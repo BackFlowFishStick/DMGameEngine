@@ -12,3 +12,4 @@
 // ── Core ─────────────────────────────────────────────────────────
 #include "DMGameEngine/Core/Export.h"
 #include "DMGameEngine/Core/Application.h"
+#include "DMGameEngine/Core/EntryPoint.h"
