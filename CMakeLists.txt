@@ -38,19 +38,24 @@ target_include_directories(DMGameEngine
         $<INSTALL_INTERFACE:include>
 )
 
-# ── Dependencies (external static libraries) ─────────────────────
+# ── Dependencies ─────────────────────────────────────────────────
+# Structure: dependencies/<libname>/include/   (e.g. dependencies/spdlog-1.x/include/)
+#            dependencies/<libname>/lib/       (e.g. dependencies/somelib/lib/foo.lib)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies")
-    file(GLOB DMGE_DEP_LIBS "dependencies/lib/*.lib" "dependencies/lib/*.a")
-    if(DMGE_DEP_LIBS)
-        target_link_libraries(DMGameEngine PRIVATE ${DMGE_DEP_LIBS})
-    endif()
-
-    file(GLOB DMGE_DEP_INCLUDE_DIRS LIST_DIRECTORIES true "dependencies/include/*")
+    file(GLOB DMGE_DEP_INCLUDE_DIRS LIST_DIRECTORIES true
+        "dependencies/*/include")
     foreach(DEP_DIR ${DMGE_DEP_INCLUDE_DIRS})
         if(IS_DIRECTORY "${DEP_DIR}")
             target_include_directories(DMGameEngine PRIVATE "${DEP_DIR}")
         endif()
     endforeach()
+
+    file(GLOB DMGE_DEP_LIBS
+        "dependencies/*/lib/*.lib"
+        "dependencies/*/lib/*.a")
+    if(DMGE_DEP_LIBS)
+        target_link_libraries(DMGameEngine PRIVATE ${DMGE_DEP_LIBS})
+    endif()
 endif()
 
 # ── Compiler Definitions ─────────────────────────────────────────
@@ -60,7 +65,7 @@ target_compile_definitions(DMGameEngine
 )
 
 if(MSVC)
-    target_compile_options(DMGameEngine PRIVATE /W4)
+    target_compile_options(DMGameEngine PRIVATE /W4 /utf-8)
 endif()
 
 set_target_properties(DMGameEngine PROPERTIES
