@@ -13,3 +13,9 @@
 #include "DMGameEngine/Core/Export.h"
 #include "DMGameEngine/Core/Application.h"
 #include "DMGameEngine/Core/Log.h"
+
+// ── Events ───────────────────────────────────────────────────────
+#include "DMGameEngine/Core/Events/Event.h"
+#include "DMGameEngine/Core/Events/KeyEvent.h"
+#include "DMGameEngine/Core/Events/MouseEvent.h"
+#include "DMGameEngine/Core/Events/ApplicationEvent.h"

@@ -20,6 +20,7 @@
 #pragma once
 
 #include "DMGameEngine/Core/Application.h"
+#include "DMGameEngine/Core/Log.h"
 
 namespace DMGameEngine {
 
@@ -33,8 +34,14 @@ int main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
 
+    DMGameEngine::Log::Init();
+    DMGE_LOG_WARN("Initialized Core Log.");
+    DMGE_CLIENT_WARN("Initialized Client Log.");
+
     auto* app = DMGameEngine::CreateApplication();
     int result = app->Run();
     delete app;
+
+    DMGameEngine::Log::Shutdown();
     return result;
 }
