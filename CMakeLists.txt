@@ -58,6 +58,16 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies")
     endif()
 endif()
 
+# ── GLFW (built from source) ─────────────────────────────────────
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glfw-3.4/CMakeLists.txt")
+    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glfw-3.4"
+                     "${CMAKE_BINARY_DIR}/glfw")
+    target_link_libraries(DMGameEngine PRIVATE glfw)
+endif()
+
 # ── Compiler Definitions ─────────────────────────────────────────
 target_compile_definitions(DMGameEngine
     PRIVATE

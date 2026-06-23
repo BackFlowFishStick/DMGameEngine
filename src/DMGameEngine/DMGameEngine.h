@@ -13,6 +13,7 @@
 #include "DMGameEngine/Core/Export.h"
 #include "DMGameEngine/Core/Application.h"
 #include "DMGameEngine/Core/Log.h"
+#include "DMGameEngine/Core/Window.h"
 
 // ── Events ───────────────────────────────────────────────────────
 #include "DMGameEngine/Core/Events/Event.h"

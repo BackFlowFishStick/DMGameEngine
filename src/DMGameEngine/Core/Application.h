@@ -4,6 +4,9 @@
  * Game projects should inherit from Application and override
  * the lifecycle hooks to build their game logic.
  *
+ * A default GLFW window is created automatically during initialization.
+ * Access it via GetWindow() to configure callbacks, VSync, etc.
+ *
  * Usage:
  *   class MyGame : public DMGameEngine::Application {
  *   public:
@@ -22,12 +25,16 @@
 #pragma once
 
 #include "DMGameEngine/Core/Export.h"
+#include "DMGameEngine/Core/Window.h"
+
+#include <memory>
 
 namespace DMGameEngine {
 
 class DMGE_API Application {
 public:
     Application();
+    explicit Application(const WindowProps& windowProps);
     virtual ~Application();
 
     // ── Public: entry point called by game's main() ─────────
@@ -36,6 +43,9 @@ public:
     // ── Quit control ────────────────────────────────────────
     void Quit();
     bool IsRunning() const;
+
+    // ── Window access ───────────────────────────────────────
+    Window& GetWindow() const;
 
 protected:
     // ── Lifecycle hooks — override in derived class ─────────
@@ -49,7 +59,9 @@ private:
     void MainLoop();
     void Shutdown();
 
-    bool m_isRunning = false;
+    bool                      m_isRunning = false;
+    std::unique_ptr<Window>   m_window;
+    WindowProps               m_windowProps;
 };
 
 } // namespace DMGameEngine
