@@ -46,7 +46,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies")
         "dependencies/*/include")
     foreach(DEP_DIR ${DMGE_DEP_INCLUDE_DIRS})
         if(IS_DIRECTORY "${DEP_DIR}")
-            target_include_directories(DMGameEngine PRIVATE "${DEP_DIR}")
+            target_include_directories(DMGameEngine PUBLIC "$<BUILD_INTERFACE:${DEP_DIR}>")
         endif()
     endforeach()
 

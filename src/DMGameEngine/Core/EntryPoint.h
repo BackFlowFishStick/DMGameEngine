@@ -36,7 +36,6 @@ int main(int argc, char* argv[]) {
 
     DMGameEngine::Log::Init();
     DMGE_LOG_WARN("Initialized Core Log.");
-    DMGE_CLIENT_WARN("Initialized Client Log.");
 
     auto* app = DMGameEngine::CreateApplication();
     int result = app->Run();

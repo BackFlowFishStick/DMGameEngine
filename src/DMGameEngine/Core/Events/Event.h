@@ -46,14 +46,17 @@ enum class EventType {
 };
 
 // ── Event Categories (bitmask for filtering) ─────────────────────
-enum EventCategory {
-    None        = 0,
-    Application = BIT(0),
-    Input       = BIT(1),
-    Keyboard    = BIT(2),
-    Mouse       = BIT(3),
-    MouseButton = BIT(4),
-};
+// Wrapped in a namespace to avoid name collisions (e.g. Application)
+namespace EventCategory {
+    enum : int {
+        None        = 0,
+        Application = BIT(0),
+        Input       = BIT(1),
+        Keyboard    = BIT(2),
+        Mouse       = BIT(3),
+        MouseButton = BIT(4),
+    };
+}
 
 // ── Macro to reduce boilerplate in derived event classes ─────────
 #define EVENT_CLASS_TYPE(type)                                          \
@@ -74,7 +77,7 @@ public:
     virtual int GetCategoryFlags() const     = 0;
     virtual std::string ToString() const { return GetName(); }
 
-    bool IsInCategory(EventCategory category) const {
+    bool IsInCategory(int category) const {
         return GetCategoryFlags() & category;
     }
 

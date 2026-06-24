@@ -49,19 +49,24 @@ void Application::OnUpdate(float /*deltaTime*/) {}
 void Application::OnRender() {}
 void Application::OnShutdown() {}
 
+// ── Default event handler ────────────────────────────────────────
+void Application::OnEvent(Event& e) {
+    EventDispatcher dispatcher(e);
+    dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent&) {
+        Quit();
+        return true;
+    });
+}
+
 // ── Private ──────────────────────────────────────────────────────
 
 void Application::Initialize() {
     // Create the platform window
     m_window = Window::Create(m_windowProps);
 
-    // Default event callback: close → quit
+    // Bind application-level event handling
     m_window->SetEventCallback([this](Event& e) {
-        EventDispatcher dispatcher(e);
-        dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent&) {
-            Quit();
-            return true;
-        });
+        OnEvent(e);
     });
 
     OnInitialize();

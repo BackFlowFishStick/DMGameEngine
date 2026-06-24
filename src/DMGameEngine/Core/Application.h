@@ -54,6 +54,11 @@ protected:
     virtual void OnRender();
     virtual void OnShutdown();
 
+    // ── Event binding — override to handle window events ────
+    //     Default implementation handles WindowCloseEvent → Quit().
+    //     Call Application::OnEvent(e) from your override to keep it.
+    virtual void OnEvent(Event& e);
+
 private:
     void Initialize();
     void MainLoop();
