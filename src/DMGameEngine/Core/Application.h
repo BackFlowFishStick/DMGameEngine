@@ -7,6 +7,10 @@
  * A default GLFW window is created automatically during initialization.
  * Access it via GetWindow() to configure callbacks, VSync, etc.
  *
+ * Layers can be pushed onto the built-in LayerStack. The Application
+ * automatically propagates OnUpdate, OnRender, OnImGuiRender, and OnEvent
+ * to all layers each frame.
+ *
  * Usage:
  *   class MyGame : public DMGameEngine::Application {
  *   public:
@@ -18,6 +22,8 @@
  *
  *   int main() {
  *       MyGame game;
+ *       game.PushLayer(std::make_unique<GameLayer>());
+ *       game.PushOverlay(std::make_unique<DebugOverlay>());
  *       return game.Run();
  *   }
  */
@@ -25,6 +31,7 @@
 #pragma once
 
 #include "DMGameEngine/Core/Export.h"
+#include "DMGameEngine/Core/LayerStack.h"
 #include "DMGameEngine/Core/Window.h"
 
 #include <memory>
@@ -47,6 +54,12 @@ public:
     // ── Window access ───────────────────────────────────────
     Window& GetWindow() const;
 
+    // ── Layer management ────────────────────────────────────
+    void PushLayer(std::unique_ptr<Layer> layer);
+    void PushOverlay(std::unique_ptr<Layer> overlay);
+    std::unique_ptr<Layer> PopLayer(Layer* layer);
+    std::unique_ptr<Layer> PopOverlay(Layer* overlay);
+
 protected:
     // ── Lifecycle hooks — override in derived class ─────────
     virtual void OnInitialize();
@@ -56,6 +69,8 @@ protected:
 
     // ── Event binding — override to handle window events ────
     //     Default implementation handles WindowCloseEvent → Quit().
+    //     Events are propagated through the LayerStack (reverse
+    //     order) before reaching this handler.
     //     Call Application::OnEvent(e) from your override to keep it.
     virtual void OnEvent(Event& e);
 
@@ -67,6 +82,7 @@ private:
     bool                      m_isRunning = false;
     std::unique_ptr<Window>   m_window;
     WindowProps               m_windowProps;
+    LayerStack                m_layerStack;
 };
 
 } // namespace DMGameEngine

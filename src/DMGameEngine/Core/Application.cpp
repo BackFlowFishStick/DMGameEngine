@@ -42,6 +42,24 @@ Window& Application::GetWindow() const {
     return *m_window;
 }
 
+// ── Layer management ─────────────────────────────────────────────
+
+void Application::PushLayer(std::unique_ptr<Layer> layer) {
+    m_layerStack.PushLayer(std::move(layer));
+}
+
+void Application::PushOverlay(std::unique_ptr<Layer> overlay) {
+    m_layerStack.PushOverlay(std::move(overlay));
+}
+
+std::unique_ptr<Layer> Application::PopLayer(Layer* layer) {
+    return m_layerStack.PopLayer(layer);
+}
+
+std::unique_ptr<Layer> Application::PopOverlay(Layer* overlay) {
+    return m_layerStack.PopOverlay(overlay);
+}
+
 // ── Lifecycle hooks (default empty) ──────────────────────────────
 
 void Application::OnInitialize() {}
@@ -51,6 +69,15 @@ void Application::OnShutdown() {}
 
 // ── Default event handler ────────────────────────────────────────
 void Application::OnEvent(Event& e) {
+    // Propagate event through layers in reverse order:
+    // overlays (UI / tool) consume input before gameplay layers.
+    for (auto it = m_layerStack.rbegin(); it != m_layerStack.rend(); ++it) {
+        (*it)->OnEvent(e);
+        if (e.Handled)
+            return;
+    }
+
+    // App-level fallback: close window → quit
     EventDispatcher dispatcher(e);
     dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent&) {
         Quit();
@@ -86,14 +113,30 @@ void Application::MainLoop() {
         const float deltaTime   = elapsed.count();
         previousTime = currentTime;
 
+        // ── Layer update (forward: Platform → Core → ... → Tool) ──
+        for (auto& layer : m_layerStack)
+            layer->OnUpdate(deltaTime);
+
         OnUpdate(deltaTime);
+
+        // ── Layer render ──────────────────────────────────────────
+        for (auto& layer : m_layerStack)
+            layer->OnRender();
+
         OnRender();
+
+        // ── Layer ImGui pass ──────────────────────────────────────
+        for (auto& layer : m_layerStack)
+            layer->OnImGuiRender();
     }
 }
 
 void Application::Shutdown() {
     m_isRunning = false;
     OnShutdown();
+    // LayerStack destructor automatically calls OnDetach()
+    // for all layers in reverse order, then clears the stack.
+    m_layerStack = LayerStack{};
     m_window.reset();
 }
 

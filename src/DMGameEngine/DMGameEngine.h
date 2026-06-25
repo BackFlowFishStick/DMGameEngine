@@ -11,6 +11,8 @@
 
 // ── Core ─────────────────────────────────────────────────────────
 #include "DMGameEngine/Core/Export.h"
+#include "DMGameEngine/Core/Layer.h"
+#include "DMGameEngine/Core/LayerStack.h"
 #include "DMGameEngine/Core/Application.h"
 #include "DMGameEngine/Core/Log.h"
 #include "DMGameEngine/Core/Window.h"
