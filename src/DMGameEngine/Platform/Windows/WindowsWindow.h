@@ -1,0 +1,47 @@
+/*
+ * DMGameEngine - Windows Window (GLFW Implementation)
+ */
+
+#pragma once
+
+#include "DMGameEngine/Core/Window.h"
+
+struct GLFWwindow;
+
+namespace DMGameEngine {
+
+class WindowsWindow : public Window {
+public:
+    explicit WindowsWindow(const WindowProps& props);
+    ~WindowsWindow() override;
+
+    void PollEvents() override;
+
+    unsigned int GetWidth()       const override { return m_data.width; }
+    unsigned int GetHeight()      const override { return m_data.height; }
+    void*        GetNativeWindow() const override;
+
+    void SetEventCallback(const EventCallbackFn& callback) override {
+        m_data.callback = callback;
+    }
+    void SetVSync(bool enabled) override;
+    bool IsVSync() const override { return m_data.vSync; }
+
+private:
+    void Init(const WindowProps& props);
+    void Shutdown();
+
+    GLFWwindow* m_window = nullptr;
+
+    struct WindowData {
+        std::string     title;
+        unsigned int    width  = 0;
+        unsigned int    height = 0;
+        bool            vSync  = false;
+        EventCallbackFn callback;
+    };
+
+    WindowData m_data;
+};
+
+} // namespace DMGameEngine
