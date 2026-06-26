@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 project(DMGameEngine
     VERSION 0.1.0
     DESCRIPTION "DMGameEngine - A C++ game engine library"
-    LANGUAGES CXX
+    LANGUAGES C CXX
 )
 
 # ── C++ Standard ─────────────────────────────────────────────────
@@ -66,6 +66,13 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glfw-3.4/CMakeLists.txt")
     add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glfw-3.4"
                      "${CMAKE_BINARY_DIR}/glfw")
     target_link_libraries(DMGameEngine PRIVATE glfw)
+endif()
+
+# ── GLAD (OpenGL loader, single-file) ─────────────────────────────
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glad/src/glad.c")
+    target_sources(DMGameEngine PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glad/src/glad.c"
+    )
 endif()
 
 # ── Compiler Definitions ─────────────────────────────────────────

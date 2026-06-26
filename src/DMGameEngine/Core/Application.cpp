@@ -105,27 +105,51 @@ void Application::MainLoop() {
     auto previousTime = Clock::now();
 
     while (m_isRunning) {
-        // Poll window events (input, resize, close, etc.)
-        m_window->OnUpdate();
+        // ═══════════════════════════════════════════════════════════
+        //  Stage 1 — Event Pump
+        //
+        //  Pull all pending OS events (input, window) and dispatch
+        //  them through the callback chain:
+        //    GLFW → Application::OnEvent(e) → LayerStack (reverse)
+        //
+        //  Must run before any layer logic so the current frame
+        //  sees the latest input state without a 1-frame delay.
+        // ═══════════════════════════════════════════════════════════
+        m_window->PollEvents();
 
         const auto currentTime  = Clock::now();
         const auto elapsed      = std::chrono::duration<float>(currentTime - previousTime);
         const float deltaTime   = elapsed.count();
         previousTime = currentTime;
 
-        // ── Layer update (forward: Platform → Core → ... → Tool) ──
+        // ═══════════════════════════════════════════════════════════
+        //  Stage 2 — Update
+        //
+        //  Forward iteration: Platform → Core → Resource → Feature → Tool.
+        //  Each layer advances its own simulation / logic tick.
+        // ═══════════════════════════════════════════════════════════
         for (auto& layer : m_layerStack)
             layer->OnUpdate(deltaTime);
 
-        OnUpdate(deltaTime);
+        OnUpdate(deltaTime);  // fallback when no layers are pushed
 
-        // ── Layer render ──────────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════
+        //  Stage 3 — Render
+        //
+        //  Forward iteration. Each layer submits draw commands.
+        // ═══════════════════════════════════════════════════════════
         for (auto& layer : m_layerStack)
             layer->OnRender();
 
-        OnRender();
+        OnRender();  // fallback when no layers are pushed
 
-        // ── Layer ImGui pass ──────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════
+        //  Stage 4 — ImGui
+        //
+        //  Forward iteration. UI overlays construct their panels.
+        //  Called after Render so ImGui draw-data is ready for the
+        //  platform backend to present.
+        // ═══════════════════════════════════════════════════════════
         for (auto& layer : m_layerStack)
             layer->OnImGuiRender();
     }
