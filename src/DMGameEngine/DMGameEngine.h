@@ -15,6 +15,7 @@
 #include "DMGameEngine/Core/LayerStack.h"
 #include "DMGameEngine/Core/Application.h"
 #include "DMGameEngine/Core/Log.h"
+#include "DMGameEngine/Core/Input.h"
 #include "DMGameEngine/Core/Window.h"
 
 // ── Events ───────────────────────────────────────────────────────

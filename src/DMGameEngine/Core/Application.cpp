@@ -1,21 +1,29 @@
 #include "DMGameEngine/Core/Application.h"
 
 #include "DMGameEngine/Core/Events/ApplicationEvent.h"
+#include "DMGameEngine/Core/Input.h"
 #include "DMGameEngine/Core/Log.h"
 
 #include <chrono>
 
 namespace DMGameEngine {
 
+// ── Static ──────────────────────────────────────────────────────
+Application* Application::s_instance = nullptr;
+
+Application& Application::Get() {
+    return *s_instance;
+}
+
 // ── Constructors / Destructor ─────────────────────────────────────
 
 Application::Application()
-    : m_windowProps(WindowProps()) {}
+    : m_windowProps(WindowProps()) { s_instance = this; }
 
 Application::Application(const WindowProps& windowProps)
-    : m_windowProps(windowProps) {}
+    : m_windowProps(windowProps) { s_instance = this; }
 
-Application::~Application() = default;
+Application::~Application() { s_instance = nullptr; }
 
 // ── Public ───────────────────────────────────────────────────────
 
@@ -69,6 +77,9 @@ void Application::OnShutdown() {}
 
 // ── Default event handler ────────────────────────────────────────
 void Application::OnEvent(Event& e) {
+    // Update the global input state before layers consume events
+    Input::Get().OnEvent(e);
+
     // Propagate event through layers in reverse order:
     // overlays (UI / tool) consume input before gameplay layers.
     for (auto it = m_layerStack.rbegin(); it != m_layerStack.rend(); ++it) {

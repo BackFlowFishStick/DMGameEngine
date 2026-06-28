@@ -75,6 +75,24 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glad/src/glad.c")
     )
 endif()
 
+# ── ImGui (source-based) ───────────────────────────────────────────
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui.h")
+    target_include_directories(DMGameEngine PUBLIC
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui>"
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/backends>"
+    )
+    target_sources(DMGameEngine PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui_draw.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui_tables.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui_widgets.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui_demo.cpp"
+        # GLFW + OpenGL3 backends
+        "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/backends/imgui_impl_glfw.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/backends/imgui_impl_opengl3.cpp"
+    )
+endif()
+
 # ── Compiler Definitions ─────────────────────────────────────────
 target_compile_definitions(DMGameEngine
     PRIVATE

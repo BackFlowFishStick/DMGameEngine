@@ -54,6 +54,9 @@ public:
     // ── Window access ───────────────────────────────────────
     Window& GetWindow() const;
 
+    // ── Singleton accessor ────────────────────────────────
+    static Application& Get();
+
     // ── Layer management ────────────────────────────────────
     void PushLayer(std::unique_ptr<Layer> layer);
     void PushOverlay(std::unique_ptr<Layer> overlay);
@@ -79,6 +82,7 @@ private:
     void MainLoop();
     void Shutdown();
 
+    static Application*       s_instance;
     bool                      m_isRunning = false;
     std::unique_ptr<Window>   m_window;
     WindowProps               m_windowProps;
