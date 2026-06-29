@@ -116,6 +116,9 @@ void Application::MainLoop() {
     auto previousTime = Clock::now();
 
     while (m_isRunning) {
+        // ── Input snapshot — capture previous frame state for edge detection
+        Input::Get().BeginFrame();
+
         // ═══════════════════════════════════════════════════════════
         //  Stage 1 — Event Pump
         //

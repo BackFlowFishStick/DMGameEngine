@@ -36,6 +36,7 @@ int main(int argc, char* argv[]) {
 
     DMGameEngine::Log::Init();
     DMGE_LOG_WARN("Initialized Core Log.");
+    DMGE_LOG_INFO("Welcome to DMEngine");
 
     auto* app = DMGameEngine::CreateApplication();
     int result = app->Run();

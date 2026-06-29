@@ -68,6 +68,15 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glfw-3.4/CMakeLists.txt")
     target_link_libraries(DMGameEngine PRIVATE glfw)
 endif()
 
+# ── GLM (OpenGL Mathematics, header-only) ─────────────────────────
+set(GLM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLM_BUILD_INSTALL OFF CACHE BOOL "" FORCE)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glm-master/CMakeLists.txt")
+    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glm-master"
+                     "${CMAKE_BINARY_DIR}/glm")
+    target_link_libraries(DMGameEngine PRIVATE glm)
+endif()
+
 # ── GLAD (OpenGL loader, single-file) ─────────────────────────────
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glad/src/glad.c")
     target_sources(DMGameEngine PRIVATE
