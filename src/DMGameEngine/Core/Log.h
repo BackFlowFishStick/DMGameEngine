@@ -48,3 +48,16 @@ private:
 #define DMGE_CLIENT_WARN(...)     ::DMGameEngine::Log::GetClientLogger()->warn(__VA_ARGS__)
 #define DMGE_CLIENT_ERROR(...)    ::DMGameEngine::Log::GetClientLogger()->error(__VA_ARGS__)
 #define DMGE_CLIENT_CRITICAL(...) ::DMGameEngine::Log::GetClientLogger()->critical(__VA_ARGS__)
+
+// ── Assert Macro ──────────────────────────────────────────────────
+#ifdef DMGE_ENABLE_ASSERTS
+    #define DMGE_CORE_ASSERT(condition, ...) \
+        do { \
+            if (!(condition)) { \
+                DMGE_LOG_CRITICAL(__VA_ARGS__); \
+                __debugbreak(); \
+            } \
+        } while (false)
+#else
+    #define DMGE_CORE_ASSERT(condition, ...)
+#endif

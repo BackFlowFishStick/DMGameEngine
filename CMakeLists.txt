@@ -106,6 +106,7 @@ endif()
 target_compile_definitions(DMGameEngine
     PRIVATE
         DMGE_BUILD_DLL
+        $<$<CONFIG:Debug>:DMGE_ENABLE_ASSERTS>
 )
 
 if(MSVC)

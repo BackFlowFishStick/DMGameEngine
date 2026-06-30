@@ -25,3 +25,7 @@
 #include "DMGameEngine/Core/Events/KeyEvent.h"
 #include "DMGameEngine/Core/Events/MouseEvent.h"
 #include "DMGameEngine/Core/Events/ApplicationEvent.h"
+
+// ── Renderer ─────────────────────────────────────────────────────
+#include "DMGameEngine/Renderer/GraphicsContext.h"
+#include "DMGameEngine/Renderer/Renderer.h"
