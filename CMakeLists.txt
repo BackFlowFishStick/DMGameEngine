@@ -74,7 +74,7 @@ set(GLM_BUILD_INSTALL OFF CACHE BOOL "" FORCE)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glm-master/CMakeLists.txt")
     add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glm-master"
                      "${CMAKE_BINARY_DIR}/glm")
-    target_link_libraries(DMGameEngine PRIVATE glm)
+    target_link_libraries(DMGameEngine PUBLIC glm)
 endif()
 
 # ── GLAD (OpenGL loader, single-file) ─────────────────────────────
@@ -118,29 +118,31 @@ set_target_properties(DMGameEngine PROPERTIES
     EXPORT_NAME DMGameEngine
 )
 
-# ── Install Rules ────────────────────────────────────────────────
-include(GNUInstallDirs)
+# ── Install Rules (only when engine is the top-level project) ──────
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    include(GNUInstallDirs)
 
-install(TARGETS DMGameEngine
-    EXPORT DMGameEngineTargets
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
+    install(TARGETS DMGameEngine
+        EXPORT DMGameEngineTargets
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
 
-install(DIRECTORY src/
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/DMGameEngine
-    FILES_MATCHING
-    PATTERN "*.h"
-    PATTERN "*.hpp"
-)
+    install(DIRECTORY src/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/DMGameEngine
+        FILES_MATCHING
+        PATTERN "*.h"
+        PATTERN "*.hpp"
+    )
 
-install(EXPORT DMGameEngineTargets
-    FILE DMGameEngineTargets.cmake
-    NAMESPACE DMGameEngine::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DMGameEngine
-)
+    install(EXPORT DMGameEngineTargets
+        FILE DMGameEngineTargets.cmake
+        NAMESPACE DMGameEngine::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DMGameEngine
+    )
+endif()
 
 # ── Examples (optional) ──────────────────────────────────────────
 if(DMGE_BUILD_EXAMPLES)

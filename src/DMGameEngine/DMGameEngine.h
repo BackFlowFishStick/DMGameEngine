@@ -29,3 +29,4 @@
 // ── Renderer ─────────────────────────────────────────────────────
 #include "DMGameEngine/Renderer/GraphicsContext.h"
 #include "DMGameEngine/Renderer/Renderer.h"
+#include "DMGameEngine/Renderer/Shader.h"
