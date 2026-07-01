@@ -4,10 +4,10 @@
 #include "DMGameEngine/Core/Events/KeyEvent.h"
 #include "DMGameEngine/Core/Events/MouseEvent.h"
 #include "DMGameEngine/Core/Log.h"
+#include "DMGameEngine/Platform/OpenGL/OpenGLGraphicsContext.h"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
-#include <glad/glad.h>
 #include <cstdlib>
 
 namespace DMGameEngine {
@@ -66,16 +66,9 @@ void WindowsWindow::Init(const WindowProps& props) {
     // ── Store pointer to WindowData for use in callbacks ─────────
     glfwSetWindowUserPointer(m_window, &m_data);
 
-    // ── OpenGL context + GLAD loader ─────────────────────────────
-    glfwMakeContextCurrent(m_window);
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        DMGE_LOG_CRITICAL("Failed to initialize GLAD");
-        glfwDestroyWindow(m_window);
-        glfwTerminate();
-        std::abort();
-    }
-    DMGE_LOG_INFO("OpenGL renderer  : {}", reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
-    DMGE_LOG_INFO("OpenGL version   : {}", reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+    // ── OpenGL context via GraphicsContext abstraction ──────────
+    m_context = std::make_unique<OpenGLGraphicsContext>(m_window);
+    m_context->Init();
 
     SetVSync(true);
 
@@ -165,6 +158,10 @@ void WindowsWindow::Init(const WindowProps& props) {
 
 // ── Shutdown ─────────────────────────────────────────────────────
 void WindowsWindow::Shutdown() {
+    // Graphics context must be destroyed before the GLFW window,
+    // since it holds references to the window's GL context.
+    m_context.reset();
+
     if (m_window) {
         glfwDestroyWindow(m_window);
         m_window = nullptr;
@@ -175,6 +172,11 @@ void WindowsWindow::Shutdown() {
 // ── PollEvents ───────────────────────────────────────────────────
 void WindowsWindow::PollEvents() {
     glfwPollEvents();
+}
+
+// ── SwapBuffers ────────────────────────────────────────────────────
+void WindowsWindow::SwapBuffers() {
+    m_context->SwapBuffers();
 }
 
 // ── Native Window ────────────────────────────────────────────────

@@ -166,6 +166,14 @@ void Application::MainLoop() {
         // ═══════════════════════════════════════════════════════════
         for (auto& layer : m_layerStack)
             layer->OnImGuiRender();
+
+        // ═══════════════════════════════════════════════════════════
+        //  Stage 5 — Swap
+        //
+        //  Present the rendered frame to the display. The platform
+        //  backend performs the buffer swap (e.g. glfwSwapBuffers).
+        // ═══════════════════════════════════════════════════════════
+        m_window->SwapBuffers();
     }
 }
 

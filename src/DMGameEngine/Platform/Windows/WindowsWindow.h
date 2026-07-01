@@ -5,6 +5,7 @@
 #pragma once
 
 #include "DMGameEngine/Core/Window.h"
+#include "DMGameEngine/Renderer/GraphicsContext.h"
 
 struct GLFWwindow;
 
@@ -16,6 +17,7 @@ public:
     ~WindowsWindow() override;
 
     void PollEvents() override;
+    void SwapBuffers() override;
 
     unsigned int GetWidth()       const override { return m_data.width; }
     unsigned int GetHeight()      const override { return m_data.height; }
@@ -42,6 +44,8 @@ private:
     };
 
     WindowData m_data;
+
+    std::unique_ptr<GraphicsContext> m_context;
 };
 
 } // namespace DMGameEngine

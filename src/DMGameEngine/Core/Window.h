@@ -39,6 +39,7 @@ public:
     // registered callback. Must be called first each frame,
     // before any layer updates, to provide current input state.
     virtual void PollEvents() = 0;
+    virtual void SwapBuffers() = 0;
 
     virtual unsigned int GetWidth()       const = 0;
     virtual unsigned int GetHeight()      const = 0;
