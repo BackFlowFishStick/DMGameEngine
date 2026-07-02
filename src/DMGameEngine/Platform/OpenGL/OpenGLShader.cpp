@@ -205,9 +205,15 @@ void OpenGLShader::Compile(std::unordered_map<GLenum, std::string>& shaderSource
 
             glDeleteShader(shader);
 
+            // Clean up previously compiled shaders and the program
+            for (uint32_t i = 0; i < shaderIndex; ++i)
+                glDeleteShader(shaderIDs[i]);
+            glDeleteProgram(program);
+
             DMGE_LOG_ERROR("{0} shader compilation failed:\n{1}",
                            ShaderTypeName(type), infoLog);
             DMGE_CORE_ASSERT(false, "{0} shader compilation failed!", ShaderTypeName(type));
+            return;
         }
 
         glAttachShader(program, shader);
@@ -233,14 +239,15 @@ void OpenGLShader::Compile(std::unordered_map<GLenum, std::string>& shaderSource
 
         DMGE_LOG_ERROR("Shader program linking failed:\n{0}", infoLog);
         DMGE_CORE_ASSERT(false, "Shader program linking failed!");
+        return;
     }
 
-    // Clean up shader objects (already linked into program)
+    // Detach and delete shader objects (already linked into program)
     for (uint32_t i = 0; i < shaderIndex; ++i)
+    {
         glDetachShader(program, shaderIDs[i]);
-
-    for (uint32_t i = 0; i < shaderIndex; ++i)
         glDeleteShader(shaderIDs[i]);
+    }
 
     m_RendererID = program;
 }
