@@ -15,14 +15,70 @@ option(DMGE_BUILD_SHARED "Build DMGameEngine as a shared library (DLL)" ON)
 option(DMGE_BUILD_EXAMPLES "Build example projects" OFF)
 
 # ── Source Files ─────────────────────────────────────────────────
-file(GLOB_RECURSE DMGE_SOURCES
-    "src/*.cpp"
-    "src/*.c"
+set(DMGE_SOURCES
+    # Core
+    "src/DMGameEngine/Core/Application.cpp"
+    "src/DMGameEngine/Core/Layer.cpp"
+    "src/DMGameEngine/Core/LayerStack.cpp"
+    "src/DMGameEngine/Core/Log.cpp"
+
+    # Platform / OpenGL
+    "src/DMGameEngine/Platform/OpenGL/OpenGLGraphicsContext.cpp"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLIndexBuffer.cpp"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLShader.cpp"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLTexture.cpp"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLVertexBuffer.cpp"
+
+    # Platform / Windows
+    "src/DMGameEngine/Platform/Windows/GLFWInput.cpp"
+    "src/DMGameEngine/Platform/Windows/WindowsWindow.cpp"
+
+    # Renderer
+    "src/DMGameEngine/Renderer/IndexBuffer.cpp"
+    "src/DMGameEngine/Renderer/Renderer.cpp"
+    "src/DMGameEngine/Renderer/Shader.cpp"
+    "src/DMGameEngine/Renderer/Texture.cpp"
+    "src/DMGameEngine/Renderer/VertexBuffer.cpp"
 )
 
-file(GLOB_RECURSE DMGE_HEADERS
-    "src/*.h"
-    "src/*.hpp"
+set(DMGE_HEADERS
+    # Core
+    "src/DMGameEngine/Core/Application.h"
+    "src/DMGameEngine/Core/EntryPoint.h"
+    "src/DMGameEngine/Core/Export.h"
+    "src/DMGameEngine/Core/Input.h"
+    "src/DMGameEngine/Core/KeyCodes.h"
+    "src/DMGameEngine/Core/Layer.h"
+    "src/DMGameEngine/Core/LayerStack.h"
+    "src/DMGameEngine/Core/Log.h"
+    "src/DMGameEngine/Core/MouseCodes.h"
+    "src/DMGameEngine/Core/Window.h"
+    "src/DMGameEngine/Core/Events/ApplicationEvent.h"
+    "src/DMGameEngine/Core/Events/Event.h"
+    "src/DMGameEngine/Core/Events/KeyEvent.h"
+    "src/DMGameEngine/Core/Events/MouseEvent.h"
+
+    # Platform / OpenGL
+    "src/DMGameEngine/Platform/OpenGL/OpenGLGraphicsContext.h"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLIndexBuffer.h"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLShader.h"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLTexture.h"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLVertexBuffer.h"
+
+    # Platform / Windows
+    "src/DMGameEngine/Platform/Windows/GLFWInput.h"
+    "src/DMGameEngine/Platform/Windows/WindowsWindow.h"
+
+    # Renderer
+    "src/DMGameEngine/Renderer/GraphicsContext.h"
+    "src/DMGameEngine/Renderer/IndexBuffer.h"
+    "src/DMGameEngine/Renderer/Renderer.h"
+    "src/DMGameEngine/Renderer/Shader.h"
+    "src/DMGameEngine/Renderer/Texture.h"
+    "src/DMGameEngine/Renderer/VertexBuffer.h"
+
+    # Public entry point
+    "src/DMGameEngine/DMGameEngine.h"
 )
 
 # ── Engine Library Target ────────────────────────────────────────

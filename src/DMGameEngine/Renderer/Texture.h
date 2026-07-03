@@ -17,6 +17,7 @@
 #include <string_view>
 #include <memory>
 #include <cstdint>
+#include "DMGameEngine/Core/Log.h"
 
 namespace DMGameEngine {
 
