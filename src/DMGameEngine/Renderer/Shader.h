@@ -86,8 +86,8 @@ struct DMGE_API BufferElement
             case ShaderDataType::Int3:   return 3;
             case ShaderDataType::Int4:   return 4;
             case ShaderDataType::Bool:   return 1;
-            case ShaderDataType::Mat3:   return 3;
-            case ShaderDataType::Mat4:   return 4;
+            case ShaderDataType::Mat3:   return 3 * 3;
+            case ShaderDataType::Mat4:   return 4 * 4;
             default:                     return 0;
         }
     }

@@ -7,6 +7,7 @@
 #include "DMGameEngine/Core/Log.h"
 
 #include <glad/glad.h>
+#include <stb_image.h>
 
 namespace DMGameEngine {
 
@@ -173,8 +174,26 @@ OpenGLTexture::OpenGLTexture(const TextureSpecification& spec)
 OpenGLTexture::OpenGLTexture(std::string_view filepath)
     : m_FilePath(filepath)
 {
-    // TODO: load image via stb_image when available
-    DMGE_CORE_ASSERT(false, "Texture loading from file not implemented (need stb_image)!");
+    // Flip textures on load — OpenGL expects (0,0) at bottom-left
+    stbi_set_flip_vertically_on_load(1);
+
+    int width = 0, height = 0, channels = 0;
+    stbi_uc* data = stbi_load(m_FilePath.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+
+    if (!data)
+    {
+        DMGE_CORE_ASSERT(false, "Failed to load texture from file: {0}", m_FilePath);
+        return;
+    }
+
+    m_Spec.Width  = static_cast<uint32_t>(width);
+    m_Spec.Height = static_cast<uint32_t>(height);
+    m_Spec.Format = TextureFormat::RGBA8;
+
+    Invalidate();
+    SetData(data, static_cast<uint32_t>(width * height * 4));
+
+    stbi_image_free(data);
 }
 
 OpenGLTexture::~OpenGLTexture()

@@ -140,6 +140,16 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glad/src/glad.c")
     )
 endif()
 
+# ── stb_image (image loading, single-file) ────────────────────────
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/stb/stb_image.cpp")
+    target_include_directories(DMGameEngine PRIVATE
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dependencies/stb>"
+    )
+    target_sources(DMGameEngine PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/stb/stb_image.cpp"
+    )
+endif()
+
 # ── ImGui (source-based) ───────────────────────────────────────────
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui.h")
     target_include_directories(DMGameEngine PUBLIC
