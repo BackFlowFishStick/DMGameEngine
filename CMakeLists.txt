@@ -25,8 +25,10 @@ set(DMGE_SOURCES
     # Platform / OpenGL
     "src/DMGameEngine/Platform/OpenGL/OpenGLGraphicsContext.cpp"
     "src/DMGameEngine/Platform/OpenGL/OpenGLIndexBuffer.cpp"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLRendererAPI.cpp"
     "src/DMGameEngine/Platform/OpenGL/OpenGLShader.cpp"
     "src/DMGameEngine/Platform/OpenGL/OpenGLTexture.cpp"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLVertexArray.cpp"
     "src/DMGameEngine/Platform/OpenGL/OpenGLVertexBuffer.cpp"
 
     # Platform / Windows
@@ -36,8 +38,10 @@ set(DMGE_SOURCES
     # Renderer
     "src/DMGameEngine/Renderer/IndexBuffer.cpp"
     "src/DMGameEngine/Renderer/Renderer.cpp"
+    "src/DMGameEngine/Renderer/RendererAPI.cpp"
     "src/DMGameEngine/Renderer/Shader.cpp"
     "src/DMGameEngine/Renderer/Texture.cpp"
+    "src/DMGameEngine/Renderer/VertexArray.cpp"
     "src/DMGameEngine/Renderer/VertexBuffer.cpp"
 )
 
@@ -61,8 +65,10 @@ set(DMGE_HEADERS
     # Platform / OpenGL
     "src/DMGameEngine/Platform/OpenGL/OpenGLGraphicsContext.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLIndexBuffer.h"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLRendererAPI.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLShader.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLTexture.h"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLVertexArray.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLVertexBuffer.h"
 
     # Platform / Windows
@@ -73,8 +79,10 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Renderer/GraphicsContext.h"
     "src/DMGameEngine/Renderer/IndexBuffer.h"
     "src/DMGameEngine/Renderer/Renderer.h"
+    "src/DMGameEngine/Renderer/RendererAPI.h"
     "src/DMGameEngine/Renderer/Shader.h"
     "src/DMGameEngine/Renderer/Texture.h"
+    "src/DMGameEngine/Renderer/VertexArray.h"
     "src/DMGameEngine/Renderer/VertexBuffer.h"
 
     # Public entry point

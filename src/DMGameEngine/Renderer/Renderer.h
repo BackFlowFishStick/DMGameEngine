@@ -1,15 +1,18 @@
-﻿/*
+/*
  * DMGameEngine - Renderer Abstraction
  *
- * High-level renderer API. Manages scene submission and
- * delegates to the active GraphicsContext backend.
+ * High-level renderer API. Manages scene submission and delegates
+ * low-level draw calls to the active RendererAPI backend.
  */
 
 #pragma once
 
 #include "DMGameEngine/Core/Export.h"
+#include <memory>
 
 namespace DMGameEngine {
+
+class RendererAPI; // forward declaration - backend instance owned below
 
 class DMGE_API Renderer
 {
@@ -38,6 +41,7 @@ public:
 
 private:
     static API s_API;
+    static std::unique_ptr<RendererAPI> s_RendererAPI;
 };
 
 } // namespace DMGameEngine

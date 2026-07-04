@@ -3,6 +3,7 @@
 #include "DMGameEngine/Core/Events/ApplicationEvent.h"
 #include "DMGameEngine/Core/Input.h"
 #include "DMGameEngine/Core/Log.h"
+#include "DMGameEngine/Renderer/Renderer.h"
 
 #include <chrono>
 
@@ -107,6 +108,8 @@ void Application::Initialize() {
         OnEvent(e);
     });
 
+    Renderer::Init();
+
     OnInitialize();
     m_isRunning = true;
 }
@@ -180,6 +183,7 @@ void Application::MainLoop() {
 void Application::Shutdown() {
     m_isRunning = false;
     OnShutdown();
+    Renderer::Shutdown();
     // LayerStack destructor automatically calls OnDetach()
     // for all layers in reverse order, then clears the stack.
     m_layerStack = LayerStack{};
