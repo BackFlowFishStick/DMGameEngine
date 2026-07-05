@@ -27,6 +27,7 @@
 #include "DMGameEngine/Core/Events/ApplicationEvent.h"
 
 // ── Renderer ─────────────────────────────────────────────────────
+#include "DMGameEngine/Renderer/Camera.h"
 #include "DMGameEngine/Renderer/GraphicsContext.h"
 #include "DMGameEngine/Renderer/Renderer.h"
 #include "DMGameEngine/Renderer/Shader.h"

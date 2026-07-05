@@ -76,6 +76,7 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Platform/Windows/WindowsWindow.h"
 
     # Renderer
+    "src/DMGameEngine/Renderer/Camera.h"
     "src/DMGameEngine/Renderer/GraphicsContext.h"
     "src/DMGameEngine/Renderer/IndexBuffer.h"
     "src/DMGameEngine/Renderer/Renderer.h"
