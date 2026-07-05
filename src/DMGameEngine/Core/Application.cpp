@@ -81,6 +81,14 @@ void Application::OnEvent(Event& e) {
     // Update the global input state before layers consume events
     Input::Get().OnEvent(e);
 
+    // Keep the render viewport in sync with the window's drawable size.
+    // Dispatched before layer propagation so a layer cannot suppress it.
+    EventDispatcher viewportDispatcher(e);
+    viewportDispatcher.Dispatch<WindowResizeEvent>([](WindowResizeEvent& ev) {
+        Renderer::OnWindowResize(static_cast<int>(ev.GetWidth()), static_cast<int>(ev.GetHeight()));
+        return false;  // do not mark handled; layers may still react
+    });
+
     // Propagate event through layers in reverse order:
     // overlays (UI / tool) consume input before gameplay layers.
     for (auto it = m_layerStack.rbegin(); it != m_layerStack.rend(); ++it) {
@@ -109,6 +117,9 @@ void Application::Initialize() {
     });
 
     Renderer::Init();
+
+    // Sync the render viewport with the initial window size.
+    Renderer::OnWindowResize(static_cast<int>(m_window->GetWidth()), static_cast<int>(m_window->GetHeight()));
 
     OnInitialize();
     m_isRunning = true;
@@ -153,12 +164,18 @@ void Application::MainLoop() {
         // ═══════════════════════════════════════════════════════════
         //  Stage 3 — Render
         //
-        //  Forward iteration. Each layer submits draw commands.
+        //  Renderer::BeginScene() clears the framebuffer (color +
+        //  depth); layers then submit draw commands inside the scene
+        //  before Renderer::EndScene() finalizes for the ImGui pass.
         // ═══════════════════════════════════════════════════════════
+        Renderer::BeginScene();
+
         for (auto& layer : m_layerStack)
             layer->OnRender();
 
         OnRender();  // fallback when no layers are pushed
+
+        Renderer::EndScene();
 
         // ═══════════════════════════════════════════════════════════
         //  Stage 4 — ImGui
