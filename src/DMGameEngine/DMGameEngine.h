@@ -28,6 +28,19 @@
 
 // ── Renderer ─────────────────────────────────────────────────────
 #include "DMGameEngine/Renderer/Camera.h"
+#include "DMGameEngine/Renderer/OrthographicCamera.h"
+#include "DMGameEngine/Renderer/PerspectiveCamera.h"
 #include "DMGameEngine/Renderer/GraphicsContext.h"
 #include "DMGameEngine/Renderer/Renderer.h"
+#include "DMGameEngine/Renderer/RendererAPI.h"
 #include "DMGameEngine/Renderer/Shader.h"
+#include "DMGameEngine/Renderer/Texture.h"
+#include "DMGameEngine/Renderer/VertexArray.h"
+#include "DMGameEngine/Renderer/VertexBuffer.h"
+#include "DMGameEngine/Renderer/IndexBuffer.h"
+
+// ── Scene ────────────────────────────────────────────────────────
+#include "DMGameEngine/Scene/SceneCamera.h"
+
+// ── ImGui ────────────────────────────────────────────────────────
+#include "DMGameEngine/ImGui/ImGuiLayer.h"

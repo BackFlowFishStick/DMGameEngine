@@ -43,6 +43,9 @@ set(DMGE_SOURCES
     "src/DMGameEngine/Renderer/Texture.cpp"
     "src/DMGameEngine/Renderer/VertexArray.cpp"
     "src/DMGameEngine/Renderer/VertexBuffer.cpp"
+
+    # ImGui
+    "src/DMGameEngine/ImGui/ImGuiLayer.cpp"
 )
 
 set(DMGE_HEADERS
@@ -77,6 +80,8 @@ set(DMGE_HEADERS
 
     # Renderer
     "src/DMGameEngine/Renderer/Camera.h"
+    "src/DMGameEngine/Renderer/OrthographicCamera.h"
+    "src/DMGameEngine/Renderer/PerspectiveCamera.h"
     "src/DMGameEngine/Renderer/GraphicsContext.h"
     "src/DMGameEngine/Renderer/IndexBuffer.h"
     "src/DMGameEngine/Renderer/Renderer.h"
@@ -85,6 +90,12 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Renderer/Texture.h"
     "src/DMGameEngine/Renderer/VertexArray.h"
     "src/DMGameEngine/Renderer/VertexBuffer.h"
+
+    # Scene
+    "src/DMGameEngine/Scene/SceneCamera.h"
+
+    # ImGui
+    "src/DMGameEngine/ImGui/ImGuiLayer.h"
 
     # Public entry point
     "src/DMGameEngine/DMGameEngine.h"

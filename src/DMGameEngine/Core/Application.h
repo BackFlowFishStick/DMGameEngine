@@ -38,6 +38,8 @@
 
 namespace DMGameEngine {
 
+class ImGuiLayer;
+
 class DMGE_API Application {
 public:
     Application();
@@ -53,6 +55,9 @@ public:
 
     // ── Window access ───────────────────────────────────────
     Window& GetWindow() const;
+
+    // ImGui overlay (attached automatically); null until Initialize()
+    ImGuiLayer* GetImGuiLayer() const { return m_ImGuiLayer; }
 
     // ── Singleton accessor ────────────────────────────────
     static Application& Get();
@@ -87,6 +92,7 @@ private:
     std::unique_ptr<Window>   m_window;
     WindowProps               m_windowProps;
     LayerStack                m_layerStack;
+    ImGuiLayer*               m_ImGuiLayer = nullptr;
 };
 
 } // namespace DMGameEngine

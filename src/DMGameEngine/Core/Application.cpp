@@ -4,6 +4,7 @@
 #include "DMGameEngine/Core/Input.h"
 #include "DMGameEngine/Core/Log.h"
 #include "DMGameEngine/Renderer/Renderer.h"
+#include "DMGameEngine/ImGui/ImGuiLayer.h"
 
 #include <chrono>
 
@@ -121,6 +122,12 @@ void Application::Initialize() {
     // Sync the render viewport with the initial window size.
     Renderer::OnWindowResize(static_cast<int>(m_window->GetWidth()), static_cast<int>(m_window->GetHeight()));
 
+    // Attach the ImGui overlay - provides the context / frame for the
+    // OnImGuiRender() pass used by editor and debug UI layers.
+    auto imguiLayer = std::make_unique<ImGuiLayer>();
+    m_ImGuiLayer = imguiLayer.get();
+    PushOverlay(std::move(imguiLayer));
+
     OnInitialize();
     m_isRunning = true;
 }
@@ -184,8 +191,10 @@ void Application::MainLoop() {
         //  Called after Render so ImGui draw-data is ready for the
         //  platform backend to present.
         // ═══════════════════════════════════════════════════════════
+        m_ImGuiLayer->Begin();
         for (auto& layer : m_layerStack)
             layer->OnImGuiRender();
+        m_ImGuiLayer->End();
 
         // ═══════════════════════════════════════════════════════════
         //  Stage 5 — Swap
@@ -204,6 +213,7 @@ void Application::Shutdown() {
     // LayerStack destructor automatically calls OnDetach()
     // for all layers in reverse order, then clears the stack.
     m_layerStack = LayerStack{};
+    m_ImGuiLayer = nullptr;
     m_window.reset();
 }
 
