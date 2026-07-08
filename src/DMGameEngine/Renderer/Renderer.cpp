@@ -4,12 +4,16 @@
 
 #include "DMGameEngine/Renderer/Renderer.h"
 #include "DMGameEngine/Renderer/RendererAPI.h"
+#include "DMGameEngine/Renderer/Camera.h"
+#include "DMGameEngine/Renderer/Shader.h"
+#include "DMGameEngine/Renderer/VertexArray.h"
 #include "DMGameEngine/Core/Log.h"
 
 namespace DMGameEngine {
 
 Renderer::API Renderer::s_API = Renderer::API::OpenGL;
 std::unique_ptr<RendererAPI> Renderer::s_RendererAPI;
+Renderer::SceneData Renderer::s_SceneData;
 
 void Renderer::Init()
 {
@@ -28,6 +32,14 @@ void Renderer::BeginScene()
 {
     DMGE_CORE_ASSERT(s_RendererAPI, "Renderer not initialized! Call Renderer::Init() first.");
     s_RendererAPI->Clear();
+    s_SceneData.ViewProjectionMatrix = glm::mat4(1.0f);
+}
+
+void Renderer::BeginScene(const Camera& camera)
+{
+    DMGE_CORE_ASSERT(s_RendererAPI, "Renderer not initialized! Call Renderer::Init() first.");
+    s_RendererAPI->Clear();
+    s_SceneData.ViewProjectionMatrix = camera.GetViewProjection();
 }
 
 void Renderer::EndScene()
@@ -46,10 +58,19 @@ void Renderer::Clear()
     s_RendererAPI->Clear();
 }
 
-void Renderer::Submit(const VertexArray& vertexArray)
+void Renderer::Submit(const std::shared_ptr<Shader>& shader,
+                      const std::shared_ptr<VertexArray>& vertexArray,
+                      const glm::mat4& transform)
 {
     DMGE_CORE_ASSERT(s_RendererAPI, "Renderer not initialized! Call Renderer::Init() first.");
-    s_RendererAPI->DrawIndexed(vertexArray);
+    DMGE_CORE_ASSERT(shader, "Renderer::Submit - shader is null!");
+    DMGE_CORE_ASSERT(vertexArray, "Renderer::Submit - vertexArray is null!");
+
+    shader->Bind();
+    shader->SetMat4("u_ViewProjection", s_SceneData.ViewProjectionMatrix);
+    shader->SetMat4("u_Transform", transform);
+
+    s_RendererAPI->DrawIndexed(*vertexArray);
 }
 
 void Renderer::Flush()
