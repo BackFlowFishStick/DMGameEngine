@@ -8,6 +8,7 @@
 #include "DMGameEngine/Core/Log.h"
 
 #include <glad/glad.h>
+#include "DMGameEngine/Platform/OpenGL/OpenGLDebug.h"
 
 namespace DMGameEngine {
 
@@ -41,24 +42,24 @@ GLenum ShaderDataTypeToOpenGLBaseType(ShaderDataType type)
 
 OpenGLVertexArray::OpenGLVertexArray()
 {
-    glGenVertexArrays(1, &m_RendererID);
+    DMGE_GL_CALL(glGenVertexArrays(1, &m_RendererID));
 }
 
 OpenGLVertexArray::~OpenGLVertexArray()
 {
-    glDeleteVertexArrays(1, &m_RendererID);
+    DMGE_GL_CALL(glDeleteVertexArrays(1, &m_RendererID));
 }
 
 // ── Bind / Unbind ────────────────────────────────────────────────────
 
 void OpenGLVertexArray::Bind() const
 {
-    glBindVertexArray(m_RendererID);
+    DMGE_GL_CALL(glBindVertexArray(m_RendererID));
 }
 
 void OpenGLVertexArray::Unbind() const
 {
-    glBindVertexArray(0);
+    DMGE_GL_CALL(glBindVertexArray(0));
 }
 
 // ── Vertex / Index Buffer Attachment ─────────────────────────────────
@@ -68,7 +69,7 @@ void OpenGLVertexArray::AddVertexBuffer(const std::shared_ptr<VertexBuffer>& ver
     DMGE_CORE_ASSERT(!vertexBuffer->GetLayout().GetElements().empty(),
                      "Vertex buffer has no layout!");
 
-    glBindVertexArray(m_RendererID);
+    DMGE_GL_CALL(glBindVertexArray(m_RendererID));
     vertexBuffer->Bind();
 
     const auto& layout = vertexBuffer->GetLayout();
@@ -81,13 +82,13 @@ void OpenGLVertexArray::AddVertexBuffer(const std::shared_ptr<VertexBuffer>& ver
             case ShaderDataType::Float3:
             case ShaderDataType::Float4:
             {
-                glEnableVertexAttribArray(m_VertexBufferIndex);
-                glVertexAttribPointer(m_VertexBufferIndex,
+                DMGE_GL_CALL(glEnableVertexAttribArray(m_VertexBufferIndex));
+                DMGE_GL_CALL(glVertexAttribPointer(m_VertexBufferIndex,
                     element.GetComponentCount(),
                     GL_FLOAT,
                     element.Normalized ? GL_TRUE : GL_FALSE,
                     layout.GetStride(),
-                    reinterpret_cast<const void*>(static_cast<uintptr_t>(element.Offset)));
+                    reinterpret_cast<const void*>(static_cast<uintptr_t>(element.Offset))));
                 m_VertexBufferIndex++;
                 break;
             }
@@ -97,12 +98,12 @@ void OpenGLVertexArray::AddVertexBuffer(const std::shared_ptr<VertexBuffer>& ver
             case ShaderDataType::Int4:
             case ShaderDataType::Bool:
             {
-                glEnableVertexAttribArray(m_VertexBufferIndex);
-                glVertexAttribIPointer(m_VertexBufferIndex,
+                DMGE_GL_CALL(glEnableVertexAttribArray(m_VertexBufferIndex));
+                DMGE_GL_CALL(glVertexAttribIPointer(m_VertexBufferIndex,
                     element.GetComponentCount(),
                     ShaderDataTypeToOpenGLBaseType(element.Type),
                     layout.GetStride(),
-                    reinterpret_cast<const void*>(static_cast<uintptr_t>(element.Offset)));
+                    reinterpret_cast<const void*>(static_cast<uintptr_t>(element.Offset))));
                 m_VertexBufferIndex++;
                 break;
             }
@@ -112,15 +113,15 @@ void OpenGLVertexArray::AddVertexBuffer(const std::shared_ptr<VertexBuffer>& ver
                 uint8_t count = (element.Type == ShaderDataType::Mat3) ? 3 : 4;
                 for (uint8_t i = 0; i < count; i++)
                 {
-                    glEnableVertexAttribArray(m_VertexBufferIndex);
-                    glVertexAttribPointer(m_VertexBufferIndex,
+                    DMGE_GL_CALL(glEnableVertexAttribArray(m_VertexBufferIndex));
+                    DMGE_GL_CALL(glVertexAttribPointer(m_VertexBufferIndex,
                         count,
                         GL_FLOAT,
                         element.Normalized ? GL_TRUE : GL_FALSE,
                         layout.GetStride(),
                         reinterpret_cast<const void*>(
-                            static_cast<uintptr_t>(element.Offset + sizeof(float) * 4 * i)));
-                    glVertexAttribDivisor(m_VertexBufferIndex, 1);
+                            static_cast<uintptr_t>(element.Offset + sizeof(float) * 4 * i))));
+                    DMGE_GL_CALL(glVertexAttribDivisor(m_VertexBufferIndex, 1));
                     m_VertexBufferIndex++;
                 }
                 break;
@@ -136,7 +137,7 @@ void OpenGLVertexArray::AddVertexBuffer(const std::shared_ptr<VertexBuffer>& ver
 
 void OpenGLVertexArray::SetIndexBuffer(const std::shared_ptr<IndexBuffer>& indexBuffer)
 {
-    glBindVertexArray(m_RendererID);
+    DMGE_GL_CALL(glBindVertexArray(m_RendererID));
     indexBuffer->Bind();
 
     m_IndexBuffer = indexBuffer;

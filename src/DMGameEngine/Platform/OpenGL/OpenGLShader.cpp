@@ -1,4 +1,4 @@
-﻿/*
+/*
  * DMGameEngine - OpenGL Shader Implementation
  */
 
@@ -7,6 +7,7 @@
 #include "DMGameEngine/Core/Log.h"
 
 #include <glad/glad.h>
+#include "DMGameEngine/Platform/OpenGL/OpenGLDebug.h"
 #include <glm/gtc/type_ptr.hpp>
 
 #include <fstream>
@@ -80,56 +81,56 @@ OpenGLShader::OpenGLShader(std::string_view filepath)
 
 OpenGLShader::~OpenGLShader()
 {
-    glDeleteProgram(m_RendererID);
+    DMGE_GL_CALL(glDeleteProgram(m_RendererID));
 }
 
 // ── Bind / Unbind ────────────────────────────────────────────────
 
 void OpenGLShader::Bind() const
 {
-    glUseProgram(m_RendererID);
+    DMGE_GL_CALL(glUseProgram(m_RendererID));
 }
 
 void OpenGLShader::Unbind() const
 {
-    glUseProgram(0);
+    DMGE_GL_CALL(glUseProgram(0));
 }
 
 // ── Uniform Setters ──────────────────────────────────────────────
 
 void OpenGLShader::SetInt(std::string_view name, int value)
 {
-    glUniform1i(GetUniformLocation(name), value);
+    DMGE_GL_CALL(glUniform1i(GetUniformLocation(name), value));
 }
 
 void OpenGLShader::SetIntArray(std::string_view name, const int* values, uint32_t count)
 {
-    glUniform1iv(GetUniformLocation(name), static_cast<GLsizei>(count), values);
+    DMGE_GL_CALL(glUniform1iv(GetUniformLocation(name), static_cast<GLsizei>(count), values));
 }
 
 void OpenGLShader::SetFloat(std::string_view name, float value)
 {
-    glUniform1f(GetUniformLocation(name), value);
+    DMGE_GL_CALL(glUniform1f(GetUniformLocation(name), value));
 }
 
 void OpenGLShader::SetFloat2(std::string_view name, const glm::vec2& value)
 {
-    glUniform2f(GetUniformLocation(name), value.x, value.y);
+    DMGE_GL_CALL(glUniform2f(GetUniformLocation(name), value.x, value.y));
 }
 
 void OpenGLShader::SetFloat3(std::string_view name, const glm::vec3& value)
 {
-    glUniform3f(GetUniformLocation(name), value.x, value.y, value.z);
+    DMGE_GL_CALL(glUniform3f(GetUniformLocation(name), value.x, value.y, value.z));
 }
 
 void OpenGLShader::SetFloat4(std::string_view name, const glm::vec4& value)
 {
-    glUniform4f(GetUniformLocation(name), value.x, value.y, value.z, value.w);
+    DMGE_GL_CALL(glUniform4f(GetUniformLocation(name), value.x, value.y, value.z, value.w));
 }
 
 void OpenGLShader::SetMat4(std::string_view name, const glm::mat4& value)
 {
-    glUniformMatrix4fv(GetUniformLocation(name), 1, GL_FALSE, glm::value_ptr(value));
+    DMGE_GL_CALL(glUniformMatrix4fv(GetUniformLocation(name), 1, GL_FALSE, glm::value_ptr(value)));
 }
 
 // ── File I/O ─────────────────────────────────────────────────────
@@ -190,8 +191,8 @@ void OpenGLShader::Compile(std::unordered_map<GLenum, std::string>& shaderSource
         GLuint shader = glCreateShader(type);
 
         const GLchar* sourceCStr = source.c_str();
-        glShaderSource(shader, 1, &sourceCStr, nullptr);
-        glCompileShader(shader);
+        DMGE_GL_CALL(glShaderSource(shader, 1, &sourceCStr, nullptr));
+        DMGE_GL_CALL(glCompileShader(shader));
 
         GLint compiled = 0;
         glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
@@ -203,12 +204,12 @@ void OpenGLShader::Compile(std::unordered_map<GLenum, std::string>& shaderSource
             std::string infoLog(maxLength, '\0');
             glGetShaderInfoLog(shader, maxLength, &maxLength, infoLog.data());
 
-            glDeleteShader(shader);
+            DMGE_GL_CALL(glDeleteShader(shader));
 
             // Clean up previously compiled shaders and the program
             for (uint32_t i = 0; i < shaderIndex; ++i)
-                glDeleteShader(shaderIDs[i]);
-            glDeleteProgram(program);
+                DMGE_GL_CALL(glDeleteShader(shaderIDs[i]));
+            DMGE_GL_CALL(glDeleteProgram(program));
 
             DMGE_LOG_ERROR("{0} shader compilation failed:\n{1}",
                            ShaderTypeName(type), infoLog);
@@ -216,11 +217,11 @@ void OpenGLShader::Compile(std::unordered_map<GLenum, std::string>& shaderSource
             return;
         }
 
-        glAttachShader(program, shader);
+        DMGE_GL_CALL(glAttachShader(program, shader));
         shaderIDs[shaderIndex++] = shader;
     }
 
-    glLinkProgram(program);
+    DMGE_GL_CALL(glLinkProgram(program));
 
     GLint linked = 0;
     glGetProgramiv(program, GL_LINK_STATUS, &linked);
@@ -232,10 +233,10 @@ void OpenGLShader::Compile(std::unordered_map<GLenum, std::string>& shaderSource
         std::string infoLog(maxLength, '\0');
         glGetProgramInfoLog(program, maxLength, &maxLength, infoLog.data());
 
-        glDeleteProgram(program);
+        DMGE_GL_CALL(glDeleteProgram(program));
 
         for (uint32_t i = 0; i < shaderIndex; ++i)
-            glDeleteShader(shaderIDs[i]);
+            DMGE_GL_CALL(glDeleteShader(shaderIDs[i]));
 
         DMGE_LOG_ERROR("Shader program linking failed:\n{0}", infoLog);
         DMGE_CORE_ASSERT(false, "Shader program linking failed!");
@@ -245,8 +246,8 @@ void OpenGLShader::Compile(std::unordered_map<GLenum, std::string>& shaderSource
     // Detach and delete shader objects (already linked into program)
     for (uint32_t i = 0; i < shaderIndex; ++i)
     {
-        glDetachShader(program, shaderIDs[i]);
-        glDeleteShader(shaderIDs[i]);
+        DMGE_GL_CALL(glDetachShader(program, shaderIDs[i]));
+        DMGE_GL_CALL(glDeleteShader(shaderIDs[i]));
     }
 
     m_RendererID = program;

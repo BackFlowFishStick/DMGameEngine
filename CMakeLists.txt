@@ -66,6 +66,7 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Core/Events/MouseEvent.h"
 
     # Platform / OpenGL
+    "src/DMGameEngine/Platform/OpenGL/OpenGLDebug.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLGraphicsContext.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLIndexBuffer.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLRendererAPI.h"

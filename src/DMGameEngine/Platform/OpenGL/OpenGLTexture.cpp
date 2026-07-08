@@ -7,6 +7,7 @@
 #include "DMGameEngine/Core/Log.h"
 
 #include <glad/glad.h>
+#include "DMGameEngine/Platform/OpenGL/OpenGLDebug.h"
 #include <stb_image.h>
 
 namespace DMGameEngine {
@@ -198,20 +199,20 @@ OpenGLTexture::OpenGLTexture(std::string_view filepath)
 
 OpenGLTexture::~OpenGLTexture()
 {
-    glDeleteTextures(1, &m_RendererID);
+    DMGE_GL_CALL(glDeleteTextures(1, &m_RendererID));
 }
 
 // ── Bind / Unbind ────────────────────────────────────────────────
 
 void OpenGLTexture::Bind(uint32_t slot) const
 {
-    glActiveTexture(GL_TEXTURE0 + slot);
-    glBindTexture(GL_TEXTURE_2D, m_RendererID);
+    DMGE_GL_CALL(glActiveTexture(GL_TEXTURE0 + slot));
+    DMGE_GL_CALL(glBindTexture(GL_TEXTURE_2D, m_RendererID));
 }
 
 void OpenGLTexture::Unbind() const
 {
-    glBindTexture(GL_TEXTURE_2D, 0);
+    DMGE_GL_CALL(glBindTexture(GL_TEXTURE_2D, 0));
 }
 
 // ── Data Upload ──────────────────────────────────────────────────
@@ -226,13 +227,13 @@ void OpenGLTexture::SetData(void* data, uint32_t size)
     GLenum dataFormat     = TextureFormatToGLData(m_Spec.Format);
     GLenum dataType       = TextureFormatToGLType(m_Spec.Format);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(internalFormat),
+    DMGE_GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(internalFormat),
                  static_cast<GLsizei>(m_Spec.Width),
                  static_cast<GLsizei>(m_Spec.Height),
-                 0, dataFormat, dataType, data);
+                 0, dataFormat, dataType, data));
 
     if (m_Spec.GenerateMipmaps)
-        glGenerateMipmap(GL_TEXTURE_2D);
+        DMGE_GL_CALL(glGenerateMipmap(GL_TEXTURE_2D));
 }
 
 // ── GPU Resource Creation ────────────────────────────────────────
@@ -240,35 +241,35 @@ void OpenGLTexture::SetData(void* data, uint32_t size)
 void OpenGLTexture::Invalidate()
 {
     if (m_RendererID)
-        glDeleteTextures(1, &m_RendererID);
+        DMGE_GL_CALL(glDeleteTextures(1, &m_RendererID));
 
-    glGenTextures(1, &m_RendererID);
+    DMGE_GL_CALL(glGenTextures(1, &m_RendererID));
     Bind(0);
 
     // ── Filtering ───────────────────────────────────────────────
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-                    TextureFilterToGL(m_Spec.MinFilter));
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
-                    TextureFilterToGL(m_Spec.MagFilter));
+    DMGE_GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                    TextureFilterToGL(m_Spec.MinFilter)));
+    DMGE_GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+                    TextureFilterToGL(m_Spec.MagFilter)));
 
     // ── Wrapping ────────────────────────────────────────────────
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
-                    TextureWrapToGL(m_Spec.WrapS));
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
-                    TextureWrapToGL(m_Spec.WrapT));
+    DMGE_GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+                    TextureWrapToGL(m_Spec.WrapS)));
+    DMGE_GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+                    TextureWrapToGL(m_Spec.WrapT)));
 
     // ── Allocate immutable storage (no data yet) ────────────────
     GLenum internalFormat = TextureFormatToGLInternal(m_Spec.Format);
     GLenum dataFormat     = TextureFormatToGLData(m_Spec.Format);
     GLenum dataType       = TextureFormatToGLType(m_Spec.Format);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(internalFormat),
+    DMGE_GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(internalFormat),
                  static_cast<GLsizei>(m_Spec.Width),
                  static_cast<GLsizei>(m_Spec.Height),
-                 0, dataFormat, dataType, nullptr);
+                 0, dataFormat, dataType, nullptr));
 
     if (m_Spec.GenerateMipmaps)
-        glGenerateMipmap(GL_TEXTURE_2D);
+        DMGE_GL_CALL(glGenerateMipmap(GL_TEXTURE_2D));
 }
 
 } // namespace DMGameEngine

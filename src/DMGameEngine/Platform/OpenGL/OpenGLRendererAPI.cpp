@@ -8,27 +8,28 @@
 #include "DMGameEngine/Core/Log.h"
 
 #include <glad/glad.h>
+#include "DMGameEngine/Platform/OpenGL/OpenGLDebug.h"
 
 namespace DMGameEngine {
 
 void OpenGLRendererAPI::Init()
 {
-    glEnable(GL_DEPTH_TEST);
+    DMGE_GL_CALL(glEnable(GL_DEPTH_TEST));
 }
 
 void OpenGLRendererAPI::SetClearColor(const glm::vec4& color)
 {
-    glClearColor(color.r, color.g, color.b, color.a);
+    DMGE_GL_CALL(glClearColor(color.r, color.g, color.b, color.a));
 }
 
 void OpenGLRendererAPI::Clear()
 {
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    DMGE_GL_CALL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 }
 
 void OpenGLRendererAPI::SetViewport(int x, int y, int width, int height)
 {
-    glViewport(x, y, width, height);
+    DMGE_GL_CALL(glViewport(x, y, width, height));
 }
 
 void OpenGLRendererAPI::DrawIndexed(const VertexArray& vertexArray)
@@ -38,10 +39,10 @@ void OpenGLRendererAPI::DrawIndexed(const VertexArray& vertexArray)
     const auto& indexBuffer = vertexArray.GetIndexBuffer();
     DMGE_CORE_ASSERT(indexBuffer, "VertexArray has no IndexBuffer attached!");
 
-    glDrawElements(GL_TRIANGLES,
+    DMGE_GL_CALL(glDrawElements(GL_TRIANGLES,
                    static_cast<GLsizei>(indexBuffer->GetCount()),
                    GL_UNSIGNED_INT,
-                   nullptr);
+                   nullptr));
 }
 
 } // namespace DMGameEngine
