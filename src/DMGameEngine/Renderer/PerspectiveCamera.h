@@ -32,7 +32,7 @@ public:
     }
 
     // ── Projection ───────────────────────────────────────────────
-    //  `fov` is the vertical field of view in radians; `aspectRatio` is
+    //  `fov` is the vertical field of view in degrees (converted to radians internally); `aspectRatio` is
     //  width / height.
     void SetProjection(float fov, float aspectRatio, float nearClip, float farClip)
     {
@@ -40,7 +40,7 @@ public:
         m_AspectRatio = aspectRatio;
         m_NearClip    = nearClip;
         m_FarClip     = farClip;
-        m_Projection  = glm::perspective(fov, aspectRatio, nearClip, farClip);
+        m_Projection  = glm::perspective(glm::radians(fov), aspectRatio, nearClip, farClip);
         RecalculateViewProjection();
     }
 
@@ -49,7 +49,7 @@ public:
     void SetAspectRatio(float aspectRatio)
     {
         m_AspectRatio = aspectRatio;
-        m_Projection  = glm::perspective(m_Fov, m_AspectRatio, m_NearClip, m_FarClip);
+        m_Projection  = glm::perspective(glm::radians(m_Fov), m_AspectRatio, m_NearClip, m_FarClip);
         RecalculateViewProjection();
     }
     float GetAspectRatio() const { return m_AspectRatio; }
@@ -78,7 +78,7 @@ private:
     glm::vec3 m_Target   = { 0.0f, 0.0f, -1.0f };
     glm::vec3 m_Up       = { 0.0f, 1.0f, 0.0f };
 
-    float m_Fov         = glm::radians(45.0f);
+    float m_Fov         = 45.0f; // vertical FOV in degrees (converted to radians internally)
     float m_AspectRatio = 16.0f / 9.0f;
     float m_NearClip    = 0.1f;
     float m_FarClip     = 1000.0f;

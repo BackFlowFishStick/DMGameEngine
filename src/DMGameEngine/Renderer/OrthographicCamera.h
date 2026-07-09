@@ -42,7 +42,7 @@ public:
 
     // ── Transform ────────────────────────────────────────────────
     //  Position is in world units; rotation is a roll about the view Z
-    //  axis expressed in radians. Mutating either recomputes the view.
+    //  axis expressed in degrees. Mutating either recomputes the view.
     void SetPosition(const glm::vec3& position) { m_Position = position; RecalculateViewMatrix(); }
     const glm::vec3& GetPosition() const { return m_Position; }
 
@@ -53,13 +53,13 @@ private:
     void RecalculateViewMatrix()
     {
         glm::mat4 transform = glm::translate(glm::mat4(1.0f), m_Position)
-                            * glm::rotate(glm::mat4(1.0f), m_Rotation,
+                            * glm::rotate(glm::mat4(1.0f), glm::radians(m_Rotation),
                                           glm::vec3(0.0f, 0.0f, 1.0f));
         SetView(glm::inverse(transform));
     }
 
     glm::vec3 m_Position = { 0.0f, 0.0f, 0.0f };
-    float     m_Rotation = 0.0f; // roll about Z, in radians
+    float     m_Rotation = 0.0f; // roll about Z, in degrees (converted to radians internally)
 };
 
 } // namespace DMGameEngine

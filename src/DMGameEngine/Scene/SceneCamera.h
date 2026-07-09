@@ -44,7 +44,7 @@ public:
     }
 
     // ── Perspective parameters ───────────────────────────────────
-    //  Vertical FOV is in radians.
+    //  Vertical FOV is in degrees (converted to radians internally).
     float GetPerspectiveVerticalFOV() const { return m_PerspectiveFOV; }
     void  SetPerspectiveVerticalFOV(float verticalFOV)
     {
@@ -109,7 +109,7 @@ private:
     {
         if (m_ProjectionType == ProjectionType::Perspective)
         {
-            m_Projection = glm::perspective(m_PerspectiveFOV, m_AspectRatio,
+            m_Projection = glm::perspective(glm::radians(m_PerspectiveFOV), m_AspectRatio,
                                              m_PerspectiveNear, m_PerspectiveFar);
         }
         else
@@ -126,7 +126,7 @@ private:
 
     ProjectionType m_ProjectionType = ProjectionType::Perspective;
 
-    float m_PerspectiveFOV  = glm::radians(45.0f);
+    float m_PerspectiveFOV  = 45.0f; // vertical FOV in degrees (converted to radians internally)
     float m_PerspectiveNear = 0.01f;
     float m_PerspectiveFar  = 1000.0f;
 
