@@ -4,6 +4,7 @@
 #include "DMGameEngine/Core/Input.h"
 #include "DMGameEngine/Core/Log.h"
 #include "DMGameEngine/Renderer/Renderer.h"
+#include "DMGameEngine/Renderer/Camera.h"
 #include "DMGameEngine/ImGui/ImGuiLayer.h"
 
 #include <chrono>
@@ -50,6 +51,14 @@ bool Application::IsRunning() const {
 
 Window& Application::GetWindow() const {
     return *m_window;
+}
+
+Camera* Application::GetActiveCamera() const {
+    return m_ActiveCamera.get();
+}
+
+void Application::SetActiveCamera(const std::shared_ptr<Camera>& camera) {
+    m_ActiveCamera = camera;
 }
 
 // ── Layer management ─────────────────────────────────────────────
@@ -172,10 +181,16 @@ void Application::MainLoop() {
         //  Stage 3 — Render
         //
         //  Renderer::BeginScene() clears the framebuffer (color +
-        //  depth); layers then submit draw commands inside the scene
-        //  before Renderer::EndScene() finalizes for the ImGui pass.
+        //  depth). With an active camera set, its view-projection is
+        //  cached for the layers' Submit() calls; otherwise the scene
+        //  begins with an identity view-projection. Layers then submit
+        //  draw commands before Renderer::EndScene() finalizes the
+        //  ImGui pass.
         // ═══════════════════════════════════════════════════════════
-        Renderer::BeginScene();
+        if (m_ActiveCamera)
+            Renderer::BeginScene(*m_ActiveCamera);
+        else
+            Renderer::BeginScene();
 
         for (auto& layer : m_layerStack)
             layer->OnRender();

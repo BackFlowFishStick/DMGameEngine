@@ -39,6 +39,7 @@
 namespace DMGameEngine {
 
 class ImGuiLayer;
+class Camera;      // forward declaration - active scene view-projection
 
 class DMGE_API Application {
 public:
@@ -58,6 +59,12 @@ public:
 
     // ImGui overlay (attached automatically); null until Initialize()
     ImGuiLayer* GetImGuiLayer() const { return m_ImGuiLayer; }
+
+    // ── Active scene camera ──────────────────────────────────
+    // If set, its view-projection is fed to Renderer::BeginScene each
+    // frame; otherwise the scene begins with an identity view-projection.
+    void SetActiveCamera(const std::shared_ptr<Camera>& camera);
+    Camera* GetActiveCamera() const;
 
     // ── Singleton accessor ────────────────────────────────
     static Application& Get();
@@ -93,6 +100,7 @@ private:
     WindowProps               m_windowProps;
     LayerStack                m_layerStack;
     ImGuiLayer*               m_ImGuiLayer = nullptr;
+    std::shared_ptr<Camera>   m_ActiveCamera;
 };
 
 } // namespace DMGameEngine
