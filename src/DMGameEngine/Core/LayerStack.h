@@ -45,6 +45,13 @@ public:
     std::unique_ptr<Layer> PopLayer(Layer* layer);
     std::unique_ptr<Layer> PopOverlay(Layer* layer);
 
+    // ── Teardown ───────────────────────────────────────────
+    // Detaches every layer in reverse order (OnDetach) while it is
+    // still alive, then drops ownership. Safe on an empty stack and
+    // idempotent - the destructor delegates here, so a later destroy
+    // of an already-cleared stack is a no-op.
+    void Clear();
+
     // ── Iterators ───────────────────────────────────────────
     // Forward: layers first, then overlays
     // Reverse: overlays first (render order), then layers

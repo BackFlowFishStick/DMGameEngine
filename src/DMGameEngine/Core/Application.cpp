@@ -225,9 +225,11 @@ void Application::Shutdown() {
     m_isRunning = false;
     OnShutdown();
     Renderer::Shutdown();
-    // LayerStack destructor automatically calls OnDetach()
-    // for all layers in reverse order, then clears the stack.
-    m_layerStack = LayerStack{};
+    // Detach every layer (OnDetach) while the GL context is still
+    // alive, before the window is torn down. Clear() runs the reverse
+    // OnDetach() pass and releases ownership in one step; the previous
+    // move-assignment bypassed the destructor and skipped OnDetach().
+    m_layerStack.Clear();
     m_ImGuiLayer = nullptr;
     m_window.reset();
 }
