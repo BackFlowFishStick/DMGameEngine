@@ -15,14 +15,13 @@
 
 #pragma once
 
-#include "DMGameEngine/Core/Export.h"
 #include "DMGameEngine/Renderer/Camera.h"
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 
 namespace DMGameEngine {
 
-class DMGE_API PerspectiveCamera : public Camera
+class PerspectiveCamera : public Camera
 {
 public:
     PerspectiveCamera(float fov, float aspectRatio,

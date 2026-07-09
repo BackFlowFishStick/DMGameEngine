@@ -20,12 +20,11 @@
 
 #pragma once
 
-#include "DMGameEngine/Core/Export.h"
 #include "glm/glm.hpp"
 
 namespace DMGameEngine {
 
-class DMGE_API Camera
+class Camera
 {
 public:
     Camera() = default;

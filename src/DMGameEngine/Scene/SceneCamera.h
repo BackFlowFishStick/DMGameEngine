@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include "DMGameEngine/Core/Export.h"
 #include "DMGameEngine/Renderer/Camera.h"
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
@@ -24,7 +23,7 @@
 
 namespace DMGameEngine {
 
-class DMGE_API SceneCamera : public Camera
+class SceneCamera : public Camera
 {
 public:
     enum class ProjectionType : uint8_t

@@ -15,7 +15,6 @@
 
 #pragma once
 
-#include "DMGameEngine/Core/Export.h"
 #include "DMGameEngine/Renderer/Camera.h"
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
@@ -23,7 +22,7 @@
 
 namespace DMGameEngine {
 
-class DMGE_API OrthographicCamera : public Camera
+class OrthographicCamera : public Camera
 {
 public:
     OrthographicCamera(float left, float right, float bottom, float top,
