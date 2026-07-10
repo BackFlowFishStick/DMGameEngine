@@ -16,6 +16,7 @@
 #pragma once
 
 #include "DMGameEngine/Renderer/Camera.h"
+#include <cstdint>
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 
@@ -53,6 +54,23 @@ public:
         RecalculateViewProjection();
     }
     float GetAspectRatio() const { return m_AspectRatio; }
+
+    // Viewport-size convenience: derives the aspect ratio from raw
+    // pixel dimensions (safe float division) and guards against a
+    // degenerate (zero) dimension. Mirrors SceneCamera::SetViewportSize.
+    void SetViewportSize(uint32_t width, uint32_t height)
+    {
+        if (width == 0 || height == 0)
+            return;
+        SetAspectRatio(static_cast<float>(width) / static_cast<float>(height));
+    }
+
+    // Routes a viewport resize to SetViewportSize, keeping the
+    // projection in sync with the drawable size.
+    void OnViewportResize(uint32_t width, uint32_t height) override
+    {
+        SetViewportSize(width, height);
+    }
 
     float GetFov()      const { return m_Fov; }
     float GetNearClip() const { return m_NearClip; }

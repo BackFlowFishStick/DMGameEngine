@@ -21,6 +21,7 @@
 #pragma once
 
 #include "glm/glm.hpp"
+#include <cstdint>
 
 namespace DMGameEngine {
 
@@ -35,6 +36,18 @@ public:
     }
 
     virtual ~Camera() = default;
+
+    // ── Viewport ──────────────────────────────────────────────────────
+    //  Hook invoked by the host (e.g. Application::OnEvent on a
+    //  WindowResizeEvent) so the camera can refresh an aspect-ratio
+    //  dependent projection. The base implementation is a no-op;
+    //  derived types whose projection depends on the aspect ratio
+    //  (PerspectiveCamera, SceneCamera) override it.
+    virtual void OnViewportResize(uint32_t width, uint32_t height)
+    {
+        (void)width;
+        (void)height;
+    }
 
     // ── Projection ───────────────────────────────────────────────
     //  The projection matrix (perspective / orthographic) transforming

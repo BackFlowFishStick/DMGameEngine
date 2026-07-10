@@ -94,8 +94,10 @@ void Application::OnEvent(Event& e) {
     // Keep the render viewport in sync with the window's drawable size.
     // Dispatched before layer propagation so a layer cannot suppress it.
     EventDispatcher viewportDispatcher(e);
-    viewportDispatcher.Dispatch<WindowResizeEvent>([](WindowResizeEvent& ev) {
+    viewportDispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& ev) {
         Renderer::OnWindowResize(static_cast<int>(ev.GetWidth()), static_cast<int>(ev.GetHeight()));
+        if (m_ActiveCamera)
+            m_ActiveCamera->OnViewportResize(ev.GetWidth(), ev.GetHeight());
         return false;  // do not mark handled; layers may still react
     });
 

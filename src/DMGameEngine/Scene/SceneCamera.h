@@ -104,6 +104,13 @@ public:
         RecalculateProjection();
     }
 
+    // Routes a viewport resize to SetViewportSize, which guards
+    // against a zero dimension and refreshes the active projection.
+    void OnViewportResize(uint32_t width, uint32_t height) override
+    {
+        SetViewportSize(width, height);
+    }
+
 private:
     void RecalculateProjection()
     {
