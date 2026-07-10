@@ -21,6 +21,11 @@ public:
     void Clear() override;
     void SetViewport(int x, int y, int width, int height) override;
     void DrawIndexed(const VertexArray& vertexArray) override;
+    void SetBlendState(bool enable, BlendFactor srcFactor, BlendFactor dstFactor) override;
+    void SetBlendEquation(BlendEquation equation) override;
+    void SetDepthTest(bool enable) override;
+    void SetDepthFunc(DepthFunc func) override;
+    void SetCullMode(CullMode mode) override;
 };
 
 } // namespace DMGameEngine

@@ -58,6 +58,36 @@ void Renderer::Clear()
     s_RendererAPI->Clear();
 }
 
+void Renderer::SetBlendState(bool enable, BlendFactor srcFactor, BlendFactor dstFactor)
+{
+    DMGE_CORE_ASSERT(s_RendererAPI, "Renderer not initialized! Call Renderer::Init() first.");
+    s_RendererAPI->SetBlendState(enable, srcFactor, dstFactor);
+}
+
+void Renderer::SetBlendEquation(BlendEquation equation)
+{
+    DMGE_CORE_ASSERT(s_RendererAPI, "Renderer not initialized! Call Renderer::Init() first.");
+    s_RendererAPI->SetBlendEquation(equation);
+}
+
+void Renderer::SetDepthTest(bool enable)
+{
+    DMGE_CORE_ASSERT(s_RendererAPI, "Renderer not initialized! Call Renderer::Init() first.");
+    s_RendererAPI->SetDepthTest(enable);
+}
+
+void Renderer::SetDepthFunc(DepthFunc func)
+{
+    DMGE_CORE_ASSERT(s_RendererAPI, "Renderer not initialized! Call Renderer::Init() first.");
+    s_RendererAPI->SetDepthFunc(func);
+}
+
+void Renderer::SetCullMode(CullMode mode)
+{
+    DMGE_CORE_ASSERT(s_RendererAPI, "Renderer not initialized! Call Renderer::Init() first.");
+    s_RendererAPI->SetCullMode(mode);
+}
+
 void Renderer::Submit(const std::shared_ptr<Shader>& shader,
                       const std::shared_ptr<VertexArray>& vertexArray,
                       const glm::mat4& transform)

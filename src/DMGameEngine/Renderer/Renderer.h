@@ -10,6 +10,7 @@
 #include "DMGameEngine/Core/Export.h"
 #include "glm/glm.hpp"
 #include <memory>
+#include "DMGameEngine/Renderer/RendererAPI.h"
 
 namespace DMGameEngine {
 
@@ -40,6 +41,16 @@ public:
     static void EndScene();
     static void SetClearColor(const glm::vec4& color);
     static void Clear();
+
+    // ── Pipeline state ───────────────────────────────────────
+    //  Forwarded to the active RendererAPI backend.
+    static void SetBlendState(bool enable,
+                              BlendFactor srcFactor = BlendFactor::SrcAlpha,
+                              BlendFactor dstFactor = BlendFactor::OneMinusSrcAlpha);
+    static void SetBlendEquation(BlendEquation equation);
+    static void SetDepthTest(bool enable);
+    static void SetDepthFunc(DepthFunc func);
+    static void SetCullMode(CullMode mode);
 
     // Binds the shader, uploads u_ViewProjection (from BeginScene's camera)
     // and u_Transform, then issues an indexed draw for the vertex array.

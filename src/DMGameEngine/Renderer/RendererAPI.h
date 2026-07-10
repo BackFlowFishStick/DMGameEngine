@@ -15,10 +15,62 @@
 #include "DMGameEngine/Core/Export.h"
 #include "glm/glm.hpp"
 #include <memory>
+#include <cstdint>
 
 namespace DMGameEngine {
 
 class VertexArray; // forward declaration
+
+// ── Blend Factor ─────────────────────────────────────────────
+enum class BlendFactor : uint8_t
+{
+    Zero = 0,
+    One,
+    SrcColor,
+    OneMinusSrcColor,
+    DstColor,
+    OneMinusDstColor,
+    SrcAlpha,
+    OneMinusSrcAlpha,
+    DstAlpha,
+    OneMinusDstAlpha,
+    ConstantColor,
+    OneMinusConstantColor,
+    ConstantAlpha,
+    OneMinusConstantAlpha,
+};
+
+// ── Blend Equation ───────────────────────────────────────────
+enum class BlendEquation : uint8_t
+{
+    Add = 0,
+    Subtract,
+    ReverseSubtract,
+    Min,
+    Max,
+};
+
+// ── Depth Function ───────────────────────────────────────────
+enum class DepthFunc : uint8_t
+{
+    Never = 0,
+    Less,
+    Equal,
+    LessEqual,
+    Greater,
+    NotEqual,
+    GreaterEqual,
+    Always,
+};
+
+// ── Cull Mode ────────────────────────────────────────────────
+enum class CullMode : uint8_t
+{
+    None = 0,
+    Front,
+    Back,
+    FrontAndBack,
+};
 
 class DMGE_API RendererAPI
 {
@@ -32,6 +84,21 @@ public:
     virtual void SetViewport(int x, int y, int width, int height) = 0;
 
     virtual void DrawIndexed(const VertexArray& vertexArray) = 0;
+
+    // ── Pipeline state ───────────────────────────────────────
+    //  Blend: toggles GL_BLEND and sets the RGB/alpha blend function.
+    virtual void SetBlendState(bool enable,
+                               BlendFactor srcFactor = BlendFactor::SrcAlpha,
+                               BlendFactor dstFactor = BlendFactor::OneMinusSrcAlpha) = 0;
+    virtual void SetBlendEquation(BlendEquation equation) = 0;
+
+    //  Depth test: toggles GL_DEPTH_TEST and sets the depth comparison.
+    virtual void SetDepthTest(bool enable) = 0;
+    virtual void SetDepthFunc(DepthFunc func) = 0;
+
+    //  Face culling: None disables culling; Front/Back/FrontAndBack
+    //  enable GL_CULL_FACE and select the culled face(s).
+    virtual void SetCullMode(CullMode mode) = 0;
 
     // ── Factory ─────────────────────────────────────────────────
     static std::unique_ptr<RendererAPI> Create();
