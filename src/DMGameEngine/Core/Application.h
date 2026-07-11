@@ -15,7 +15,7 @@
  *   class MyGame : public DMGameEngine::Application {
  *   public:
  *       void OnInitialize() override { ... }
- *       void OnUpdate(float dt) override { ... }
+ *       void OnUpdate(Timestep ts) override { ... }
  *       void OnRender() override      { ... }
  *       void OnShutdown() override    { ... }
  *   };
@@ -31,6 +31,7 @@
 #pragma once
 
 #include "DMGameEngine/Core/Export.h"
+#include "DMGameEngine/Core/Timestep.h"
 #include "DMGameEngine/Core/LayerStack.h"
 #include "DMGameEngine/Core/Window.h"
 
@@ -78,7 +79,7 @@ public:
 protected:
     // ── Lifecycle hooks — override in derived class ─────────
     virtual void OnInitialize();
-    virtual void OnUpdate(float deltaTime);
+    virtual void OnUpdate(Timestep ts);
     virtual void OnRender();
     virtual void OnShutdown();
 

@@ -9,7 +9,7 @@
  *   class MyFeatureLayer : public DMGameEngine::Layer {
  *   public:
  *       MyFeatureLayer() : Layer("MyFeature") {}
- *       void OnUpdate(float dt) override { ... }
+ *       void OnUpdate(Timestep ts) override { ... }
  *       void OnRender() override      { ... }
  *       void OnEvent(Event& e) override { ... }
  *   };
@@ -18,6 +18,7 @@
 #pragma once
 
 #include "DMGameEngine/Core/Export.h"
+#include "DMGameEngine/Core/Timestep.h"
 #include "DMGameEngine/Core/Events/Event.h"
 
 #include <string>
@@ -57,7 +58,7 @@ public:
     // ── Lifecycle hooks — override in derived classes ────
     virtual void OnAttach()    {}
     virtual void OnDetach()    {}
-    virtual void OnUpdate(float deltaTime) {}
+    virtual void OnUpdate(Timestep ts) {}
     virtual void OnRender()    {}
     virtual void OnEvent(Event& event) {}
 

@@ -59,6 +59,7 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Core/LayerStack.h"
     "src/DMGameEngine/Core/Log.h"
     "src/DMGameEngine/Core/MouseCodes.h"
+    "src/DMGameEngine/Core/Timestep.h"
     "src/DMGameEngine/Core/Window.h"
     "src/DMGameEngine/Core/Events/ApplicationEvent.h"
     "src/DMGameEngine/Core/Events/Event.h"

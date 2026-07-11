@@ -3,10 +3,12 @@
 #include "DMGameEngine/Core/Events/ApplicationEvent.h"
 #include "DMGameEngine/Core/Input.h"
 #include "DMGameEngine/Core/Log.h"
+#include "DMGameEngine/Core/Timestep.h"
 #include "DMGameEngine/Renderer/Renderer.h"
 #include "DMGameEngine/Renderer/Camera.h"
 #include "DMGameEngine/ImGui/ImGuiLayer.h"
 
+#include <algorithm>
 #include <chrono>
 
 namespace DMGameEngine {
@@ -82,7 +84,7 @@ std::unique_ptr<Layer> Application::PopOverlay(Layer* overlay) {
 // ── Lifecycle hooks (default empty) ──────────────────────────────
 
 void Application::OnInitialize() {}
-void Application::OnUpdate(float /*deltaTime*/) {}
+void Application::OnUpdate(Timestep /*ts*/) {}
 void Application::OnRender() {}
 void Application::OnShutdown() {}
 
@@ -165,8 +167,14 @@ void Application::MainLoop() {
 
         const auto currentTime  = Clock::now();
         const auto elapsed      = std::chrono::duration<float>(currentTime - previousTime);
-        const float deltaTime   = elapsed.count();
         previousTime = currentTime;
+
+        // Clamp the frame delta so a stalled frame (window drag, system
+        // suspend, or debugger pause) does not produce an oversized
+        // timestep that destabilizes motion / physics integrators.
+        constexpr float kMaxDeltaTime = 0.1f;
+        const float deltaTime = std::clamp(elapsed.count(), 0.0f, kMaxDeltaTime);
+        const Timestep ts(deltaTime);
 
         // ═══════════════════════════════════════════════════════════
         //  Stage 2 — Update
@@ -175,9 +183,9 @@ void Application::MainLoop() {
         //  Each layer advances its own simulation / logic tick.
         // ═══════════════════════════════════════════════════════════
         for (auto& layer : m_layerStack)
-            layer->OnUpdate(deltaTime);
+            layer->OnUpdate(ts);
 
-        OnUpdate(deltaTime);  // fallback when no layers are pushed
+        OnUpdate(ts);  // fallback when no layers are pushed
 
         // ═══════════════════════════════════════════════════════════
         //  Stage 3 — Render

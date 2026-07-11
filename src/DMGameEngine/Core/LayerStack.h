@@ -11,7 +11,7 @@
  *   stack.PushOverlay(new DebugOverlay());
  *
  *   for (Layer* layer : stack)
- *       layer->OnUpdate(dt);
+ *       layer->OnUpdate(ts);
  */
 
 #pragma once

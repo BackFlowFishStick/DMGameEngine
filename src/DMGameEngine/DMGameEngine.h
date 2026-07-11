@@ -13,6 +13,7 @@
 #include "DMGameEngine/Core/Export.h"
 #include "DMGameEngine/Core/KeyCodes.h"
 #include "DMGameEngine/Core/MouseCodes.h"
+#include "DMGameEngine/Core/Timestep.h"
 #include "DMGameEngine/Core/Layer.h"
 #include "DMGameEngine/Core/LayerStack.h"
 #include "DMGameEngine/Core/Application.h"
