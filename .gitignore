@@ -75,3 +75,6 @@ vcpkg_installed/
 *.tmp
 *.temp
 .DS_Store
+
+# SVN
+.svn/

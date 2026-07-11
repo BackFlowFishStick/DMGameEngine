@@ -17,6 +17,7 @@ namespace DMGameEngine {
 class RendererAPI; // forward declaration - backend instance owned below
 class Camera;      // forward declaration - scene view-projection source
 class Shader;      // forward declaration - bound per draw submission
+class Material;    // forward declaration - shader + uniform bundle per draw
 class VertexArray; // forward declaration - vertex inputs for a draw
 
 class DMGE_API Renderer
@@ -55,6 +56,13 @@ public:
     // Binds the shader, uploads u_ViewProjection (from BeginScene's camera)
     // and u_Transform, then issues an indexed draw for the vertex array.
     static void Submit(const std::shared_ptr<Shader>& shader,
+                      const std::shared_ptr<VertexArray>& vertexArray,
+                      const glm::mat4& transform = glm::mat4(1.0f));
+    // Binds the material (its shader + stored uniforms), then uploads
+    // u_ViewProjection (cached by BeginScene) and u_Transform before
+    // issuing an indexed draw. Use this when a draw carries per-material
+    // uniform values (e.g. u_Color).
+    static void Submit(const std::shared_ptr<Material>& material,
                       const std::shared_ptr<VertexArray>& vertexArray,
                       const glm::mat4& transform = glm::mat4(1.0f));
     static void Flush();

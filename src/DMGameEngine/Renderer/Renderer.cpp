@@ -6,6 +6,7 @@
 #include "DMGameEngine/Renderer/RendererAPI.h"
 #include "DMGameEngine/Renderer/Camera.h"
 #include "DMGameEngine/Renderer/Shader.h"
+#include "DMGameEngine/Renderer/Material.h"
 #include "DMGameEngine/Renderer/VertexArray.h"
 #include "DMGameEngine/Core/Log.h"
 
@@ -97,6 +98,26 @@ void Renderer::Submit(const std::shared_ptr<Shader>& shader,
     DMGE_CORE_ASSERT(vertexArray, "Renderer::Submit - vertexArray is null!");
 
     shader->Bind();
+    shader->SetMat4("u_ViewProjection", s_SceneData.ViewProjectionMatrix);
+    shader->SetMat4("u_Transform", transform);
+
+    s_RendererAPI->DrawIndexed(*vertexArray);
+}
+
+void Renderer::Submit(const std::shared_ptr<Material>& material,
+                      const std::shared_ptr<VertexArray>& vertexArray,
+                      const glm::mat4& transform)
+{
+    DMGE_CORE_ASSERT(s_RendererAPI, "Renderer not initialized! Call Renderer::Init() first.");
+    DMGE_CORE_ASSERT(material, "Renderer::Submit - material is null!");
+    DMGE_CORE_ASSERT(vertexArray, "Renderer::Submit - vertexArray is null!");
+
+    // Bind the shader and upload the stored material uniforms, then
+    // supply the scene/object uniforms (u_ViewProjection, u_Transform).
+    material->Bind();
+
+    const std::shared_ptr<Shader>& shader = material->GetShader();
+    DMGE_CORE_ASSERT(shader, "Renderer::Submit - material has no shader!");
     shader->SetMat4("u_ViewProjection", s_SceneData.ViewProjectionMatrix);
     shader->SetMat4("u_Transform", transform);
 
