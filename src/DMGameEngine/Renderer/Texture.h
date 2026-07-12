@@ -102,8 +102,8 @@ public:
     }
 
     // ── Factory ─────────────────────────────────────────────────
-    static std::shared_ptr<Texture> Create(const TextureSpecification& spec);
-    static std::shared_ptr<Texture> Create(std::string_view filepath);
+    static DM::Ref<Texture> Create(const TextureSpecification& spec);
+    static DM::Ref<Texture> Create(std::string_view filepath);
 };
 
 } // namespace DMGameEngine

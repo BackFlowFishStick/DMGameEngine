@@ -25,7 +25,7 @@ void LayerStack::Clear() {
 
 // ── PushLayer ────────────────────────────────────────────────────
 
-void LayerStack::PushLayer(std::unique_ptr<Layer> layer) {
+void LayerStack::PushLayer(DM::Scope<Layer> layer) {
     layer->OnAttach();
     m_layers.emplace(m_layers.begin() + m_layerInsertIndex,
                      std::move(layer));
@@ -34,7 +34,7 @@ void LayerStack::PushLayer(std::unique_ptr<Layer> layer) {
 
 // ── PushOverlay ──────────────────────────────────────────────────
 
-void LayerStack::PushOverlay(std::unique_ptr<Layer> overlay) {
+void LayerStack::PushOverlay(DM::Scope<Layer> overlay) {
     overlay->OnAttach();
     m_layers.emplace_back(std::move(overlay));
     // m_layerInsertIndex unchanged — overlays always at the back
@@ -42,10 +42,10 @@ void LayerStack::PushOverlay(std::unique_ptr<Layer> overlay) {
 
 // ── PopLayer ─────────────────────────────────────────────────────
 
-std::unique_ptr<Layer> LayerStack::PopLayer(Layer* layer) {
+DM::Scope<Layer> LayerStack::PopLayer(Layer* layer) {
     auto it = std::find_if(m_layers.begin(),
                            m_layers.begin() + m_layerInsertIndex,
-                           [layer](const std::unique_ptr<Layer>& ptr) {
+                           [layer](const DM::Scope<Layer>& ptr) {
                                return ptr.get() == layer;
                            });
 
@@ -62,10 +62,10 @@ std::unique_ptr<Layer> LayerStack::PopLayer(Layer* layer) {
 
 // ── PopOverlay ───────────────────────────────────────────────────
 
-std::unique_ptr<Layer> LayerStack::PopOverlay(Layer* overlay) {
+DM::Scope<Layer> LayerStack::PopOverlay(Layer* overlay) {
     auto it = std::find_if(m_layers.begin() + m_layerInsertIndex,
                            m_layers.end(),
-                           [overlay](const std::unique_ptr<Layer>& ptr) {
+                           [overlay](const DM::Scope<Layer>& ptr) {
                                return ptr.get() == overlay;
                            });
 

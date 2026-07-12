@@ -101,7 +101,7 @@ public:
     virtual void SetCullMode(CullMode mode) = 0;
 
     // ── Factory ─────────────────────────────────────────────────
-    static std::unique_ptr<RendererAPI> Create();
+    static DM::Scope<RendererAPI> Create();
 };
 
 } // namespace DMGameEngine

@@ -54,14 +54,14 @@ using UniformValue = std::variant<
 class DMGE_API Material
 {
 public:
-    explicit Material(std::shared_ptr<Shader> shader);
+    explicit Material(DM::Ref<Shader> shader);
     virtual ~Material() = default;
 
     // Binds the shader and uploads every stored uniform value.
     // Virtual so MaterialInstance can layer overrides on top of the base.
     virtual void Bind() const;
 
-    const std::shared_ptr<Shader>& GetShader() const { return m_Shader; }
+    const DM::Ref<Shader>& GetShader() const { return m_Shader; }
 
     // ── Uniform setters (mirror the Shader API by name) ────────
     virtual void SetInt(std::string_view name, int value);
@@ -77,7 +77,7 @@ public:
     virtual const UniformValue* Get(std::string_view name) const;
 
 private:
-    std::shared_ptr<Shader>                       m_Shader;
+    DM::Ref<Shader>                       m_Shader;
     std::unordered_map<std::string, UniformValue> m_Uniforms;
 };
 
@@ -87,18 +87,18 @@ private:
 // private override map. Bind() applies the base first, then the
 // overridden uniforms of this instance on top, so sibling instances do
 // not affect one another. Because it derives from Material it can be
-// passed to Renderer::Submit(const std::shared_ptr<Material>&, ...).
+// passed to Renderer::Submit(const DM::Ref<Material>&, ...).
 
 class DMGE_API MaterialInstance : public Material
 {
 public:
-    explicit MaterialInstance(std::shared_ptr<Material> baseMaterial);
+    explicit MaterialInstance(DM::Ref<Material> baseMaterial);
 
     // Binds the base material (shader + base uniforms), then uploads
     // this instance's overridden uniforms on top of them.
     void Bind() const override;
 
-    const std::shared_ptr<Material>& GetBaseMaterial() const { return m_BaseMaterial; }
+    const DM::Ref<Material>& GetBaseMaterial() const { return m_BaseMaterial; }
 
     // ── Uniform overrides (stored locally, never touch the base) ─
     void SetInt(std::string_view name, int value) override;
@@ -114,7 +114,7 @@ public:
     const UniformValue* Get(std::string_view name) const override;
 
 private:
-    std::shared_ptr<Material>                       m_BaseMaterial;
+    DM::Ref<Material>                       m_BaseMaterial;
     std::unordered_map<std::string, UniformValue>   m_Overrides;
 };
 

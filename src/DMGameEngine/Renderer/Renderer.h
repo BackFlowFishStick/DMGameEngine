@@ -55,15 +55,15 @@ public:
 
     // Binds the shader, uploads u_ViewProjection (from BeginScene's camera)
     // and u_Transform, then issues an indexed draw for the vertex array.
-    static void Submit(const std::shared_ptr<Shader>& shader,
-                      const std::shared_ptr<VertexArray>& vertexArray,
+    static void Submit(const DM::Ref<Shader>& shader,
+                      const DM::Ref<VertexArray>& vertexArray,
                       const glm::mat4& transform = glm::mat4(1.0f));
     // Binds the material (its shader + stored uniforms), then uploads
     // u_ViewProjection (cached by BeginScene) and u_Transform before
     // issuing an indexed draw. Use this when a draw carries per-material
     // uniform values (e.g. u_Color).
-    static void Submit(const std::shared_ptr<Material>& material,
-                      const std::shared_ptr<VertexArray>& vertexArray,
+    static void Submit(const DM::Ref<Material>& material,
+                      const DM::Ref<VertexArray>& vertexArray,
                       const glm::mat4& transform = glm::mat4(1.0f));
     static void Flush();
 
@@ -78,7 +78,7 @@ private:
     };
 
     static API s_API;
-    static std::unique_ptr<RendererAPI> s_RendererAPI;
+    static DM::Scope<RendererAPI> s_RendererAPI;
     static SceneData s_SceneData;
 };
 

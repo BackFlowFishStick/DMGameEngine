@@ -10,12 +10,12 @@
 
 namespace DMGameEngine {
 
-std::unique_ptr<RendererAPI> RendererAPI::Create()
+DM::Scope<RendererAPI> RendererAPI::Create()
 {
     switch (Renderer::GetAPI())
     {
         case Renderer::API::OpenGL:
-            return std::make_unique<OpenGLRendererAPI>();
+            return DM::CreateScope<OpenGLRendererAPI>();
 
         case Renderer::API::Vulkan:
         case Renderer::API::DirectX:

@@ -13,7 +13,7 @@
 namespace DMGameEngine {
 
 Renderer::API Renderer::s_API = Renderer::API::OpenGL;
-std::unique_ptr<RendererAPI> Renderer::s_RendererAPI;
+DM::Scope<RendererAPI> Renderer::s_RendererAPI;
 Renderer::SceneData Renderer::s_SceneData;
 
 void Renderer::Init()
@@ -89,8 +89,8 @@ void Renderer::SetCullMode(CullMode mode)
     s_RendererAPI->SetCullMode(mode);
 }
 
-void Renderer::Submit(const std::shared_ptr<Shader>& shader,
-                      const std::shared_ptr<VertexArray>& vertexArray,
+void Renderer::Submit(const DM::Ref<Shader>& shader,
+                      const DM::Ref<VertexArray>& vertexArray,
                       const glm::mat4& transform)
 {
     DMGE_CORE_ASSERT(s_RendererAPI, "Renderer not initialized! Call Renderer::Init() first.");
@@ -104,8 +104,8 @@ void Renderer::Submit(const std::shared_ptr<Shader>& shader,
     s_RendererAPI->DrawIndexed(*vertexArray);
 }
 
-void Renderer::Submit(const std::shared_ptr<Material>& material,
-                      const std::shared_ptr<VertexArray>& vertexArray,
+void Renderer::Submit(const DM::Ref<Material>& material,
+                      const DM::Ref<VertexArray>& vertexArray,
                       const glm::mat4& transform)
 {
     DMGE_CORE_ASSERT(s_RendererAPI, "Renderer not initialized! Call Renderer::Init() first.");
@@ -116,7 +116,7 @@ void Renderer::Submit(const std::shared_ptr<Material>& material,
     // supply the scene/object uniforms (u_ViewProjection, u_Transform).
     material->Bind();
 
-    const std::shared_ptr<Shader>& shader = material->GetShader();
+    const DM::Ref<Shader>& shader = material->GetShader();
     DMGE_CORE_ASSERT(shader, "Renderer::Submit - material has no shader!");
     shader->SetMat4("u_ViewProjection", s_SceneData.ViewProjectionMatrix);
     shader->SetMat4("u_Transform", transform);

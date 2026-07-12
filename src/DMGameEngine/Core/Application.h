@@ -22,8 +22,8 @@
  *
  *   int main() {
  *       MyGame game;
- *       game.PushLayer(std::make_unique<GameLayer>());
- *       game.PushOverlay(std::make_unique<DebugOverlay>());
+ *       game.PushLayer(DM::CreateScope<GameLayer>());
+ *       game.PushOverlay(DM::CreateScope<DebugOverlay>());
  *       return game.Run();
  *   }
  */
@@ -64,17 +64,17 @@ public:
     // ── Active scene camera ──────────────────────────────────
     // If set, its view-projection is fed to Renderer::BeginScene each
     // frame; otherwise the scene begins with an identity view-projection.
-    void SetActiveCamera(const std::shared_ptr<Camera>& camera);
+    void SetActiveCamera(const DM::Ref<Camera>& camera);
     Camera* GetActiveCamera() const;
 
     // ── Singleton accessor ────────────────────────────────
     static Application& Get();
 
     // ── Layer management ────────────────────────────────────
-    void PushLayer(std::unique_ptr<Layer> layer);
-    void PushOverlay(std::unique_ptr<Layer> overlay);
-    std::unique_ptr<Layer> PopLayer(Layer* layer);
-    std::unique_ptr<Layer> PopOverlay(Layer* overlay);
+    void PushLayer(DM::Scope<Layer> layer);
+    void PushOverlay(DM::Scope<Layer> overlay);
+    DM::Scope<Layer> PopLayer(Layer* layer);
+    DM::Scope<Layer> PopOverlay(Layer* overlay);
 
 protected:
     // ── Lifecycle hooks — override in derived class ─────────
@@ -97,11 +97,11 @@ private:
 
     static Application*       s_instance;
     bool                      m_isRunning = false;
-    std::unique_ptr<Window>   m_window;
+    DM::Scope<Window>         m_window;
     WindowProps               m_windowProps;
     LayerStack                m_layerStack;
     ImGuiLayer*               m_ImGuiLayer = nullptr;
-    std::shared_ptr<Camera>   m_ActiveCamera;
+    DM::Ref<Camera>           m_ActiveCamera;
 };
 
 } // namespace DMGameEngine

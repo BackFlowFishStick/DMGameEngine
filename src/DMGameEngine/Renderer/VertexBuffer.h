@@ -34,8 +34,8 @@ public:
     virtual void SetData(const void* data, uint32_t size) = 0;
 
     // ── Factory ─────────────────────────────────────────────────
-    static std::shared_ptr<VertexBuffer> Create(uint32_t size);
-    static std::shared_ptr<VertexBuffer> Create(const void* vertices, uint32_t size);
+    static DM::Ref<VertexBuffer> Create(uint32_t size);
+    static DM::Ref<VertexBuffer> Create(const void* vertices, uint32_t size);
 };
 
 } // namespace DMGameEngine

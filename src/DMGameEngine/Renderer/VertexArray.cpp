@@ -10,12 +10,12 @@
 
 namespace DMGameEngine {
 
-std::shared_ptr<VertexArray> VertexArray::Create()
+DM::Ref<VertexArray> VertexArray::Create()
 {
     switch (Renderer::GetAPI())
     {
         case Renderer::API::OpenGL:
-            return std::make_shared<OpenGLVertexArray>();
+            return DM::CreateRef<OpenGLVertexArray>();
 
         case Renderer::API::Vulkan:
         case Renderer::API::DirectX:

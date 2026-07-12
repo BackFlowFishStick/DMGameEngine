@@ -10,12 +10,12 @@
 
 namespace DMGameEngine {
 
-std::shared_ptr<VertexBuffer> VertexBuffer::Create(uint32_t size)
+DM::Ref<VertexBuffer> VertexBuffer::Create(uint32_t size)
 {
     switch (Renderer::GetAPI())
     {
         case Renderer::API::OpenGL:
-            return std::make_shared<OpenGLVertexBuffer>(size);
+            return DM::CreateRef<OpenGLVertexBuffer>(size);
 
         case Renderer::API::Vulkan:
         case Renderer::API::DirectX:
@@ -28,12 +28,12 @@ std::shared_ptr<VertexBuffer> VertexBuffer::Create(uint32_t size)
     return nullptr;
 }
 
-std::shared_ptr<VertexBuffer> VertexBuffer::Create(const void* vertices, uint32_t size)
+DM::Ref<VertexBuffer> VertexBuffer::Create(const void* vertices, uint32_t size)
 {
     switch (Renderer::GetAPI())
     {
         case Renderer::API::OpenGL:
-            return std::make_shared<OpenGLVertexBuffer>(vertices, size);
+            return DM::CreateRef<OpenGLVertexBuffer>(vertices, size);
 
         case Renderer::API::Vulkan:
         case Renderer::API::DirectX:

@@ -37,13 +37,13 @@ public:
     // ── Push / Pop ──────────────────────────────────────────
     // Layers are inserted at m_layerInsertIndex so that
     // overlays always sit at the back of the container.
-    void PushLayer(std::unique_ptr<Layer> layer);
-    void PushOverlay(std::unique_ptr<Layer> overlay);
+    void PushLayer(DM::Scope<Layer> layer);
+    void PushOverlay(DM::Scope<Layer> overlay);
 
     // Pop removes the layer from the stack; ownership
     // is transferred back to the caller (usually for deletion).
-    std::unique_ptr<Layer> PopLayer(Layer* layer);
-    std::unique_ptr<Layer> PopOverlay(Layer* layer);
+    DM::Scope<Layer> PopLayer(Layer* layer);
+    DM::Scope<Layer> PopOverlay(Layer* layer);
 
     // ── Teardown ───────────────────────────────────────────
     // Detaches every layer in reverse order (OnDetach) while it is
@@ -56,7 +56,7 @@ public:
     // Forward: layers first, then overlays
     // Reverse: overlays first (render order), then layers
 
-    using container_type = std::vector<std::unique_ptr<Layer>>;
+    using container_type = std::vector<DM::Scope<Layer>>;
 
     container_type::iterator       begin()       { return m_layers.begin(); }
     container_type::iterator       end()         { return m_layers.end(); }

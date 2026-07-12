@@ -19,7 +19,7 @@ overloaded(Ts...) -> overloaded<Ts...>;
 
 // Upload every uniform in a map to the given shader. Shared by Material
 // (its own uniforms) and MaterialInstance (its overrides).
-void UploadUniforms(const std::shared_ptr<Shader>& shader,
+void UploadUniforms(const DM::Ref<Shader>& shader,
                     const std::unordered_map<std::string, UniformValue>& uniforms)
 {
     for (const auto& [name, value] : uniforms)
@@ -41,7 +41,7 @@ void UploadUniforms(const std::shared_ptr<Shader>& shader,
 
 // ── Material ──────────────────────────────────────────────────────
 
-Material::Material(std::shared_ptr<Shader> shader)
+Material::Material(DM::Ref<Shader> shader)
     : m_Shader(std::move(shader))
 {
     DMGE_CORE_ASSERT(m_Shader, "Material - shader is null!");
@@ -106,7 +106,7 @@ const UniformValue* Material::Get(std::string_view name) const
 
 // ── MaterialInstance ──────────────────────────────────────────────
 
-MaterialInstance::MaterialInstance(std::shared_ptr<Material> baseMaterial)
+MaterialInstance::MaterialInstance(DM::Ref<Material> baseMaterial)
     : Material(baseMaterial ? baseMaterial->GetShader() : nullptr)
     , m_BaseMaterial(std::move(baseMaterial))
 {

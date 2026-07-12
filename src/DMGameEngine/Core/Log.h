@@ -23,12 +23,12 @@ public:
     static void Init();
     static void Shutdown();
 
-    static std::shared_ptr<spdlog::logger>& GetCoreLogger();
-    static std::shared_ptr<spdlog::logger>& GetClientLogger();
+    static DM::Ref<spdlog::logger>& GetCoreLogger();
+    static DM::Ref<spdlog::logger>& GetClientLogger();
 
 private:
-    static std::shared_ptr<spdlog::logger> s_coreLogger;
-    static std::shared_ptr<spdlog::logger> s_clientLogger;
+    static DM::Ref<spdlog::logger> s_coreLogger;
+    static DM::Ref<spdlog::logger> s_clientLogger;
 };
 
 } // namespace DMGameEngine

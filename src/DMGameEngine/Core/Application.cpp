@@ -59,25 +59,25 @@ Camera* Application::GetActiveCamera() const {
     return m_ActiveCamera.get();
 }
 
-void Application::SetActiveCamera(const std::shared_ptr<Camera>& camera) {
+void Application::SetActiveCamera(const DM::Ref<Camera>& camera) {
     m_ActiveCamera = camera;
 }
 
 // ── Layer management ─────────────────────────────────────────────
 
-void Application::PushLayer(std::unique_ptr<Layer> layer) {
+void Application::PushLayer(DM::Scope<Layer> layer) {
     m_layerStack.PushLayer(std::move(layer));
 }
 
-void Application::PushOverlay(std::unique_ptr<Layer> overlay) {
+void Application::PushOverlay(DM::Scope<Layer> overlay) {
     m_layerStack.PushOverlay(std::move(overlay));
 }
 
-std::unique_ptr<Layer> Application::PopLayer(Layer* layer) {
+DM::Scope<Layer> Application::PopLayer(Layer* layer) {
     return m_layerStack.PopLayer(layer);
 }
 
-std::unique_ptr<Layer> Application::PopOverlay(Layer* overlay) {
+DM::Scope<Layer> Application::PopOverlay(Layer* overlay) {
     return m_layerStack.PopOverlay(overlay);
 }
 
@@ -137,7 +137,7 @@ void Application::Initialize() {
 
     // Attach the ImGui overlay - provides the context / frame for the
     // OnImGuiRender() pass used by editor and debug UI layers.
-    auto imguiLayer = std::make_unique<ImGuiLayer>();
+    auto imguiLayer = DM::CreateScope<ImGuiLayer>();
     m_ImGuiLayer = imguiLayer.get();
     PushOverlay(std::move(imguiLayer));
 

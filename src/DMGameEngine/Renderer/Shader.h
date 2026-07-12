@@ -153,8 +153,8 @@ public:
     virtual void SetMat4(std::string_view name, const glm::mat4& value)    = 0;
 
     // ── Factory ─────────────────────────────────────────────────
-    static std::shared_ptr<Shader> Create(std::string_view filepath);
-    static std::shared_ptr<Shader> Create(std::string_view name,
+    static DM::Ref<Shader> Create(std::string_view filepath);
+    static DM::Ref<Shader> Create(std::string_view name,
                                           std::string_view vertexSrc,
                                           std::string_view fragmentSrc);
 };

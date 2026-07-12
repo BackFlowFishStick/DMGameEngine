@@ -8,12 +8,12 @@
 
 namespace DMGameEngine {
 
-std::shared_ptr<Shader> Shader::Create(std::string_view filepath)
+DM::Ref<Shader> Shader::Create(std::string_view filepath)
 {
     switch (Renderer::GetAPI())
     {
         case Renderer::API::OpenGL:
-            return std::make_shared<OpenGLShader>(filepath);
+            return DM::CreateRef<OpenGLShader>(filepath);
 
         case Renderer::API::Vulkan:
         case Renderer::API::DirectX:
@@ -26,14 +26,14 @@ std::shared_ptr<Shader> Shader::Create(std::string_view filepath)
     return nullptr;
 }
 
-std::shared_ptr<Shader> Shader::Create(std::string_view name,
+DM::Ref<Shader> Shader::Create(std::string_view name,
                                        std::string_view vertexSrc,
                                        std::string_view fragmentSrc)
 {
     switch (Renderer::GetAPI())
     {
         case Renderer::API::OpenGL:
-            return std::make_shared<OpenGLShader>(name, vertexSrc, fragmentSrc);
+            return DM::CreateRef<OpenGLShader>(name, vertexSrc, fragmentSrc);
 
         case Renderer::API::Vulkan:
         case Renderer::API::DirectX:

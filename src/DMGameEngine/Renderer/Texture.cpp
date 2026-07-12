@@ -8,12 +8,12 @@
 
 namespace DMGameEngine {
 
-std::shared_ptr<Texture> Texture::Create(const TextureSpecification& spec)
+DM::Ref<Texture> Texture::Create(const TextureSpecification& spec)
 {
     switch (Renderer::GetAPI())
     {
         case Renderer::API::OpenGL:
-            return std::make_shared<OpenGLTexture>(spec);
+            return DM::CreateRef<OpenGLTexture>(spec);
 
         case Renderer::API::Vulkan:
         case Renderer::API::DirectX:
@@ -26,12 +26,12 @@ std::shared_ptr<Texture> Texture::Create(const TextureSpecification& spec)
     return nullptr;
 }
 
-std::shared_ptr<Texture> Texture::Create(std::string_view filepath)
+DM::Ref<Texture> Texture::Create(std::string_view filepath)
 {
     switch (Renderer::GetAPI())
     {
         case Renderer::API::OpenGL:
-            return std::make_shared<OpenGLTexture>(filepath);
+            return DM::CreateRef<OpenGLTexture>(filepath);
 
         case Renderer::API::Vulkan:
         case Renderer::API::DirectX:

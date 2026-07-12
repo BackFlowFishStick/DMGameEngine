@@ -64,7 +64,7 @@ void OpenGLVertexArray::Unbind() const
 
 // ── Vertex / Index Buffer Attachment ─────────────────────────────────
 
-void OpenGLVertexArray::AddVertexBuffer(const std::shared_ptr<VertexBuffer>& vertexBuffer)
+void OpenGLVertexArray::AddVertexBuffer(const DM::Ref<VertexBuffer>& vertexBuffer)
 {
     DMGE_CORE_ASSERT(!vertexBuffer->GetLayout().GetElements().empty(),
                      "Vertex buffer has no layout!");
@@ -135,7 +135,7 @@ void OpenGLVertexArray::AddVertexBuffer(const std::shared_ptr<VertexBuffer>& ver
     m_VertexBuffers.push_back(vertexBuffer);
 }
 
-void OpenGLVertexArray::SetIndexBuffer(const std::shared_ptr<IndexBuffer>& indexBuffer)
+void OpenGLVertexArray::SetIndexBuffer(const DM::Ref<IndexBuffer>& indexBuffer)
 {
     DMGE_GL_CALL(glBindVertexArray(m_RendererID));
     indexBuffer->Bind();

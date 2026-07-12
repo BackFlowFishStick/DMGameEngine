@@ -45,7 +45,7 @@ private:
 
     WindowData m_data;
 
-    std::unique_ptr<GraphicsContext> m_context;
+    DM::Scope<GraphicsContext> m_context;
 };
 
 } // namespace DMGameEngine

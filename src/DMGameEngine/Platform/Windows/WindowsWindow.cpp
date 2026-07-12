@@ -18,8 +18,8 @@ static void GLFWErrorCallback(int error, const char* description) {
 }
 
 // ── Factory ──────────────────────────────────────────────────────
-std::unique_ptr<Window> Window::Create(const WindowProps& props) {
-    return std::make_unique<WindowsWindow>(props);
+DM::Scope<Window> Window::Create(const WindowProps& props) {
+    return DM::CreateScope<WindowsWindow>(props);
 }
 
 // ── Constructor / Destructor ─────────────────────────────────────
@@ -67,7 +67,7 @@ void WindowsWindow::Init(const WindowProps& props) {
     glfwSetWindowUserPointer(m_window, &m_data);
 
     // ── OpenGL context via GraphicsContext abstraction ──────────
-    m_context = std::make_unique<OpenGLGraphicsContext>(m_window);
+    m_context = DM::CreateScope<OpenGLGraphicsContext>(m_window);
     m_context->Init();
 
     SetVSync(true);

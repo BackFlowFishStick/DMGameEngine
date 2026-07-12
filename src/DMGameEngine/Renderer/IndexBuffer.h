@@ -30,7 +30,7 @@ public:
     virtual uint32_t GetCount() const = 0;
 
     // ── Factory ─────────────────────────────────────────────────
-    static std::shared_ptr<IndexBuffer> Create(const uint32_t* indices, uint32_t count);
+    static DM::Ref<IndexBuffer> Create(const uint32_t* indices, uint32_t count);
 };
 
 } // namespace DMGameEngine

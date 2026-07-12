@@ -50,7 +50,7 @@ public:
     virtual bool IsVSync() const = 0;
 
     // Factory — returns a platform-specific Window instance
-    static std::unique_ptr<Window> Create(const WindowProps& props = WindowProps());
+    static DM::Scope<Window> Create(const WindowProps& props = WindowProps());
 };
 
 } // namespace DMGameEngine

@@ -7,6 +7,8 @@
  */
 
 #pragma once
+#include <memory>
+#include <utility>
 
 #if defined(DMGE_BUILD_DLL)
     // Building the engine DLL
@@ -22,3 +24,33 @@
     // Static build or unsupported platform — no export/import needed
     #define DMGE_API
 #endif
+
+namespace DM
+{
+    template<typename T>
+    using Scope = std::unique_ptr<T>;
+
+    template<typename T>
+    using Ref = std::shared_ptr<T>;
+
+    template<typename T, typename... Args>
+    Scope<T> CreateScope(Args&&... args)
+    {
+        return std::make_unique<T>(std::forward<Args>(args)...);
+    }
+
+    template<typename T, typename... Args>
+    Ref<T> CreateRef(Args&&... args)
+    {
+        return std::make_shared<T>(std::forward<Args>(args)...);
+    }
+}
+
+// Bring aliases into DMGameEngine namespace for convenience
+namespace DMGameEngine
+{
+    using DM::Scope;
+    using DM::Ref;
+    using DM::CreateScope;
+    using DM::CreateRef;
+}
