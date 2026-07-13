@@ -1,27 +1,24 @@
 /*
  * DMGameEngine - Texture Abstraction
  *
- * Base class for all graphics API texture implementations.
- * Platform backends (OpenGL, Vulkan, DirectX) derive from this
- * and provide their own texture creation, binding and data upload.
+ * Abstract base class for all graphics API texture implementations.
+ * Platform backends (OpenGL, Vulkan, DirectX) derive from this and
+ * provide their own texture creation, binding and data upload.
  *
- * Textures are created via the static Create() factory, which
- * selects the correct backend based on the active Renderer::API.
+ * Concrete texture kinds (Texture2D, TextureCube, Texture2DArray)
+ * derive from Texture and expose type-specific specification structs
+ * and Create() factories.
  */
 
 #pragma once
 
 #include "DMGameEngine/Core/Export.h"
-#include "glm/glm.hpp"
-#include <string>
-#include <string_view>
-#include <memory>
+
 #include <cstdint>
-#include "DMGameEngine/Core/Log.h"
 
 namespace DMGameEngine {
 
-// ── Texture Format ─────────────────────────────────────────────────
+// -- Texture Format ------------------------------------------------
 
 enum class TextureFormat : uint8_t
 {
@@ -42,7 +39,7 @@ enum class TextureFormat : uint8_t
     DepthStencil
 };
 
-// ── Texture Filter ─────────────────────────────────────────────────
+// -- Texture Filter ------------------------------------------------
 
 enum class TextureFilter : uint8_t
 {
@@ -51,59 +48,35 @@ enum class TextureFilter : uint8_t
     Linear   = 2
 };
 
-// ── Texture Wrap ───────────────────────────────────────────────────
+// -- Texture Wrap --------------------------------------------------
 
 enum class TextureWrap : uint8_t
 {
-    None         = 0,
-    Repeat       = 1,
-    ClampToEdge  = 2,
-    ClampToBorder = 3,
+    None           = 0,
+    Repeat         = 1,
+    ClampToEdge    = 2,
+    ClampToBorder  = 3,
     MirroredRepeat = 4
 };
 
-// ── Texture Specification ──────────────────────────────────────────
-
-struct DMGE_API TextureSpecification
-{
-    uint32_t      Width          = 1;
-    uint32_t      Height         = 1;
-    TextureFormat Format         = TextureFormat::RGBA8;
-    TextureFilter MinFilter      = TextureFilter::Linear;
-    TextureFilter MagFilter      = TextureFilter::Linear;
-    TextureWrap   WrapS          = TextureWrap::Repeat;
-    TextureWrap   WrapT          = TextureWrap::Repeat;
-    bool          GenerateMipmaps = true;
-
-    TextureSpecification() = default;
-};
-
-// ── Texture ────────────────────────────────────────────────────────
+// -- Texture (base) -----------------------------------------------
 
 class DMGE_API Texture
 {
 public:
     virtual ~Texture() = default;
 
-    virtual void Bind(uint32_t slot = 0)   const = 0;
-    virtual void Unbind()                  const = 0;
-
-    virtual uint32_t GetWidth()  const = 0;
-    virtual uint32_t GetHeight() const = 0;
+    virtual uint32_t GetWidth()      const = 0;
+    virtual uint32_t GetHeight()     const = 0;
     virtual uint32_t GetRendererID() const = 0;
 
-    virtual const TextureSpecification& GetSpecification() const = 0;
-
-    virtual void SetData(void* data, uint32_t size) = 0;
+    virtual void Bind(uint32_t slot = 0) const = 0;
+    virtual void Unbind()                 const = 0;
 
     virtual bool operator==(const Texture& other) const
     {
         return GetRendererID() == other.GetRendererID();
     }
-
-    // ── Factory ─────────────────────────────────────────────────
-    static DM::Ref<Texture> Create(const TextureSpecification& spec);
-    static DM::Ref<Texture> Create(std::string_view filepath);
 };
 
 } // namespace DMGameEngine

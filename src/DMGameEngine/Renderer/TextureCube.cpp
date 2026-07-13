@@ -1,19 +1,20 @@
 /*
- * DMGameEngine - Texture Factory Implementation
+ * DMGameEngine - TextureCube Factory Implementation
  */
 
-#include "DMGameEngine/Renderer/Texture.h"
+#include "DMGameEngine/Renderer/TextureCube.h"
+#include "DMGameEngine/Core/Log.h"
 #include "DMGameEngine/Renderer/Renderer.h"
-#include "DMGameEngine/Platform/OpenGL/OpenGLTexture.h"
+#include "DMGameEngine/Platform/OpenGL/OpenGLTextureCube.h"
 
 namespace DMGameEngine {
 
-DM::Ref<Texture> Texture::Create(const TextureSpecification& spec)
+DM::Ref<TextureCube> TextureCube::Create(const TextureCubeSpecification& spec)
 {
     switch (Renderer::GetAPI())
     {
         case Renderer::API::OpenGL:
-            return DM::CreateRef<OpenGLTexture>(spec);
+            return DM::CreateRef<OpenGLTextureCube>(spec);
 
         case Renderer::API::Vulkan:
         case Renderer::API::DirectX:
@@ -26,12 +27,12 @@ DM::Ref<Texture> Texture::Create(const TextureSpecification& spec)
     return nullptr;
 }
 
-DM::Ref<Texture> Texture::Create(std::string_view filepath)
+DM::Ref<TextureCube> TextureCube::Create(const std::array<std::string, CubeFaceCount>& facePaths)
 {
     switch (Renderer::GetAPI())
     {
         case Renderer::API::OpenGL:
-            return DM::CreateRef<OpenGLTexture>(filepath);
+            return DM::CreateRef<OpenGLTextureCube>(facePaths);
 
         case Renderer::API::Vulkan:
         case Renderer::API::DirectX:

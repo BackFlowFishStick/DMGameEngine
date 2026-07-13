@@ -27,7 +27,9 @@ set(DMGE_SOURCES
     "src/DMGameEngine/Platform/OpenGL/OpenGLIndexBuffer.cpp"
     "src/DMGameEngine/Platform/OpenGL/OpenGLRendererAPI.cpp"
     "src/DMGameEngine/Platform/OpenGL/OpenGLShader.cpp"
-    "src/DMGameEngine/Platform/OpenGL/OpenGLTexture.cpp"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLTexture2D.cpp"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLTextureCube.cpp"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLTexture2DArray.cpp"
     "src/DMGameEngine/Platform/OpenGL/OpenGLVertexArray.cpp"
     "src/DMGameEngine/Platform/OpenGL/OpenGLVertexBuffer.cpp"
 
@@ -41,7 +43,9 @@ set(DMGE_SOURCES
     "src/DMGameEngine/Renderer/RendererAPI.cpp"
     "src/DMGameEngine/Renderer/Shader.cpp"
     "src/DMGameEngine/Renderer/Material.cpp"
-    "src/DMGameEngine/Renderer/Texture.cpp"
+    "src/DMGameEngine/Renderer/Texture2D.cpp"
+    "src/DMGameEngine/Renderer/TextureCube.cpp"
+    "src/DMGameEngine/Renderer/Texture2DArray.cpp"
     "src/DMGameEngine/Renderer/VertexArray.cpp"
     "src/DMGameEngine/Renderer/VertexBuffer.cpp"
 
@@ -73,7 +77,10 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Platform/OpenGL/OpenGLIndexBuffer.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLRendererAPI.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLShader.h"
-    "src/DMGameEngine/Platform/OpenGL/OpenGLTexture.h"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLTextureUtils.h"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLTexture2D.h"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLTextureCube.h"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLTexture2DArray.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLVertexArray.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLVertexBuffer.h"
 
@@ -92,6 +99,9 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Renderer/Shader.h"
     "src/DMGameEngine/Renderer/Material.h"
     "src/DMGameEngine/Renderer/Texture.h"
+    "src/DMGameEngine/Renderer/Texture2D.h"
+    "src/DMGameEngine/Renderer/TextureCube.h"
+    "src/DMGameEngine/Renderer/Texture2DArray.h"
     "src/DMGameEngine/Renderer/VertexArray.h"
     "src/DMGameEngine/Renderer/VertexBuffer.h"
 
