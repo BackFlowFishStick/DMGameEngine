@@ -46,11 +46,11 @@ namespace DM
     }
 }
 
-// Bring aliases into DMGameEngine namespace for convenience
-namespace DMGameEngine
-{
-    using DM::Scope;
-    using DM::Ref;
-    using DM::CreateScope;
-    using DM::CreateRef;
-}
+// // Bring aliases into DMGameEngine namespace for convenience
+// namespace DMGameEngine
+// {
+//     using DM::Scope;
+//     using DM::Ref;
+//     using DM::CreateScope;
+//     using DM::CreateRef;
+// }
