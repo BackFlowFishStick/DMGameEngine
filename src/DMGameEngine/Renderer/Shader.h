@@ -17,6 +17,7 @@
 #include <string_view>
 #include <memory>
 #include <vector>
+#include <unordered_map>
 #include <cstdint>
 #include "DMGameEngine/Core/Log.h"
 
@@ -157,6 +158,24 @@ public:
     static DM::Ref<Shader> Create(std::string_view name,
                                           std::string_view vertexSrc,
                                           std::string_view fragmentSrc);
+};
+
+// ── Shader Library ─────────────────────────────────────────────────────────
+
+class DMGE_API ShaderLibrary
+{
+public:
+    void Add(const DM::Ref<Shader>& shader);
+    void Add(const std::string& name, const DM::Ref<Shader>& shader);
+
+    DM::Ref<Shader> Load(const std::string& filepath);
+    DM::Ref<Shader> Load(const std::string& name, const std::string& filepath);
+
+    DM::Ref<Shader> Get(const std::string& name) const;
+    bool            Exists(const std::string& name) const;
+
+private:
+    std::unordered_map<std::string, DM::Ref<Shader>> m_Shaders;
 };
 
 } // namespace DMGameEngine

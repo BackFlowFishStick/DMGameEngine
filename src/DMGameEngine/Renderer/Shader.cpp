@@ -46,4 +46,63 @@ DM::Ref<Shader> Shader::Create(std::string_view name,
     return nullptr;
 }
 
+// -- Shader Library Implementation ---
+
+namespace {
+
+std::string ExtractShaderName(const std::string& filepath)
+{
+    auto lastSlash = filepath.find_last_of("/\\");
+    auto lastDot   = filepath.rfind('.');
+    auto start     = (lastSlash == std::string::npos) ? 0 : lastSlash + 1;
+    auto count     = (lastDot == std::string::npos || lastDot < start)
+                         ? std::string::npos
+                         : lastDot - start;
+    return filepath.substr(start, count);
+}
+
+} // namespace
+
+void ShaderLibrary::Add(const DM::Ref<Shader>& shader)
+{
+    Add(shader->GetName(), shader);
+}
+
+void ShaderLibrary::Add(const std::string& name, const DM::Ref<Shader>& shader)
+{
+    DMGE_CORE_ASSERT(shader, "ShaderLibrary::Add - shader is null!");
+    DMGE_CORE_ASSERT(!Exists(name), "Shader '{0}' already exists!", name);
+    m_Shaders[name] = shader;
+}
+
+DM::Ref<Shader> ShaderLibrary::Load(const std::string& filepath)
+{
+    return Load(ExtractShaderName(filepath), filepath);
+}
+
+DM::Ref<Shader> ShaderLibrary::Load(const std::string& name, const std::string& filepath)
+{
+    if (Exists(name))
+        return Get(name);
+
+    auto shader = Shader::Create(filepath);
+    Add(name, shader);
+    return shader;
+}
+
+DM::Ref<Shader> ShaderLibrary::Get(const std::string& name) const
+{
+    auto it = m_Shaders.find(name);
+    if (it != m_Shaders.end())
+        return it->second;
+
+    DMGE_CORE_ASSERT(false, "Shader '{0}' not found in library!", name);
+    return nullptr;
+}
+
+bool ShaderLibrary::Exists(const std::string& name) const
+{
+    return m_Shaders.find(name) != m_Shaders.end();
+}
+
 } // namespace DMGameEngine
