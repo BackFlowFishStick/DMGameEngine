@@ -77,6 +77,10 @@ public:
     {
         return GetRendererID() == other.GetRendererID();
     }
+
+    // Regenerate the mipmap chain from the base level. No-op for textures
+    // whose storage was allocated without mip levels (GenerateMipmaps=false).
+    virtual void GenerateMipmaps() = 0;
 };
 
 } // namespace DMGameEngine

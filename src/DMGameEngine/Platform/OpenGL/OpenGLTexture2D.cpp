@@ -18,6 +18,7 @@ using Detail::TextureFormatToGLData;
 using Detail::TextureFormatToGLType;
 using Detail::TextureFilterToGL;
 using Detail::TextureWrapToGL;
+using Detail::MipLevelCount;
 
 // -- Constructors / Destructor -------------------------------------
 
@@ -49,6 +50,9 @@ OpenGLTexture2D::OpenGLTexture2D(std::string_view filepath)
     Invalidate();
     SetData(data, static_cast<uint32_t>(width * height * 4));
 
+    if (m_Spec.GenerateMipmaps)
+        GenerateMipmaps();
+
     stbi_image_free(data);
 }
 
@@ -78,17 +82,29 @@ void OpenGLTexture2D::SetData(void* data, uint32_t size)
 
     Bind(0);
 
-    GLenum internalFormat = TextureFormatToGLInternal(m_Spec.Format);
-    GLenum dataFormat     = TextureFormatToGLData(m_Spec.Format);
-    GLenum dataType       = TextureFormatToGLType(m_Spec.Format);
+    GLenum dataFormat = TextureFormatToGLData(m_Spec.Format);
+    GLenum dataType   = TextureFormatToGLType(m_Spec.Format);
 
-    DMGE_GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(internalFormat),
+    // Update the whole base level of the immutable storage allocated in
+    // Invalidate(). glTexSubImage2D only writes pixels into existing storage
+    // (no re-spec / reallocation), making it suitable for frequent updates
+    // (video frames, dynamic canvases, ...). Mipmaps are NOT regenerated
+    // here - call GenerateMipmaps() explicitly when needed.
+    DMGE_GL_CALL(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0,
                  static_cast<GLsizei>(m_Spec.Width),
                  static_cast<GLsizei>(m_Spec.Height),
-                 0, dataFormat, dataType, data));
+                 dataFormat, dataType, data));
+}
 
-    if (m_Spec.GenerateMipmaps)
-        DMGE_GL_CALL(glGenerateMipmap(GL_TEXTURE_2D));
+// -- Mipmaps -------------------------------------------------------
+
+void OpenGLTexture2D::GenerateMipmaps()
+{
+    if (!m_RendererID || !m_Spec.GenerateMipmaps)
+        return;   // no texture / storage was allocated with a single level
+
+    Bind(0);
+    DMGE_GL_CALL(glGenerateMipmap(GL_TEXTURE_2D));
 }
 
 // -- GPU Resource Creation -----------------------------------------
@@ -113,18 +129,19 @@ void OpenGLTexture2D::Invalidate()
     DMGE_GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
                     TextureWrapToGL(m_Spec.WrapT)));
 
-    // -- Allocate storage (no data yet) -------------------------
+    // -- Allocate immutable storage (no data yet) ---------------
+    // Storage is allocated once; mip levels are reserved up-front when
+    // GenerateMipmaps is set so GenerateMipmaps() can fill them later.
+    // Subsequent updates must use glTexSubImage2D (glTexImage2D is illegal
+    // on immutable-storage textures).
     GLenum internalFormat = TextureFormatToGLInternal(m_Spec.Format);
-    GLenum dataFormat     = TextureFormatToGLData(m_Spec.Format);
-    GLenum dataType       = TextureFormatToGLType(m_Spec.Format);
+    GLsizei levels = m_Spec.GenerateMipmaps
+        ? MipLevelCount(m_Spec.Width, m_Spec.Height)
+        : 1;
 
-    DMGE_GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(internalFormat),
+    DMGE_GL_CALL(glTexStorage2D(GL_TEXTURE_2D, levels, internalFormat,
                  static_cast<GLsizei>(m_Spec.Width),
-                 static_cast<GLsizei>(m_Spec.Height),
-                 0, dataFormat, dataType, nullptr));
-
-    if (m_Spec.GenerateMipmaps)
-        DMGE_GL_CALL(glGenerateMipmap(GL_TEXTURE_2D));
+                 static_cast<GLsizei>(m_Spec.Height)));
 }
 
 } // namespace DMGameEngine

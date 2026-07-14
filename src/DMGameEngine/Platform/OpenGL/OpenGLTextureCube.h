@@ -35,6 +35,8 @@ public:
 
     void SetData(void* data, uint32_t size, uint32_t face) override;
 
+    void GenerateMipmaps() override;
+
 private:
     void Invalidate();   // (re)create the GPU cube map from current spec
 

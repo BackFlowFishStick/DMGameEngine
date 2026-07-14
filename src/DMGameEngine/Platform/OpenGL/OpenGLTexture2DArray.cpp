@@ -17,6 +17,7 @@ using Detail::TextureFormatToGLData;
 using Detail::TextureFormatToGLType;
 using Detail::TextureFilterToGL;
 using Detail::TextureWrapToGL;
+using Detail::MipLevelCount;
 
 // -- Constructor / Destructor --------------------------------------
 
@@ -67,6 +68,17 @@ void OpenGLTexture2DArray::SetData(void* data, uint32_t size, uint32_t layer)
                  dataFormat, dataType, data));
 }
 
+// -- Mipmaps -------------------------------------------------------
+
+void OpenGLTexture2DArray::GenerateMipmaps()
+{
+    if (!m_RendererID || !m_Spec.GenerateMipmaps)
+        return;   // no texture / storage was allocated with a single level
+
+    Bind(0);
+    DMGE_GL_CALL(glGenerateMipmap(GL_TEXTURE_2D_ARRAY));
+}
+
 // -- GPU Resource Creation -----------------------------------------
 
 void OpenGLTexture2DArray::Invalidate()
@@ -91,20 +103,20 @@ void OpenGLTexture2DArray::Invalidate()
     DMGE_GL_CALL(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_R,
                     TextureWrapToGL(m_Spec.WrapR)));
 
-    // -- Allocate array storage (no data yet) -------------------
+    // -- Allocate immutable array storage (no data yet) ---------
+    // Storage is allocated once; mip levels are reserved up-front when
+    // GenerateMipmaps is set so GenerateMipmaps() can fill them later.
+    // Per-layer updates must use glTexSubImage3D (glTexImage3D is illegal
+    // on immutable-storage textures).
     GLenum internalFormat = TextureFormatToGLInternal(m_Spec.Format);
-    GLenum dataFormat     = TextureFormatToGLData(m_Spec.Format);
-    GLenum dataType       = TextureFormatToGLType(m_Spec.Format);
+    GLsizei levels = m_Spec.GenerateMipmaps
+        ? MipLevelCount(m_Spec.Width, m_Spec.Height)
+        : 1;
 
-    DMGE_GL_CALL(glTexImage3D(GL_TEXTURE_2D_ARRAY,
-                 0, static_cast<GLint>(internalFormat),
+    DMGE_GL_CALL(glTexStorage3D(GL_TEXTURE_2D_ARRAY, levels, internalFormat,
                  static_cast<GLsizei>(m_Spec.Width),
                  static_cast<GLsizei>(m_Spec.Height),
-                 static_cast<GLsizei>(m_Spec.Layers),
-                 0, dataFormat, dataType, nullptr));
-
-    if (m_Spec.GenerateMipmaps)
-        DMGE_GL_CALL(glGenerateMipmap(GL_TEXTURE_2D_ARRAY));
+                 static_cast<GLsizei>(m_Spec.Layers)));
 }
 
 } // namespace DMGameEngine

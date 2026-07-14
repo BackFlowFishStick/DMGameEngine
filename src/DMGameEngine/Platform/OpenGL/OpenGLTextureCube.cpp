@@ -18,6 +18,7 @@ using Detail::TextureFormatToGLData;
 using Detail::TextureFormatToGLType;
 using Detail::TextureFilterToGL;
 using Detail::TextureWrapToGL;
+using Detail::MipLevelCount;
 
 // -- Constructors / Destructor -------------------------------------
 
@@ -55,6 +56,9 @@ OpenGLTextureCube::OpenGLTextureCube(const std::array<std::string, CubeFaceCount
         SetData(data, static_cast<uint32_t>(width * height * 4), i);
         stbi_image_free(data);
     }
+
+    if (m_RendererID && m_Spec.GenerateMipmaps)
+        GenerateMipmaps();
 }
 
 OpenGLTextureCube::~OpenGLTextureCube()
@@ -95,6 +99,17 @@ void OpenGLTextureCube::SetData(void* data, uint32_t size, uint32_t face)
                  dataFormat, dataType, data));
 }
 
+// -- Mipmaps -------------------------------------------------------
+
+void OpenGLTextureCube::GenerateMipmaps()
+{
+    if (!m_RendererID || !m_Spec.GenerateMipmaps)
+        return;   // no texture / storage was allocated with a single level
+
+    Bind(0);
+    DMGE_GL_CALL(glGenerateMipmap(GL_TEXTURE_CUBE_MAP));
+}
+
 // -- GPU Resource Creation -----------------------------------------
 
 void OpenGLTextureCube::Invalidate()
@@ -119,22 +134,19 @@ void OpenGLTextureCube::Invalidate()
     DMGE_GL_CALL(glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T,
                     TextureWrapToGL(m_Spec.WrapT)));
 
-    // -- Allocate each face (no data yet) -----------------------
+    // -- Allocate immutable storage for all 6 faces (no data yet) --
+    // glTexStorage2D on a cube-map target allocates every face + the mip
+    // chain in one call; levels are reserved up-front when GenerateMipmaps
+    // is set. Updates must use glTexSubImage2D (glTexImage2D is illegal on
+    // immutable-storage textures).
     GLenum internalFormat = TextureFormatToGLInternal(m_Spec.Format);
-    GLenum dataFormat     = TextureFormatToGLData(m_Spec.Format);
-    GLenum dataType       = TextureFormatToGLType(m_Spec.Format);
+    GLsizei levels = m_Spec.GenerateMipmaps
+        ? MipLevelCount(m_Spec.Size, m_Spec.Size)
+        : 1;
 
-    for (uint32_t i = 0; i < CubeFaceCount; ++i)
-    {
-        DMGE_GL_CALL(glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
-                     0, static_cast<GLint>(internalFormat),
-                     static_cast<GLsizei>(m_Spec.Size),
-                     static_cast<GLsizei>(m_Spec.Size),
-                     0, dataFormat, dataType, nullptr));
-    }
-
-    if (m_Spec.GenerateMipmaps)
-        DMGE_GL_CALL(glGenerateMipmap(GL_TEXTURE_CUBE_MAP));
+    DMGE_GL_CALL(glTexStorage2D(GL_TEXTURE_CUBE_MAP, levels, internalFormat,
+                 static_cast<GLsizei>(m_Spec.Size),
+                 static_cast<GLsizei>(m_Spec.Size)));
 }
 
 } // namespace DMGameEngine

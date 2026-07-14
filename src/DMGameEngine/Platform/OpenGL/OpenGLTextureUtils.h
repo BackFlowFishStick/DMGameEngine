@@ -168,4 +168,15 @@ inline GLsizei FormatChannels(TextureFormat format)
     }
 }
 
+// Number of mipmap levels needed for a texture of the given dimensions
+// (chain depth: floor(log2(max(w,h))) + 1). Used only to size immutable
+// storage; callers pass 1 when mipmaps are disabled.
+inline GLsizei MipLevelCount(uint32_t width, uint32_t height)
+{
+    uint32_t maxDim = (width > height) ? width : height;
+    GLsizei  levels = 1;
+    while (maxDim > 1) { maxDim >>= 1; ++levels; }
+    return levels;
+}
+
 } // namespace DMGameEngine::Detail

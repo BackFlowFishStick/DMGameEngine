@@ -32,6 +32,8 @@ public:
 
     void SetData(void* data, uint32_t size, uint32_t layer) override;
 
+    void GenerateMipmaps() override;
+
 private:
     void Invalidate();   // (re)create the GPU texture array from current spec
 
