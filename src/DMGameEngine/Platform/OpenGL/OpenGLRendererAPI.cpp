@@ -71,16 +71,6 @@ GLenum DepthFuncToGL(DepthFunc func)
 } // anonymous namespace
 
 
-void OpenGLRendererAPI::Init()
-{
-    // Default pipeline state - explicit so the baseline is documented.
-    // (Depth test on with Less; face culling and blending off by default.)
-    SetDepthTest(true);
-    SetDepthFunc(DepthFunc::Less);
-    SetCullMode(CullMode::None);
-    SetBlendState(false, BlendFactor::SrcAlpha, BlendFactor::OneMinusSrcAlpha);
-}
-
 void OpenGLRendererAPI::SetClearColor(const glm::vec4& color)
 {
     DMGE_GL_CALL(glClearColor(color.r, color.g, color.b, color.a));

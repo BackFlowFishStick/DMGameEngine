@@ -16,11 +16,11 @@ Renderer::API Renderer::s_API = Renderer::API::OpenGL;
 DM::Scope<RendererAPI> Renderer::s_RendererAPI;
 Renderer::SceneData Renderer::s_SceneData;
 
-void Renderer::Init()
+void Renderer::Init(const RendererAPIInitConfig& config)
 {
     s_RendererAPI = RendererAPI::Create();
     DMGE_CORE_ASSERT(s_RendererAPI, "Failed to create RendererAPI backend!");
-    s_RendererAPI->Init();
+    s_RendererAPI->Init(config);
     DMGE_LOG_INFO("Renderer initialized with API: OpenGL");
 }
 

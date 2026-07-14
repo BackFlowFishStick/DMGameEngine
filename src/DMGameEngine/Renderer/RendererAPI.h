@@ -72,12 +72,35 @@ enum class CullMode : uint8_t
     FrontAndBack,
 };
 
+// -- Init Configuration ------------------------------------------
+// Bundle of initial pipeline-state values handed to RendererAPI::Init().
+// Defaults mirror the previous hardcoded baseline, so call sites that
+// pass no argument keep the same behavior.
+struct RendererAPIInitConfig
+{
+    // Clear color written by Clear() (RGBA). Matches the GL default.
+    glm::vec4 ClearColor{0.0f, 0.0f, 0.0f, 0.0f};
+
+    // Depth test.
+    bool DepthTestEnabled = true;
+    DepthFunc DepthFunction = DepthFunc::Less;
+
+    // Face culling.
+    CullMode Culling = CullMode::None;
+
+    // Blending.
+    bool BlendEnabled = false;
+    BlendFactor SrcBlendFactor = BlendFactor::SrcAlpha;
+    BlendFactor DstBlendFactor = BlendFactor::OneMinusSrcAlpha;
+    BlendEquation BlendEquationMode = BlendEquation::Add;
+};
+
 class DMGE_API RendererAPI
 {
 public:
     virtual ~RendererAPI() = default;
 
-    virtual void Init() {}
+    virtual void Init(const RendererAPIInitConfig& config = {});
 
     virtual void SetClearColor(const glm::vec4& color) = 0;
     virtual void Clear() = 0;

@@ -32,7 +32,7 @@ public:
     };
 
 public:
-    static void Init();
+    static void Init(const RendererAPIInitConfig& config = {});
     static void Shutdown();
 
     static void BeginScene();
