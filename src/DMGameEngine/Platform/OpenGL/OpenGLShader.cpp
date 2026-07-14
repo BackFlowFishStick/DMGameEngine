@@ -218,6 +218,8 @@ void OpenGLShader::Compile(std::unordered_map<GLenum, std::string>& shaderSource
         }
 
         DMGE_GL_CALL(glAttachShader(program, shader));
+        DMGE_CORE_ASSERT(shaderIndex < shaderIDs.size(),
+                         "Too many shader stages! Max supported: {0}", shaderIDs.size());
         shaderIDs[shaderIndex++] = shader;
     }
 
