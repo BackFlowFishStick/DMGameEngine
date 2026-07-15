@@ -31,6 +31,7 @@
 #include "DMGameEngine/Renderer/Camera.h"
 #include "DMGameEngine/Renderer/OrthographicCamera.h"
 #include "DMGameEngine/Renderer/PerspectiveCamera.h"
+#include "DMGameEngine/Renderer/CameraController.h"
 #include "DMGameEngine/Renderer/GraphicsContext.h"
 #include "DMGameEngine/Renderer/Renderer.h"
 #include "DMGameEngine/Renderer/RendererAPI.h"
@@ -46,6 +47,8 @@
 
 // ── Scene ────────────────────────────────────────────────────────
 #include "DMGameEngine/Scene/SceneCamera.h"
+#include "DMGameEngine/Scene/OrthographicCameraController.h"
+#include "DMGameEngine/Scene/EditorCameraController.h"
 
 // ── ImGui ────────────────────────────────────────────────────────
 #include "DMGameEngine/ImGui/ImGuiLayer.h"

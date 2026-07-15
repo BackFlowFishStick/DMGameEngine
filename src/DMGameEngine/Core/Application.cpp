@@ -5,7 +5,7 @@
 #include "DMGameEngine/Core/Log.h"
 #include "DMGameEngine/Core/Timestep.h"
 #include "DMGameEngine/Renderer/Renderer.h"
-#include "DMGameEngine/Renderer/Camera.h"
+#include "DMGameEngine/Renderer/CameraController.h"
 #include "DMGameEngine/ImGui/ImGuiLayer.h"
 
 #include <algorithm>
@@ -55,12 +55,12 @@ Window& Application::GetWindow() const {
     return *m_window;
 }
 
-Camera* Application::GetActiveCamera() const {
-    return m_ActiveCamera.get();
+CameraController* Application::GetActiveCameraController() const {
+    return m_ActiveController.get();
 }
 
-void Application::SetActiveCamera(const DM::Ref<Camera>& camera) {
-    m_ActiveCamera = camera;
+void Application::SetActiveCameraController(const DM::Ref<CameraController>& controller) {
+    m_ActiveController = controller;
 }
 
 // ── Layer management ─────────────────────────────────────────────
@@ -98,10 +98,14 @@ void Application::OnEvent(Event& e) {
     EventDispatcher viewportDispatcher(e);
     viewportDispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& ev) {
         Renderer::OnWindowResize(static_cast<int>(ev.GetWidth()), static_cast<int>(ev.GetHeight()));
-        if (m_ActiveCamera)
-            m_ActiveCamera->OnViewportResize(ev.GetWidth(), ev.GetHeight());
         return false;  // do not mark handled; layers may still react
     });
+
+    // Forward to the active camera controller (mouse drag / scroll /
+    // button / viewport resize). Handlers return false, so events keep
+    // propagating to layers below.
+    if (m_ActiveController)
+        m_ActiveController->OnEvent(e);
 
     // Propagate event through layers in reverse order:
     // overlays (UI / tool) consume input before gameplay layers.
@@ -182,6 +186,9 @@ void Application::MainLoop() {
         //  Forward iteration: Platform → Core → Resource → Feature → Tool.
         //  Each layer advances its own simulation / logic tick.
         // ═══════════════════════════════════════════════════════════
+        if (m_ActiveController)
+            m_ActiveController->OnUpdate(ts);
+
         for (auto& layer : m_layerStack)
             layer->OnUpdate(ts);
 
@@ -197,8 +204,8 @@ void Application::MainLoop() {
         //  draw commands before Renderer::EndScene() finalizes the
         //  ImGui pass.
         // ═══════════════════════════════════════════════════════════
-        if (m_ActiveCamera)
-            Renderer::BeginScene(*m_ActiveCamera);
+        if (m_ActiveController)
+            Renderer::BeginScene(m_ActiveController->GetCamera());
         else
             Renderer::BeginScene();
 

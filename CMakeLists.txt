@@ -90,6 +90,7 @@ set(DMGE_HEADERS
 
     # Renderer
     "src/DMGameEngine/Renderer/Camera.h"
+    "src/DMGameEngine/Renderer/CameraController.h"
     "src/DMGameEngine/Renderer/OrthographicCamera.h"
     "src/DMGameEngine/Renderer/PerspectiveCamera.h"
     "src/DMGameEngine/Renderer/GraphicsContext.h"
@@ -107,6 +108,8 @@ set(DMGE_HEADERS
 
     # Scene
     "src/DMGameEngine/Scene/SceneCamera.h"
+    "src/DMGameEngine/Scene/OrthographicCameraController.h"
+    "src/DMGameEngine/Scene/EditorCameraController.h"
 
     # ImGui
     "src/DMGameEngine/ImGui/ImGuiLayer.h"
