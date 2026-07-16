@@ -63,6 +63,16 @@ public:
             m_CameraPosition.y += move;
         if (input.IsKeyPressed(KeyCode::S) || input.IsKeyPressed(KeyCode::Down))
             m_CameraPosition.y -= move;
+        const float dz = 0.15f;
+
+        {
+            auto leftX = input.GetGamepadAxis(0, GamepadAxis::LeftX);
+            auto leftY = input.GetGamepadAxis(0, GamepadAxis::LeftY);
+
+            m_CameraPosition.x += leftX * dz;
+            m_CameraPosition.y += leftY * dz;
+        }
+
 
         m_Camera.SetPosition(m_CameraPosition);
 

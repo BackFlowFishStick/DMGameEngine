@@ -23,7 +23,7 @@ public:
         : m_jid(jid), m_name(std::move(name)) {}
 
     int GetJid() const { return m_jid; }
-    const std::string& GetName() const { return m_name; }
+    const std::string& GetGamepadName() const { return m_name; }
 
     std::string ToString() const override {
         std::ostringstream oss;

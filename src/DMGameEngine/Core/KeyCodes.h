@@ -23,7 +23,7 @@ enum class KeyCode : int {
     A = 65, B, C, D, E, F, G, H, I, J, K, L, M,
     N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
     LeftBracket = 91,   // [
-    Backslash = 92,     // \
+    Backslash = 92,     // backslash
     RightBracket = 93,  // ]
     GraveAccent = 96,   // `
 
