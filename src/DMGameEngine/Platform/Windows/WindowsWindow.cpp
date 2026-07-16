@@ -3,6 +3,7 @@
 #include "DMGameEngine/Core/Events/ApplicationEvent.h"
 #include "DMGameEngine/Core/Events/KeyEvent.h"
 #include "DMGameEngine/Core/Events/MouseEvent.h"
+#include "DMGameEngine/Core/Events/GamepadEvent.h"
 #include "DMGameEngine/Core/Log.h"
 #include "DMGameEngine/Platform/OpenGL/OpenGLGraphicsContext.h"
 
@@ -16,6 +17,11 @@ namespace DMGameEngine {
 static void GLFWErrorCallback(int error, const char* description) {
     DMGE_LOG_ERROR("GLFW Error ({}): {}", error, description);
 }
+
+// Window whose callback chain receives global joystick / gamepad events.
+// The GLFW joystick callback has no window parameter, so we bridge via
+// this static pointer (the engine runs a single primary window).
+static GLFWwindow* s_eventWindow = nullptr;
 
 // ── Factory ──────────────────────────────────────────────────────
 DM::Scope<Window> Window::Create(const WindowProps& props) {
@@ -65,6 +71,8 @@ void WindowsWindow::Init(const WindowProps& props) {
 
     // ── Store pointer to WindowData for use in callbacks ─────────
     glfwSetWindowUserPointer(m_window, &m_data);
+
+    s_eventWindow = m_window;
 
     // ── OpenGL context via GraphicsContext abstraction ──────────
     m_context = DM::CreateScope<OpenGLGraphicsContext>(m_window);
@@ -154,10 +162,30 @@ void WindowsWindow::Init(const WindowProps& props) {
         MouseScrolledEvent event(static_cast<float>(xOffset), static_cast<float>(yOffset));
         data.callback(event);
     });
+
+    // ── Joystick / gamepad hot-plug callback ──────────────────────────────
+    glfwSetJoystickCallback([](int jid, int event) {
+        if (!s_eventWindow)
+            return;
+        auto& data = *static_cast<WindowData*>(
+            glfwGetWindowUserPointer(s_eventWindow));
+        if (!data.callback)
+            return;
+        if (event == GLFW_CONNECTED) {
+            const char* name = glfwGetJoystickName(jid);
+            GamepadConnectedEvent ev(jid, name ? name : "");
+            data.callback(ev);
+        } else {  // GLFW_DISCONNECTED
+            GamepadDisconnectedEvent ev(jid);
+            data.callback(ev);
+        }
+    });
 }
 
 // ── Shutdown ─────────────────────────────────────────────────────
 void WindowsWindow::Shutdown() {
+    s_eventWindow = nullptr;
+
     // Graphics context must be destroyed before the GLFW window,
     // since it holds references to the window's GL context.
     m_context.reset();
@@ -188,6 +216,28 @@ void* WindowsWindow::GetNativeWindow() const {
 void WindowsWindow::SetVSync(bool enabled) {
     m_data.vSync = enabled;
     glfwSwapInterval(enabled ? 1 : 0);
+}
+
+// ── Cursor mode ─────────────────────────────────────────────────
+void WindowsWindow::SetCursorMode(CursorMode mode) {
+    m_cursorMode = mode;
+    int glfwMode = GLFW_CURSOR_NORMAL;
+    switch (mode) {
+    case CursorMode::Normal:   glfwMode = GLFW_CURSOR_NORMAL;   break;
+    case CursorMode::Hidden:   glfwMode = GLFW_CURSOR_HIDDEN;   break;
+    case CursorMode::Disabled: glfwMode = GLFW_CURSOR_DISABLED; break;
+    }
+    glfwSetInputMode(m_window, GLFW_CURSOR, glfwMode);
+}
+
+// ── Raw mouse motion ────────────────────────────────────────────────
+void WindowsWindow::SetRawMouseMotion(bool enabled) {
+    m_rawMouseMotion = enabled;
+    // Raw motion only takes effect with the cursor disabled and needs
+    // platform support; otherwise the request is recorded but inert.
+    if (glfwRawMouseMotionSupported())
+        glfwSetInputMode(m_window, GLFW_RAW_MOUSE_MOTION,
+                         enabled ? GLFW_TRUE : GLFW_FALSE);
 }
 
 } // namespace DMGameEngine

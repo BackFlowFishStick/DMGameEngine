@@ -26,6 +26,9 @@
 #include "DMGameEngine/Core/Events/Event.h"
 #include "DMGameEngine/Core/KeyCodes.h"
 #include "DMGameEngine/Core/MouseCodes.h"
+#include "DMGameEngine/Core/GamepadCodes.h"
+
+#include <string>
 
 namespace DMGameEngine {
 
@@ -53,6 +56,20 @@ public:
     // ── Mouse position ─────────────────────────────────────────
     virtual float GetMouseX() const = 0;
     virtual float GetMouseY() const = 0;
+
+    // ── Mouse motion delta (per frame) ──────────────────────────────
+    // Frame-to-frame movement accumulated from mouse-motion events
+    // during the last event pump. Reset to zero by BeginFrame().
+    virtual float GetMouseDeltaX() const = 0;
+    virtual float GetMouseDeltaY() const = 0;
+
+    // ── Gamepad (controller) state ───────────────────────────────────────
+    // index selects a controller slot in [0, kMaxGamepads).
+    virtual bool IsGamepadPresent(int index) const = 0;
+    virtual std::string GetGamepadName(int index) const = 0;
+    virtual bool IsGamepadButtonPressed(int index, GamepadButton button) const = 0;
+    virtual bool IsGamepadButtonJustPressed(int index, GamepadButton button) const = 0;
+    virtual float GetGamepadAxis(int index, GamepadAxis axis) const = 0;
 
     // ── Internal: update state from an event ───────────────────
     virtual void OnEvent(Event& e) = 0;

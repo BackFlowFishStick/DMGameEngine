@@ -27,6 +27,13 @@ struct WindowProps {
         : title(t), width(w), height(h) {}
 };
 
+// ── Cursor Mode ─────────────────────────────────────────────────
+enum class CursorMode {
+    Normal,    // visible, free to leave the window
+    Hidden,    // hidden while over the window, not locked
+    Disabled,  // hidden + locked to the window (FPS mouse-look)
+};
+
 // ── Window Interface ─────────────────────────────────────────────
 class DMGE_API Window {
 public:
@@ -48,6 +55,16 @@ public:
     virtual void SetEventCallback(const EventCallbackFn& callback) = 0;
     virtual void SetVSync(bool enabled) = 0;
     virtual bool IsVSync() const = 0;
+
+    // ── Cursor mode (mouse capture) ──────────────────────────────────
+    virtual void SetCursorMode(CursorMode mode) = 0;
+    virtual CursorMode GetCursorMode() const = 0;
+
+    // ── Raw mouse motion (unaccelerated device input) ─────────────
+    // Only effective while the cursor is Disabled; requires
+    // platform support (see glfwRawMouseMotionSupported).
+    virtual void SetRawMouseMotion(bool enabled) = 0;
+    virtual bool IsRawMouseMotion() const = 0;
 
     // Factory — returns a platform-specific Window instance
     static DM::Scope<Window> Create(const WindowProps& props = WindowProps());

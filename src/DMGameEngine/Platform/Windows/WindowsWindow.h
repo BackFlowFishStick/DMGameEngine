@@ -29,11 +29,19 @@ public:
     void SetVSync(bool enabled) override;
     bool IsVSync() const override { return m_data.vSync; }
 
+    void SetCursorMode(CursorMode mode) override;
+    CursorMode GetCursorMode() const override { return m_cursorMode; }
+    void SetRawMouseMotion(bool enabled) override;
+    bool IsRawMouseMotion() const override { return m_rawMouseMotion; }
+
 private:
     void Init(const WindowProps& props);
     void Shutdown();
 
     GLFWwindow* m_window = nullptr;
+
+    CursorMode m_cursorMode     = CursorMode::Normal;
+    bool       m_rawMouseMotion = false;
 
     struct WindowData {
         std::string     title;

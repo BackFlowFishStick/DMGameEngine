@@ -13,6 +13,7 @@
 #include "DMGameEngine/Core/Export.h"
 #include "DMGameEngine/Core/KeyCodes.h"
 #include "DMGameEngine/Core/MouseCodes.h"
+#include "DMGameEngine/Core/GamepadCodes.h"
 #include "DMGameEngine/Core/Timestep.h"
 #include "DMGameEngine/Core/Layer.h"
 #include "DMGameEngine/Core/LayerStack.h"
@@ -25,6 +26,7 @@
 #include "DMGameEngine/Core/Events/Event.h"
 #include "DMGameEngine/Core/Events/KeyEvent.h"
 #include "DMGameEngine/Core/Events/MouseEvent.h"
+#include "DMGameEngine/Core/Events/GamepadEvent.h"
 #include "DMGameEngine/Core/Events/ApplicationEvent.h"
 
 // ── Renderer ─────────────────────────────────────────────────────

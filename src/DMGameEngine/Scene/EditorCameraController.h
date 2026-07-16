@@ -67,8 +67,8 @@ public:
         if (input.IsKeyPressed(KeyCode::S)) move -= forward;
         if (input.IsKeyPressed(KeyCode::D)) move += right;
         if (input.IsKeyPressed(KeyCode::A)) move -= right;
-        if (input.IsKeyPressed(KeyCode::Space))    move += m_WorldUp;
-        if (input.IsKeyPressed(KeyCode::LeftShift)) move -= m_WorldUp;
+        if (input.IsKeyPressed(KeyCode::E))    move += m_WorldUp;
+        if (input.IsKeyPressed(KeyCode::Q)) move -= m_WorldUp;
 
         if (float len = glm::length(move); len > 0.0f)
         {

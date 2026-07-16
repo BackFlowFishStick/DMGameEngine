@@ -64,12 +64,14 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Core/LayerStack.h"
     "src/DMGameEngine/Core/Log.h"
     "src/DMGameEngine/Core/MouseCodes.h"
+    "src/DMGameEngine/Core/GamepadCodes.h"
     "src/DMGameEngine/Core/Timestep.h"
     "src/DMGameEngine/Core/Window.h"
     "src/DMGameEngine/Core/Events/ApplicationEvent.h"
     "src/DMGameEngine/Core/Events/Event.h"
     "src/DMGameEngine/Core/Events/KeyEvent.h"
     "src/DMGameEngine/Core/Events/MouseEvent.h"
+    "src/DMGameEngine/Core/Events/GamepadEvent.h"
 
     # Platform / OpenGL
     "src/DMGameEngine/Platform/OpenGL/OpenGLDebug.h"

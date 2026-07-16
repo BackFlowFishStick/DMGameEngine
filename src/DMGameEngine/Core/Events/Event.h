@@ -43,6 +43,10 @@ enum class EventType {
     MouseButtonReleased,
     MouseMoved,
     MouseScrolled,
+
+    // Gamepad
+    GamepadConnected,
+    GamepadDisconnected,
 };
 
 // ── Event Categories (bitmask for filtering) ─────────────────────
@@ -55,6 +59,7 @@ namespace EventCategory {
         Keyboard    = BIT(2),
         Mouse       = BIT(3),
         MouseButton = BIT(4),
+        Gamepad      = BIT(5),
     };
 }
 
@@ -122,6 +127,8 @@ inline std::string ToString(const EventType type) {
     case EventType::MouseButtonReleased:  return "MouseButtonReleased";
     case EventType::MouseMoved:           return "MouseMoved";
     case EventType::MouseScrolled:        return "MouseScrolled";
+    case EventType::GamepadConnected:     return "GamepadConnected";
+    case EventType::GamepadDisconnected:  return "GamepadDisconnected";
     default:                              return "Unknown";
     }
 }

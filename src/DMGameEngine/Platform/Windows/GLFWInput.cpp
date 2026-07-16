@@ -39,6 +39,23 @@ void GLFWInput::BeginFrame() {
     m_prevMouseButtonState  = m_mouseButtonState;
     m_keyJustPressed.clear();
     m_mouseButtonJustPressed.clear();
+
+    // Reset per-frame mouse delta; position tracking continues so the
+    // next motion event resumes smoothly without a jump.
+    m_mouseDeltaX = 0.0f;
+    m_mouseDeltaY = 0.0f;
+
+    // Snapshot gamepad button states as "previous" for edge detection.
+    // Gamepads have no press/release events, so we poll once per frame.
+    for (int i = 0; i < kMaxGamepads; ++i) {
+        GLFWgamepadstate state;
+        if (glfwGetGamepadState(i, &state)) {
+            for (int b = 0; b < static_cast<int>(GamepadButton::Count); ++b)
+                m_prevGamepadButtons[i][b] = state.buttons[b] == GLFW_PRESS;
+        } else {
+            m_prevGamepadButtons[i].fill(false);
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -114,6 +131,56 @@ float GLFWInput::GetMouseY() const {
     return static_cast<float>(y);
 }
 
+// ── Mouse motion delta (per frame) ──────────────────────────────
+float GLFWInput::GetMouseDeltaX() const { return m_mouseDeltaX; }
+float GLFWInput::GetMouseDeltaY() const { return m_mouseDeltaY; }
+
+// ── Gamepad (controller) state ───────────────────────────────────────
+// glfwGetGamepadState succeeds only for present gamepads with a
+// standard mapping, so every method is safe to call on any slot.
+bool GLFWInput::IsGamepadPresent(int index) const {
+    if (index < 0 || index >= kMaxGamepads)
+        return false;
+    return glfwJoystickPresent(index) && glfwJoystickIsGamepad(index);
+}
+
+std::string GLFWInput::GetGamepadName(int index) const {
+    if (index < 0 || index >= kMaxGamepads)
+        return {};
+    const char* name = glfwGetGamepadName(index);
+    return name ? std::string(name) : std::string{};
+}
+
+bool GLFWInput::IsGamepadButtonPressed(int index, GamepadButton button) const {
+    if (index < 0 || index >= kMaxGamepads)
+        return false;
+    GLFWgamepadstate state;
+    if (!glfwGetGamepadState(index, &state))
+        return false;
+    return state.buttons[static_cast<int>(button)] == GLFW_PRESS;
+}
+
+bool GLFWInput::IsGamepadButtonJustPressed(int index, GamepadButton button) const {
+    if (index < 0 || index >= kMaxGamepads)
+        return false;
+    GLFWgamepadstate state;
+    if (!glfwGetGamepadState(index, &state))
+        return false;
+    const int b = static_cast<int>(button);
+    const bool current  = state.buttons[b] == GLFW_PRESS;
+    const bool previous = m_prevGamepadButtons[index][b];
+    return current && !previous;
+}
+
+float GLFWInput::GetGamepadAxis(int index, GamepadAxis axis) const {
+    if (index < 0 || index >= kMaxGamepads)
+        return 0.0f;
+    GLFWgamepadstate state;
+    if (!glfwGetGamepadState(index, &state))
+        return 0.0f;
+    return state.axes[static_cast<int>(axis)];
+}
+
 // ═══════════════════════════════════════════════════════════════════
 //  OnEvent — track key/mouse state for frame-to-frame edge detection
 //
@@ -154,7 +221,22 @@ void GLFWInput::OnEvent(Event& e) {
         return false;
     });
 
-    // MouseMoved not tracked here — GetMouseX/Y polls GLFW directly.
+    // Mouse motion delta - accumulate per-event movement for GetMouseDelta.
+    dispatcher.Dispatch<MouseMovedEvent>([this](MouseMovedEvent& event) {
+        const float x = event.GetX();
+        const float y = event.GetY();
+        if (!m_mousePosInitialized) {
+            m_lastMouseX = x;
+            m_lastMouseY = y;
+            m_mousePosInitialized = true;
+        } else {
+            m_mouseDeltaX += x - m_lastMouseX;
+            m_mouseDeltaY += y - m_lastMouseY;
+            m_lastMouseX = x;
+            m_lastMouseY = y;
+        }
+        return false;  // keep propagating (e.g. camera drag)
+    });
 }
 
 } // namespace DMGameEngine
