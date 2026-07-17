@@ -21,7 +21,15 @@ void Renderer::Init(const RendererAPIInitConfig& config)
     s_RendererAPI = RendererAPI::Create();
     DMGE_CORE_ASSERT(s_RendererAPI, "Failed to create RendererAPI backend!");
     s_RendererAPI->Init(config);
-    DMGE_LOG_INFO("Renderer initialized with API: OpenGL");
+    const char* apiName = "Unknown";
+    switch (s_API)
+    {
+        case API::OpenGL:  apiName = "OpenGL";  break;
+        case API::Vulkan:   apiName = "Vulkan";   break;
+        case API::DirectX:  apiName = "DirectX";  break;
+        case API::None:     apiName = "None";     break;
+    }
+    DMGE_LOG_INFO("Renderer initialized with API: {0}", apiName);
 }
 
 void Renderer::Shutdown()

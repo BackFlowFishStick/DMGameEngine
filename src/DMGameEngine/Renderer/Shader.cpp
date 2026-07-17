@@ -1,10 +1,13 @@
-﻿/*
+/*
  * DMGameEngine - Shader Factory Implementation
  */
 
 #include "DMGameEngine/Renderer/Shader.h"
 #include "DMGameEngine/Renderer/Renderer.h"
 #include "DMGameEngine/Platform/OpenGL/OpenGLShader.h"
+#ifdef DMGE_VULKAN
+#include "DMGameEngine/Platform/Vulkan/VulkanShader.h"
+#endif
 
 namespace DMGameEngine {
 
@@ -16,6 +19,13 @@ DM::Ref<Shader> Shader::Create(std::string_view filepath)
             return DM::CreateRef<OpenGLShader>(filepath);
 
         case Renderer::API::Vulkan:
+#ifdef DMGE_VULKAN
+            return DM::CreateRef<VulkanShader>(filepath);
+#else
+            DMGE_CORE_ASSERT(false, "Vulkan backend not built (enable DMGE_VULKAN_BACKEND).");
+            return nullptr;
+#endif
+
         case Renderer::API::DirectX:
         case Renderer::API::None:
             DMGE_CORE_ASSERT(false, "Renderer::API not supported yet!");
@@ -36,6 +46,13 @@ DM::Ref<Shader> Shader::Create(std::string_view name,
             return DM::CreateRef<OpenGLShader>(name, vertexSrc, fragmentSrc);
 
         case Renderer::API::Vulkan:
+#ifdef DMGE_VULKAN
+            return DM::CreateRef<VulkanShader>(name, vertexSrc, fragmentSrc);
+#else
+            DMGE_CORE_ASSERT(false, "Vulkan backend not built (enable DMGE_VULKAN_BACKEND).");
+            return nullptr;
+#endif
+
         case Renderer::API::DirectX:
         case Renderer::API::None:
             DMGE_CORE_ASSERT(false, "Renderer::API not supported yet!");

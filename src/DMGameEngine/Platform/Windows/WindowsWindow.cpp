@@ -6,6 +6,10 @@
 #include "DMGameEngine/Core/Events/GamepadEvent.h"
 #include "DMGameEngine/Core/Log.h"
 #include "DMGameEngine/Platform/OpenGL/OpenGLGraphicsContext.h"
+#include "DMGameEngine/Renderer/Renderer.h"
+#ifdef DMGE_VULKAN
+#include "DMGameEngine/Platform/Vulkan/VulkanGraphicsContext.h"
+#endif
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -53,9 +57,19 @@ void WindowsWindow::Init(const WindowProps& props) {
         std::abort();
     }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    // Backend-specific window hints.
+    if (Renderer::GetAPI() == Renderer::API::Vulkan)
+    {
+        // No OpenGL context is created for Vulkan; the VkSurfaceKHR is
+        // created explicitly by VulkanGraphicsContext::Init().
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    }
+    else
+    {
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    }
 
     m_window = glfwCreateWindow(
         static_cast<int>(props.width),
@@ -75,7 +89,18 @@ void WindowsWindow::Init(const WindowProps& props) {
     s_eventWindow = m_window;
 
     // ── OpenGL context via GraphicsContext abstraction ──────────
-    m_context = DM::CreateScope<OpenGLGraphicsContext>(m_window);
+    if (Renderer::GetAPI() == Renderer::API::Vulkan)
+    {
+#ifdef DMGE_VULKAN
+        m_context = DM::CreateScope<VulkanGraphicsContext>(m_window);
+#else
+        DMGE_CORE_ASSERT(false, "Vulkan backend not built (enable DMGE_VULKAN_BACKEND).");
+#endif
+    }
+    else
+    {
+        m_context = DM::CreateScope<OpenGLGraphicsContext>(m_window);
+    }
     m_context->Init();
 
     SetVSync(true);
@@ -215,7 +240,8 @@ void* WindowsWindow::GetNativeWindow() const {
 // ── VSync ────────────────────────────────────────────────────────
 void WindowsWindow::SetVSync(bool enabled) {
     m_data.vSync = enabled;
-    glfwSwapInterval(enabled ? 1 : 0);
+    if (Renderer::GetAPI() != Renderer::API::Vulkan)
+        glfwSwapInterval(enabled ? 1 : 0);  // VSync for Vulkan is handled by the present mode.
 }
 
 // ── Cursor mode ─────────────────────────────────────────────────

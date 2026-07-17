@@ -7,6 +7,9 @@
 #include "DMGameEngine/Core/Log.h"
 
 #include "DMGameEngine/Platform/OpenGL/OpenGLRendererAPI.h"
+#ifdef DMGE_VULKAN
+#include "DMGameEngine/Platform/Vulkan/VulkanRendererAPI.h"
+#endif
 
 namespace DMGameEngine {
 
@@ -30,6 +33,13 @@ DM::Scope<RendererAPI> RendererAPI::Create()
             return DM::CreateScope<OpenGLRendererAPI>();
 
         case Renderer::API::Vulkan:
+#ifdef DMGE_VULKAN
+            return DM::CreateScope<VulkanRendererAPI>();
+#else
+            DMGE_CORE_ASSERT(false, "Vulkan backend not built (enable DMGE_VULKAN_BACKEND).");
+            return nullptr;
+#endif
+
         case Renderer::API::DirectX:
         case Renderer::API::None:
             DMGE_CORE_ASSERT(false, "Renderer::API not supported yet!");

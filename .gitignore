@@ -78,3 +78,5 @@ vcpkg_installed/
 
 # SVN
 .svn/
+
+vc140.pdb

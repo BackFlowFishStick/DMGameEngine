@@ -69,7 +69,8 @@ public:
 
     static void OnWindowResize(int width, int height);
 
-    static API GetAPI() { return s_API; }
+    static API  GetAPI()      { return s_API; }
+    static void SetAPI(API api) { s_API = api; }
 
 private:
     struct SceneData

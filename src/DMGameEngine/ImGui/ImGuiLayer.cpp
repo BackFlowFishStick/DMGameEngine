@@ -7,6 +7,7 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include "DMGameEngine/Renderer/Renderer.h"
 
 namespace DMGameEngine {
 
@@ -31,8 +32,17 @@ void ImGuiLayer::OnAttach() {
     GLFWwindow* window = static_cast<GLFWwindow*>(
         Application::Get().GetWindow().GetNativeWindow());
 
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init(nullptr);  // default GLSL version (#version 130)
+    if (Renderer::GetAPI() == Renderer::API::Vulkan)
+        ImGui_ImplGlfw_InitForVulkan(window, true);
+    else
+        ImGui_ImplGlfw_InitForOpenGL(window, true);
+
+    // NOTE: a full Vulkan ImGui render backend (imgui_impl_vulkan) is not
+    // wired up here yet; under Vulkan the GL renderer backend is skipped so
+    // the engine renders its scene without ImGui draw data. Add a Vulkan
+    // ImGui backend to get visible UI panels under Vulkan.
+    if (Renderer::GetAPI() != Renderer::API::Vulkan)
+        ImGui_ImplOpenGL3_Init(nullptr);  // default GLSL version (#version 130)
 
     DMGE_LOG_INFO("ImGuiLayer attached (ImGui {})", IMGUI_VERSION);
 }
@@ -48,14 +58,16 @@ void ImGuiLayer::OnDetach() {
 // ── Per-frame ImGui pass ─────────────────────────────────────────
 
 void ImGuiLayer::Begin() {
-    ImGui_ImplOpenGL3_NewFrame();
+    if (Renderer::GetAPI() != Renderer::API::Vulkan)
+        ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 }
 
 void ImGuiLayer::End() {
     ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    if (Renderer::GetAPI() != Renderer::API::Vulkan)
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
 // ── Optional demo ────────────────────────────────────────────────
