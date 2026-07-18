@@ -88,7 +88,7 @@ void VulkanTexture2D::SetData(void* data, uint32_t size)
 
     UploadToImage(m_Image, TextureFormatToVk(m_Spec.Format),
                   m_Spec.Width, m_Spec.Height, data, 0, m_Spec.Format);
-    FinalizeAfterUpload(m_Image, FormatAspect(m_Spec.Format), m_MipLevels, 1);
+    FinalizeAfterUpload(m_Image, FormatAspect(m_Spec.Format), m_MipLevels, 0, 1);
 }
 
 void VulkanTexture2D::GenerateMipmaps()

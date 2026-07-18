@@ -214,10 +214,11 @@ void VulkanRendererAPI::DrawIndexed(const VertexArray& vertexArray)
     if (set != VK_NULL_HANDLE)
     {
         uint32_t dynCount = hasUBO ? 1 : 0;
+        uint32_t dynOffset = hasUBO ? static_cast<uint32_t>(dynamicOffset) : 0;
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 shader.GetPipelineLayout(),
                                 0, 1, &set, dynCount,
-                                hasUBO ? &dynamicOffset : nullptr);
+                                hasUBO ? &dynOffset : nullptr);
     }
 
     vkCmdDrawIndexed(cmd, va.GetIndexCount(), 1, 0, 0, 0);
@@ -331,7 +332,7 @@ VkPipeline VulkanRendererAPI::GetOrCreatePipeline(VulkanShader& shader,
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer.cullMode    = CullModeToVk(m_CullMode);
-    rasterizer.frontFace    = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizer.frontFace    = VK_FRONT_FACE_CLOCKWISE;  // CW: matches the projection Y-flip in Renderer::BeginScene
     rasterizer.lineWidth   = 1.0f;
 
     // ── Multisampling ────────────────────────────────────────────

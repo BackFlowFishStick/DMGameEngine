@@ -7,12 +7,28 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+
+#ifdef DMGE_VULKAN
+#include <imgui_impl_vulkan.h>
+#include "DMGameEngine/Platform/Vulkan/VulkanDevice.h"
+#include "DMGameEngine/Platform/Vulkan/VulkanSwapchain.h"
+#include "DMGameEngine/Platform/Vulkan/VulkanGraphicsContext.h"
+#endif
+
 #include "DMGameEngine/Renderer/Renderer.h"
 
 namespace DMGameEngine {
 
 ImGuiLayer::ImGuiLayer()
     : Layer("ImGuiLayer", LayerType::Tool) {}
+
+#ifdef DMGE_VULKAN
+static void ImGuiVkCheckResult(VkResult err)
+{
+    if (err != VK_SUCCESS)
+        DMGE_LOG_ERROR("ImGui Vulkan backend error: VkResult {}", static_cast<int>(err));
+}
+#endif
 
 // ── Lifecycle ────────────────────────────────────────────────────
 
@@ -32,23 +48,58 @@ void ImGuiLayer::OnAttach() {
     GLFWwindow* window = static_cast<GLFWwindow*>(
         Application::Get().GetWindow().GetNativeWindow());
 
+#ifdef DMGE_VULKAN
     if (Renderer::GetAPI() == Renderer::API::Vulkan)
+    {
         ImGui_ImplGlfw_InitForVulkan(window, true);
-    else
-        ImGui_ImplGlfw_InitForOpenGL(window, true);
 
-    // NOTE: a full Vulkan ImGui render backend (imgui_impl_vulkan) is not
-    // wired up here yet; under Vulkan the GL renderer backend is skipped so
-    // the engine renders its scene without ImGui draw data. Add a Vulkan
-    // ImGui backend to get visible UI panels under Vulkan.
-    if (Renderer::GetAPI() != Renderer::API::Vulkan)
+        // Draw into the swapchain color image the context already has open
+        // for the frame: VulkanGraphicsContext keeps the dynamic-rendering
+        // pass open across EndScene()/ImGui until SwapBuffers().
+        auto& ctx  = VulkanGraphicsContext::Get();
+        auto& dev  = VulkanDevice::Get();
+        auto& swap = ctx.GetSwapchain();
+        VkFormat colorFormat = swap.GetImageFormat();
+
+        ImGui_ImplVulkan_InitInfo info{};
+        info.ApiVersion            = VK_API_VERSION_1_3;
+        info.Instance              = ctx.GetInstance();
+        info.PhysicalDevice        = dev.PhysicalDevice;
+        info.Device                = dev.Device;
+        info.QueueFamily           = dev.GraphicsFamily;
+        info.Queue                 = dev.GraphicsQueue;
+        info.DescriptorPoolSize    = 1000;  // backend creates + owns the pool
+        info.MinImageCount         = 2;
+        info.ImageCount            = swap.GetImageCount();
+        info.Allocator             = nullptr;
+        info.CheckVkResultFn       = &ImGuiVkCheckResult;
+        info.UseDynamicRendering   = true;
+        info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineRenderingCreateInfo& prci = info.PipelineInfoMain.PipelineRenderingCreateInfo;
+        prci.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+        prci.colorAttachmentCount    = 1;
+        prci.pColorAttachmentFormats  = &colorFormat;
+
+        ImGui_ImplVulkan_Init(&info);
+    }
+    else
+#endif
+    {
+        ImGui_ImplGlfw_InitForOpenGL(window, true);
         ImGui_ImplOpenGL3_Init(nullptr);  // default GLSL version (#version 130)
+    }
 
     DMGE_LOG_INFO("ImGuiLayer attached (ImGui {})", IMGUI_VERSION);
 }
 
 void ImGuiLayer::OnDetach() {
-    ImGui_ImplOpenGL3_Shutdown();
+#ifdef DMGE_VULKAN
+    if (Renderer::GetAPI() == Renderer::API::Vulkan)
+        ImGui_ImplVulkan_Shutdown();
+    else
+#endif
+        ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 
@@ -58,7 +109,11 @@ void ImGuiLayer::OnDetach() {
 // ── Per-frame ImGui pass ─────────────────────────────────────────
 
 void ImGuiLayer::Begin() {
-    if (Renderer::GetAPI() != Renderer::API::Vulkan)
+#ifdef DMGE_VULKAN
+    if (Renderer::GetAPI() == Renderer::API::Vulkan)
+        ImGui_ImplVulkan_NewFrame();
+    else
+#endif
         ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -66,7 +121,12 @@ void ImGuiLayer::Begin() {
 
 void ImGuiLayer::End() {
     ImGui::Render();
-    if (Renderer::GetAPI() != Renderer::API::Vulkan)
+#ifdef DMGE_VULKAN
+    if (Renderer::GetAPI() == Renderer::API::Vulkan)
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(),
+                                        VulkanGraphicsContext::Get().GetCurrentCommandBuffer());
+    else
+#endif
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 

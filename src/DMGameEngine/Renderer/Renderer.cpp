@@ -49,6 +49,16 @@ void Renderer::BeginScene(const Camera& camera)
     DMGE_CORE_ASSERT(s_RendererAPI, "Renderer not initialized! Call Renderer::Init() first.");
     s_RendererAPI->Clear();
     s_SceneData.ViewProjectionMatrix = camera.GetViewProjection();
+    if (s_API == API::Vulkan)
+    {
+        // Vulkan clip space Y points down (OpenGL Y points up), so an
+        // OpenGL-convention projection renders upside down. Negate the
+        // clip-space Y here; the matching frontFace flip in the Vulkan
+        // pipeline keeps back-face culling behaving as under OpenGL.
+        glm::mat4 flipY(1.0f);
+        flipY[1][1] = -1.0f;
+        s_SceneData.ViewProjectionMatrix = flipY * s_SceneData.ViewProjectionMatrix;
+    }
 }
 
 void Renderer::EndScene()

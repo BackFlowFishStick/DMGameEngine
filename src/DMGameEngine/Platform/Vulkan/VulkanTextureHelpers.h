@@ -349,7 +349,7 @@ inline void GenerateMipmaps(VkImage image, VkFormat format,
 // the whole image is in a valid sampled layout (mip content may be stale
 // until GenerateMipmaps() runs).
 inline void FinalizeAfterUpload(VkImage image, VkImageAspectFlags aspect,
-                                uint32_t mipLevels, uint32_t layerCount)
+                                uint32_t mipLevels, uint32_t baseLayer, uint32_t layerCount)
 {
     if (mipLevels == 0)
         return;

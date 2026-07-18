@@ -212,13 +212,17 @@ endif()
 option(DMGE_VULKAN_BACKEND "Build the Vulkan renderer backend" OFF)
 if(DMGE_VULKAN_BACKEND)
     find_package(Vulkan REQUIRED)
-    find_path(VMA_INCLUDE_DIR NAMES vk_mem_alloc.h PATHS "$ENV{VULKAN_SDK}/Include" "$ENV{VULKAN_SDK}/Include/vulkan" REQUIRED)
+    find_path(VMA_INCLUDE_DIR NAMES vk_mem_alloc.h PATHS "$ENV{VULKAN_SDK}/Include" "$ENV{VULKAN_SDK}/Include/vulkan" "$ENV{VULKAN_SDK}/Include/vma" REQUIRED)
     find_path(SHADERC_INCLUDE_DIR NAMES shaderc/shaderc.hpp PATHS "$ENV{VULKAN_SDK}/Include" REQUIRED)
-    find_library(SHADERC_LIBRARY NAMES shaderc_combined shaderc PATHS "$ENV{VULKAN_SDK}/Lib" "$ENV{VULKAN_SDK}/Lib/shaderc" REQUIRED)
+    find_library(SHADERC_LIBRARY_RELEASE NAMES shaderc_combined PATHS "$ENV{VULKAN_SDK}/Lib" "$ENV{VULKAN_SDK}/Lib/shaderc" REQUIRED)
+    find_library(SHADERC_LIBRARY_DEBUG   NAMES shaderc_combinedd PATHS "$ENV{VULKAN_SDK}/Lib" "$ENV{VULKAN_SDK}/Lib/shaderc" REQUIRED)
     target_compile_definitions(DMGameEngine PRIVATE DMGE_VULKAN)
     target_include_directories(DMGameEngine PRIVATE "${VMA_INCLUDE_DIR}" "${SHADERC_INCLUDE_DIR}")
-    target_link_libraries(DMGameEngine PRIVATE Vulkan::Vulkan "${SHADERC_LIBRARY}")
+    target_link_libraries(DMGameEngine PRIVATE Vulkan::Vulkan
+        "$<$<CONFIG:Debug>:${SHADERC_LIBRARY_DEBUG}>"
+        "$<$<NOT:$<CONFIG:Debug>>:${SHADERC_LIBRARY_RELEASE}>")
     target_sources(DMGameEngine PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/backends/imgui_impl_vulkan.cpp"
         "src/DMGameEngine/Platform/Vulkan/VulkanDevice.cpp"
         "src/DMGameEngine/Platform/Vulkan/VulkanSwapchain.cpp"
         "src/DMGameEngine/Platform/Vulkan/VulkanGraphicsContext.cpp"

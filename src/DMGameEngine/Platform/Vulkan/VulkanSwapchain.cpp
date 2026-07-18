@@ -37,7 +37,8 @@ void VulkanSwapchain::Cleanup()
         vkDestroyImageView(dev.Device, m_DepthView, nullptr);
     if (m_DepthImage != VK_NULL_HANDLE)
         vmaDestroyImage(dev.Allocator, m_DepthImage, m_DepthAlloc);
-    m_DepthView = m_DepthImage = VK_NULL_HANDLE;
+    m_DepthView = VK_NULL_HANDLE;
+    m_DepthImage = VK_NULL_HANDLE;
     m_DepthAlloc = VK_NULL_HANDLE;
 
     for (auto view : m_ImageViews)

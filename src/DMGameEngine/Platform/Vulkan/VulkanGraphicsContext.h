@@ -54,6 +54,7 @@ public:
     bool            IsFrameStarted()          const { return m_FrameStarted; }
 
     VulkanSwapchain& GetSwapchain() { return m_Swapchain; }
+    VkInstance       GetInstance() const { return m_Instance; }
 
     static VulkanGraphicsContext& Get() { return *s_Instance; }
 

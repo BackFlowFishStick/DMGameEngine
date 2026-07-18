@@ -388,7 +388,7 @@ VulkanShader::CompileStage(const std::string& source,
 {
     shaderc::Compiler compiler;
     shaderc::CompileOptions options;
-    options.SetTargetEnvironment(shaderc_target_vulkan, shaderc_env_version_vulkan_1_3);
+    options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
     options.SetOptimizationLevel(shaderc_optimization_level_performance);
 
     shaderc::SpvCompilationResult result =
@@ -495,7 +495,8 @@ void VulkanShader::DestroyModules()
         vkDestroyShaderModule(dev.Device, m_VertModule, nullptr);
     if (m_FragModule != VK_NULL_HANDLE)
         vkDestroyShaderModule(dev.Device, m_FragModule, nullptr);
-    m_PipelineLayout = m_DescriptorSetLayout = VK_NULL_HANDLE;
+    m_PipelineLayout = VK_NULL_HANDLE;
+    m_DescriptorSetLayout = VK_NULL_HANDLE;
     m_VertModule = m_FragModule = VK_NULL_HANDLE;
 }
 
