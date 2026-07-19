@@ -40,6 +40,7 @@ set(DMGE_SOURCES
     # Renderer
     "src/DMGameEngine/Renderer/IndexBuffer.cpp"
     "src/DMGameEngine/Renderer/Renderer.cpp"
+    "src/DMGameEngine/Renderer/RenderCommand.cpp"
     "src/DMGameEngine/Renderer/RendererAPI.cpp"
     "src/DMGameEngine/Renderer/Shader.cpp"
     "src/DMGameEngine/Renderer/Material.cpp"
@@ -98,6 +99,7 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Renderer/GraphicsContext.h"
     "src/DMGameEngine/Renderer/IndexBuffer.h"
     "src/DMGameEngine/Renderer/Renderer.h"
+    "src/DMGameEngine/Renderer/RenderCommand.h"
     "src/DMGameEngine/Renderer/RendererAPI.h"
     "src/DMGameEngine/Renderer/Shader.h"
     "src/DMGameEngine/Renderer/Material.h"

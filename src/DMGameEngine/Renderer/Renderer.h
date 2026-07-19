@@ -1,20 +1,25 @@
 /*
- * DMGameEngine - Renderer Abstraction
+ * DMGameEngine - Renderer (Scene Submission)
  *
- * High-level renderer API. Manages scene submission and delegates
- * low-level draw calls to the active RendererAPI backend.
+ * High-level renderer surface. Brackets a frame with BeginScene /
+ * EndScene, caching the camera view-projection for the frame, and
+ * Submit() binds the shader + uniforms before issuing a draw.
+ *
+ * Low-level GPU commands (clear, viewport, blend / depth / cull
+ * state, draw calls) are owned by RenderCommand, which holds the
+ * active RendererAPI backend. Renderer delegates to it rather than
+ * holding the backend instance itself.
  */
 
 #pragma once
 
 #include "DMGameEngine/Core/Export.h"
+#include "DMGameEngine/Renderer/RendererAPI.h"
 #include "glm/glm.hpp"
 #include <memory>
-#include "DMGameEngine/Renderer/RendererAPI.h"
 
 namespace DMGameEngine {
 
-class RendererAPI; // forward declaration - backend instance owned below
 class Camera;      // forward declaration - scene view-projection source
 class Shader;      // forward declaration - bound per draw submission
 class Material;    // forward declaration - shader + uniform bundle per draw
@@ -40,18 +45,6 @@ public:
     // for subsequent Submit() calls (fed to shaders as u_ViewProjection).
     static void BeginScene(const Camera& camera);
     static void EndScene();
-    static void SetClearColor(const glm::vec4& color);
-    static void Clear();
-
-    // ── Pipeline state ───────────────────────────────────────
-    //  Forwarded to the active RendererAPI backend.
-    static void SetBlendState(bool enable,
-                              BlendFactor srcFactor = BlendFactor::SrcAlpha,
-                              BlendFactor dstFactor = BlendFactor::OneMinusSrcAlpha);
-    static void SetBlendEquation(BlendEquation equation);
-    static void SetDepthTest(bool enable);
-    static void SetDepthFunc(DepthFunc func);
-    static void SetCullMode(CullMode mode);
 
     // Binds the shader, uploads u_ViewProjection (from BeginScene's camera)
     // and u_Transform, then issues an indexed draw for the vertex array.
@@ -79,7 +72,6 @@ private:
     };
 
     static API s_API;
-    static DM::Scope<RendererAPI> s_RendererAPI;
     static SceneData s_SceneData;
 };
 
