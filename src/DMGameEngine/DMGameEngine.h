@@ -55,3 +55,7 @@
 
 // ── ImGui ────────────────────────────────────────────────────────
 #include "DMGameEngine/ImGui/ImGuiLayer.h"
+
+// ── Debug ────────────────────────────────────────────────────────
+#include "DMGameEngine/Debug/Profiler.h"
+#include "DMGameEngine/Debug/ProfilerLayer.h"

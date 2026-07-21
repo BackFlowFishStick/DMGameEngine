@@ -13,6 +13,33 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # ── Build Options ────────────────────────────────────────────────
 option(DMGE_BUILD_SHARED "Build DMGameEngine as a shared library (DLL)" ON)
 option(DMGE_BUILD_EXAMPLES "Build example projects" OFF)
+option(DMGE_PROFILE "Enable engine CPU profiling instrumentation" ON)
+
+# ── ImGui multi-viewport: auto-detect the docking branch ─────────
+# The vendored master-branch ImGui does not define
+# ImGuiConfigFlags_ViewportsEnable; only the docking branch does.
+# Detect it so the multi-viewport code in ImGuiLayer.cpp is compiled
+# only when the vendored ImGui actually supports it (avoids the
+# "undeclared identifier" build break seen with the master branch).
+set(DMGE_IMGUI_VIEWPORTS OFF CACHE BOOL "ImGui multi-viewport (auto-detected; requires docking branch)" FORCE)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui.h")
+    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui.h" _dmge_imgui_vp REGEX "ImGuiConfigFlags_ViewportsEnable")
+    # Re-run auto-detection when the vendored ImGui header changes.
+    # file(STRINGS) does not register a build-system dependency on its own,
+    # so swapping the ImGui branch would otherwise leave DMGE_IMGUI_VIEWPORTS
+    # stale (OFF) until the cache is wiped.
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui.h")
+    if(_dmge_imgui_vp)
+        set(DMGE_IMGUI_VIEWPORTS ON CACHE BOOL "ImGui multi-viewport (auto-detected; requires docking branch)" FORCE)
+    endif()
+    unset(_dmge_imgui_vp)
+endif()
+if(DMGE_IMGUI_VIEWPORTS)
+    message(STATUS "ImGui: multi-viewport ENABLED (docking branch detected)")
+else()
+    message(STATUS "ImGui: multi-viewport disabled (master branch; swap to docking branch to enable)")
+endif()
 
 # ── Source Files ─────────────────────────────────────────────────
 set(DMGE_SOURCES
@@ -52,6 +79,10 @@ set(DMGE_SOURCES
 
     # ImGui
     "src/DMGameEngine/ImGui/ImGuiLayer.cpp"
+
+    # Debug
+    "src/DMGameEngine/Debug/Profiler.cpp"
+    "src/DMGameEngine/Debug/ProfilerLayer.cpp"
 )
 
 set(DMGE_HEADERS
@@ -117,6 +148,10 @@ set(DMGE_HEADERS
 
     # ImGui
     "src/DMGameEngine/ImGui/ImGuiLayer.h"
+
+    # Debug
+    "src/DMGameEngine/Debug/Profiler.h"
+    "src/DMGameEngine/Debug/ProfilerLayer.h"
 
     # Public entry point
     "src/DMGameEngine/DMGameEngine.h"
@@ -241,6 +276,8 @@ target_compile_definitions(DMGameEngine
     PRIVATE
         DMGE_BUILD_DLL
         $<$<CONFIG:Debug>:DMGE_ENABLE_ASSERTS>
+        $<$<BOOL:DMGE_PROFILE>:DMGE_PROFILE>
+        $<$<BOOL:${DMGE_IMGUI_VIEWPORTS}>:DMGE_IMGUI_VIEWPORTS>
 )
 
 if(MSVC)

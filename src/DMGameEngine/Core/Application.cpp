@@ -7,6 +7,8 @@
 #include "DMGameEngine/Renderer/Renderer.h"
 #include "DMGameEngine/Renderer/CameraController.h"
 #include "DMGameEngine/ImGui/ImGuiLayer.h"
+#include "DMGameEngine/Debug/Profiler.h"
+#include "DMGameEngine/Debug/ProfilerLayer.h"
 
 #include <algorithm>
 #include <chrono>
@@ -145,6 +147,10 @@ void Application::Initialize() {
     m_ImGuiLayer = imguiLayer.get();
     PushOverlay(std::move(imguiLayer));
 
+    // Attach the profiler overlay - renders profiling data via the
+    // ImGui pass. Toggle visibility with F1.
+    PushOverlay(DM::CreateScope<ProfilerLayer>());
+
     OnInitialize();
     m_isRunning = true;
 }
@@ -157,6 +163,9 @@ void Application::MainLoop() {
         // ── Input snapshot — capture previous frame state for edge detection
         Input::Get().BeginFrame();
 
+        // Bracket the whole frame for the profiler (CPU + swap wait).
+        Profiler::Get().BeginFrame();
+
         // ═══════════════════════════════════════════════════════════
         //  Stage 1 — Event Pump
         //
@@ -167,7 +176,10 @@ void Application::MainLoop() {
         //  Must run before any layer logic so the current frame
         //  sees the latest input state without a 1-frame delay.
         // ═══════════════════════════════════════════════════════════
-        m_window->PollEvents();
+        {
+            DMGE_PROFILE_SCOPE("Stage 1: Event Pump");
+            m_window->PollEvents();
+        }
 
         const auto currentTime  = Clock::now();
         const auto elapsed      = std::chrono::duration<float>(currentTime - previousTime);
@@ -186,13 +198,17 @@ void Application::MainLoop() {
         //  Forward iteration: Platform → Core → Resource → Feature → Tool.
         //  Each layer advances its own simulation / logic tick.
         // ═══════════════════════════════════════════════════════════
-        if (m_ActiveController)
-            m_ActiveController->OnUpdate(ts);
+        {
+            DMGE_PROFILE_SCOPE("Stage 2: Update");
 
-        for (auto& layer : m_layerStack)
-            layer->OnUpdate(ts);
+            if (m_ActiveController)
+                m_ActiveController->OnUpdate(ts);
 
-        OnUpdate(ts);  // fallback when no layers are pushed
+            for (auto& layer : m_layerStack)
+                layer->OnUpdate(ts);
+
+            OnUpdate(ts);  // fallback when no layers are pushed
+        }
 
         // ═══════════════════════════════════════════════════════════
         //  Stage 3 — Render
@@ -204,17 +220,21 @@ void Application::MainLoop() {
         //  draw commands before Renderer::EndScene() finalizes the
         //  ImGui pass.
         // ═══════════════════════════════════════════════════════════
-        if (m_ActiveController)
-            Renderer::BeginScene(m_ActiveController->GetCamera());
-        else
-            Renderer::BeginScene();
+        {
+            DMGE_PROFILE_SCOPE("Stage 3: Render");
 
-        for (auto& layer : m_layerStack)
-            layer->OnRender();
+            if (m_ActiveController)
+                Renderer::BeginScene(m_ActiveController->GetCamera());
+            else
+                Renderer::BeginScene();
 
-        OnRender();  // fallback when no layers are pushed
+            for (auto& layer : m_layerStack)
+                layer->OnRender();
 
-        Renderer::EndScene();
+            OnRender();  // fallback when no layers are pushed
+
+            Renderer::EndScene();
+        }
 
         // ═══════════════════════════════════════════════════════════
         //  Stage 4 — ImGui
@@ -223,10 +243,14 @@ void Application::MainLoop() {
         //  Called after Render so ImGui draw-data is ready for the
         //  platform backend to present.
         // ═══════════════════════════════════════════════════════════
-        m_ImGuiLayer->Begin();
-        for (auto& layer : m_layerStack)
-            layer->OnImGuiRender();
-        m_ImGuiLayer->End();
+        {
+            DMGE_PROFILE_SCOPE("Stage 4: ImGui");
+
+            m_ImGuiLayer->Begin();
+            for (auto& layer : m_layerStack)
+                layer->OnImGuiRender();
+            m_ImGuiLayer->End();
+        }
 
         // ═══════════════════════════════════════════════════════════
         //  Stage 5 — Swap
@@ -234,7 +258,12 @@ void Application::MainLoop() {
         //  Present the rendered frame to the display. The platform
         //  backend performs the buffer swap (e.g. glfwSwapBuffers).
         // ═══════════════════════════════════════════════════════════
-        m_window->SwapBuffers();
+        {
+            DMGE_PROFILE_SCOPE("Stage 5: Swap");
+            m_window->SwapBuffers();
+        }
+
+        Profiler::Get().EndFrame();
     }
 }
 

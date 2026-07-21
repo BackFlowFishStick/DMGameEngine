@@ -8,6 +8,8 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#include <GLFW/glfw3.h>
+
 #ifdef DMGE_VULKAN
 #include <imgui_impl_vulkan.h>
 #include "DMGameEngine/Platform/Vulkan/VulkanDevice.h"
@@ -38,8 +40,19 @@ void ImGuiLayer::OnAttach() {
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+#if defined(DMGE_IMGUI_VIEWPORTS)
+    // Multi-viewport requires the ImGui 'docking' branch; the vendored
+    // master-branch ImGui does not define these symbols.
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+#endif
 
     ImGui::StyleColorsDark();
+
+    // Multi-viewport: platform windows cannot round corners or be
+    // translucent, so flatten the window style accordingly.
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowRounding = 0.0f;
+    style.Colors[ImGuiCol_WindowBg].w = 1.0f;
 
     // The ImGui GLFW backend installs its own GLFW callbacks and chains
     // the engine's existing ones, so both ImGui and the engine receive
@@ -121,13 +134,37 @@ void ImGuiLayer::Begin() {
 
 void ImGuiLayer::End() {
     ImGui::Render();
+
+    // Render the main window's draw data, then update + render any
+    // secondary platform windows dragged outside the main window
+    // (multi-viewport). For OpenGL the current context must be saved
+    // and restored because each platform window owns its own context.
+#if defined(DMGE_IMGUI_VIEWPORTS)
+    const ImGuiIO& io = ImGui::GetIO();
+#endif
 #ifdef DMGE_VULKAN
-    if (Renderer::GetAPI() == Renderer::API::Vulkan)
+    if (Renderer::GetAPI() == Renderer::API::Vulkan) {
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(),
                                         VulkanGraphicsContext::Get().GetCurrentCommandBuffer());
-    else
+#if defined(DMGE_IMGUI_VIEWPORTS)
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+        }
 #endif
+    } else
+#endif
+    {
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+#if defined(DMGE_IMGUI_VIEWPORTS)
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            GLFWwindow* backupContext = glfwGetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            glfwMakeContextCurrent(backupContext);
+        }
+#endif
+    }
 }
 
 // ── Optional demo ────────────────────────────────────────────────
