@@ -59,3 +59,5 @@
 // ── Debug ────────────────────────────────────────────────────────
 #include "DMGameEngine/Debug/Profiler.h"
 #include "DMGameEngine/Debug/ProfilerLayer.h"
+#include "DMGameEngine/Debug/Console.h"
+#include "DMGameEngine/Debug/ConsoleLayer.h"

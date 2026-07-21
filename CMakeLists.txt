@@ -83,6 +83,8 @@ set(DMGE_SOURCES
     # Debug
     "src/DMGameEngine/Debug/Profiler.cpp"
     "src/DMGameEngine/Debug/ProfilerLayer.cpp"
+    "src/DMGameEngine/Debug/Console.cpp"
+    "src/DMGameEngine/Debug/ConsoleLayer.cpp"
 )
 
 set(DMGE_HEADERS
@@ -152,6 +154,8 @@ set(DMGE_HEADERS
     # Debug
     "src/DMGameEngine/Debug/Profiler.h"
     "src/DMGameEngine/Debug/ProfilerLayer.h"
+    "src/DMGameEngine/Debug/Console.h"
+    "src/DMGameEngine/Debug/ConsoleLayer.h"
 
     # Public entry point
     "src/DMGameEngine/DMGameEngine.h"

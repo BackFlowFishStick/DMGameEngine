@@ -9,6 +9,8 @@
 #include "DMGameEngine/ImGui/ImGuiLayer.h"
 #include "DMGameEngine/Debug/Profiler.h"
 #include "DMGameEngine/Debug/ProfilerLayer.h"
+#include "DMGameEngine/Debug/Console.h"
+#include "DMGameEngine/Debug/ConsoleLayer.h"
 
 #include <algorithm>
 #include <chrono>
@@ -150,6 +152,9 @@ void Application::Initialize() {
     // Attach the profiler overlay - renders profiling data via the
     // ImGui pass. Toggle visibility with F1.
     PushOverlay(DM::CreateScope<ProfilerLayer>());
+
+    // Attach the developer console - toggle with the GraveAccent key.
+    PushOverlay(DM::CreateScope<ConsoleLayer>());
 
     OnInitialize();
     m_isRunning = true;
