@@ -64,6 +64,16 @@ public:
     float GetFrameTimeMs() const { return m_lastFrameTimeNs / 1.0e6f; }
     const std::vector<float>& GetFrameTimeHistory() const { return m_frameHistory; }
 
+    // GPU draw statistics for the last completed frame. Counts only
+    // engine scene draws routed through RenderCommand::DrawIndexed;
+    // ImGui draws via its own backend are not included.
+    uint32_t GetDrawCalls() const   { return m_lastDrawCalls; }
+    uint32_t GetDrawIndices() const { return m_lastDrawIndices; }
+
+    // Called by RenderCommand::DrawIndexed to account a scene draw call
+    // and (optionally) the indices it consumes.
+    void AddDrawCall(uint32_t indexCount = 0) { ++m_drawCalls; m_drawIndices += indexCount; }
+
     void SetEnabled(bool enabled) { m_enabled = enabled; }
     bool IsEnabled() const         { return m_enabled; }
 
@@ -85,6 +95,13 @@ private:
 
     std::vector<float> m_frameHistory;  // ms, rolling window
     static constexpr size_t kFrameHistorySize = 240;
+
+    // Per-frame GPU draw counters: accumulated during the frame, then
+    // published to m_lastDraw* at EndFrame for the UI to read.
+    uint32_t m_drawCalls = 0;
+    uint32_t m_drawIndices = 0;
+    uint32_t m_lastDrawCalls = 0;
+    uint32_t m_lastDrawIndices = 0;
 
     bool m_enabled = true;
 };

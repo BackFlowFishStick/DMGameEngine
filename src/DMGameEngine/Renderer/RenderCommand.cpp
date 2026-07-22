@@ -8,7 +8,9 @@
  */
 
 #include "DMGameEngine/Renderer/RenderCommand.h"
+#include "DMGameEngine/Renderer/VertexArray.h"
 #include "DMGameEngine/Core/Log.h"
+#include "DMGameEngine/Debug/Profiler.h"
 
 namespace DMGameEngine {
 
@@ -49,6 +51,14 @@ void RenderCommand::SetViewport(int x, int y, int width, int height)
 void RenderCommand::DrawIndexed(const VertexArray& vertexArray)
 {
     DMGE_CORE_ASSERT(s_RendererAPI, "RenderCommand not initialized! Call RenderCommand::Init() first.");
+
+    // Account this scene draw in the profiler (draw calls + index
+    // count). ImGui draws through its own backend are not routed here.
+    uint32_t indexCount = 0;
+    if (const auto& indexBuffer = vertexArray.GetIndexBuffer())
+        indexCount = indexBuffer->GetCount();
+    Profiler::Get().AddDrawCall(indexCount);
+
     s_RendererAPI->DrawIndexed(vertexArray);
 }
 

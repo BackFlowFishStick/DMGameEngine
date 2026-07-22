@@ -36,6 +36,8 @@ ProfilerScopeTimer::~ProfilerScopeTimer() {
 // ── Frame lifecycle ─────────────────────────────────────────────
 void Profiler::BeginFrame() {
     m_frameStart = Clock::now();
+    m_drawCalls = 0;
+    m_drawIndices = 0;
 }
 
 void Profiler::EndFrame() {
@@ -84,6 +86,10 @@ void Profiler::EndFrame() {
     m_frameHistory.push_back(static_cast<float>(m_lastFrameTimeNs) / 1.0e6f);
     if (m_frameHistory.size() > kFrameHistorySize)
         m_frameHistory.erase(m_frameHistory.begin());
+
+    // Publish per-frame GPU draw counters for the UI.
+    m_lastDrawCalls = m_drawCalls;
+    m_lastDrawIndices = m_drawIndices;
 }
 
 // ── Result collection (thread-safe) ─────────────────────────────

@@ -46,6 +46,9 @@ void ProfilerLayer::OnImGuiRender() {
     ImGui::Text("FPS:    %.1f", profiler.GetFPS());
     ImGui::SameLine(220.0f);
     ImGui::Text("Frame: %.3f ms", profiler.GetFrameTimeMs());
+    ImGui::Text("Draws:  %u", profiler.GetDrawCalls());
+    ImGui::SameLine(220.0f);
+    ImGui::Text("Indices: %u", profiler.GetDrawIndices());
 
     // ── Frame-time graph ────────────────────────────────────────
     const auto& hist = profiler.GetFrameTimeHistory();
