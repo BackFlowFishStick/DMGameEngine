@@ -38,6 +38,7 @@
 #include "DMGameEngine/Renderer/Renderer.h"
 #include "DMGameEngine/Renderer/RendererAPI.h"
 #include "DMGameEngine/Renderer/RenderCommand.h"
+#include "DMGameEngine/Renderer/RenderQueue.h"
 #include "DMGameEngine/Renderer/Shader.h"
 #include "DMGameEngine/Renderer/Material.h"
 #include "DMGameEngine/Renderer/Texture.h"
