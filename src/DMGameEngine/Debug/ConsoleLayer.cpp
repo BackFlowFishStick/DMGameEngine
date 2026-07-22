@@ -290,15 +290,29 @@ void ConsoleLayer::RegisterBuiltins() {
             return out;
         });
 
-    console.Register("stat", "stat <fps|frame>",
+    console.Register("stat", "stat <fps|frame|draws>",
         [](const std::vector<std::string>& args) -> std::string {
-            const auto& p = Profiler::Get();
+            auto& p = Profiler::Get();
             const std::string what = (args.size() >= 2) ? ToLower(args[1]) : std::string{};
             if (what == "fps")
                 return "FPS: " + std::to_string(p.GetFPS());
             if (what == "frame")
                 return "Frame time: " + std::to_string(p.GetFrameTimeMs()) + " ms";
-            return "usage: stat <fps|frame>";
+            if (what == "draws" || what == "drawcalls")
+            {
+                const std::string sub = (args.size() >= 3) ? ToLower(args[2]) : std::string{};
+                if (sub == "on")  { p.SetDrawCallTracking(true);  return "Draw call tracking enabled"; }
+                if (sub == "off") { p.SetDrawCallTracking(false); return "Draw call tracking disabled"; }
+                if (sub == "status" || sub.empty())
+                {
+                    const char* state = p.IsDrawCallTracking() ? "on" : "off";
+                    return "Draw calls: " + std::to_string(p.GetDrawCalls())
+                         + " | Indices: " + std::to_string(p.GetDrawIndices())
+                         + " (tracking: " + state + ")";
+                }
+                return "usage: stat draws [on|off|status]";
+            }
+            return "usage: stat <fps|frame|draws>";
         });
 
     console.Register("profile", "profile <on|off|status>",

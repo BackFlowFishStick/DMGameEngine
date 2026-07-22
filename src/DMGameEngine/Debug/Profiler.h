@@ -72,7 +72,14 @@ public:
 
     // Called by RenderCommand::DrawIndexed to account a scene draw call
     // and (optionally) the indices it consumes.
-    void AddDrawCall(uint32_t indexCount = 0) { ++m_drawCalls; m_drawIndices += indexCount; }
+    void AddDrawCall(uint32_t indexCount = 0) {
+        if (!m_drawCallTracking)
+            return;
+        ++m_drawCalls;
+        m_drawIndices += indexCount;
+    }
+    void SetDrawCallTracking(bool enabled) { m_drawCallTracking = enabled; }
+    bool IsDrawCallTracking() const        { return m_drawCallTracking; }
 
     void SetEnabled(bool enabled) { m_enabled = enabled; }
     bool IsEnabled() const         { return m_enabled; }
@@ -104,6 +111,7 @@ private:
     uint32_t m_lastDrawIndices = 0;
 
     bool m_enabled = true;
+    bool m_drawCallTracking = true;
 };
 
 // ── RAII scope timer (created by DMGE_PROFILE_*) ─────────────────
