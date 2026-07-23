@@ -1,11 +1,12 @@
 /*
  * DMGameEngine - Renderer Implementation
  *
- * Scene-level surface: brackets a frame with BeginScene / EndScene,
- * caches the camera view-projection, and enqueues draws into a
- * RenderQueue. The queue is sorted by material/shader and flushed at
- * EndScene / Flush, binding each group's state only once per frame
- * instead of once per Submit.
+ * Scene-level surface: the host clears the framebuffer once per frame
+ * (ClearFrame); each scene layer brackets its own render pass with
+ * BeginScene / EndScene, caching the camera view-projection and
+ * enqueuing draws into a RenderQueue. The queue is sorted by
+ * material/shader and flushed at EndScene / Flush, binding each group's
+ * state only once per pass instead of once per Submit.
  */
 
 #include "DMGameEngine/Renderer/Renderer.h"
@@ -42,16 +43,19 @@ void Renderer::Shutdown()
     RenderCommand::Shutdown();
 }
 
-void Renderer::BeginScene()
+void Renderer::ClearFrame()
 {
     RenderCommand::Clear();
+}
+
+void Renderer::BeginScene()
+{
     s_SceneData.ViewProjectionMatrix = glm::mat4(1.0f);
     s_Queue.Clear();
 }
 
 void Renderer::BeginScene(const Camera& camera)
 {
-    RenderCommand::Clear();
     s_SceneData.ViewProjectionMatrix = camera.GetViewProjection();
     if (s_API == API::Vulkan)
     {

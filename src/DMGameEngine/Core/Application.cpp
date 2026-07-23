@@ -5,7 +5,6 @@
 #include "DMGameEngine/Core/Log.h"
 #include "DMGameEngine/Core/Timestep.h"
 #include "DMGameEngine/Renderer/Renderer.h"
-#include "DMGameEngine/Renderer/CameraController.h"
 #include "DMGameEngine/ImGui/ImGuiLayer.h"
 #include "DMGameEngine/Debug/Profiler.h"
 #include "DMGameEngine/Debug/ProfilerLayer.h"
@@ -59,14 +58,6 @@ Window& Application::GetWindow() const {
     return *m_window;
 }
 
-CameraController* Application::GetActiveCameraController() const {
-    return m_ActiveController.get();
-}
-
-void Application::SetActiveCameraController(const DM::Ref<CameraController>& controller) {
-    m_ActiveController = controller;
-}
-
 // ── Layer management ─────────────────────────────────────────────
 
 void Application::PushLayer(DM::Scope<Layer> layer) {
@@ -104,12 +95,6 @@ void Application::OnEvent(Event& e) {
         Renderer::OnWindowResize(static_cast<int>(ev.GetWidth()), static_cast<int>(ev.GetHeight()));
         return false;  // do not mark handled; layers may still react
     });
-
-    // Forward to the active camera controller (mouse drag / scroll /
-    // button / viewport resize). Handlers return false, so events keep
-    // propagating to layers below.
-    if (m_ActiveController)
-        m_ActiveController->OnEvent(e);
 
     // Propagate event through layers in reverse order:
     // overlays (UI / tool) consume input before gameplay layers.
@@ -206,8 +191,6 @@ void Application::MainLoop() {
         {
             DMGE_PROFILE_SCOPE("Stage 2: Update");
 
-            if (m_ActiveController)
-                m_ActiveController->OnUpdate(ts);
 
             for (auto& layer : m_layerStack)
                 layer->OnUpdate(ts);
@@ -218,27 +201,25 @@ void Application::MainLoop() {
         // ═══════════════════════════════════════════════════════════
         //  Stage 3 — Render
         //
-        //  Renderer::BeginScene() clears the framebuffer (color +
-        //  depth). With an active camera set, its view-projection is
-        //  cached for the layers' Submit() calls; otherwise the scene
-        //  begins with an identity view-projection. Layers then submit
-        //  draw commands before Renderer::EndScene() finalizes the
-        //  ImGui pass.
+        //  Renderer::ClearFrame() clears the framebuffer (color +
+        //  depth) once. Each scene layer then brackets its own pass
+        //  (BeginScene(camera) / EndScene) and submits draw commands
+        //  with its own view-projection; non-scene layers render
+        //  outside any pass.
         // ═══════════════════════════════════════════════════════════
         {
             DMGE_PROFILE_SCOPE("Stage 3: Render");
 
-            if (m_ActiveController)
-                Renderer::BeginScene(m_ActiveController->GetCamera());
-            else
-                Renderer::BeginScene();
+            // Clear the framebuffer once per frame. Each scene layer
+            // brackets its own render pass (BeginScene(camera) /
+            // EndScene) and supplies its own view-projection, so the
+            // frame orchestrator no longer owns a global camera.
+            Renderer::ClearFrame();
 
             for (auto& layer : m_layerStack)
                 layer->OnRender();
 
             OnRender();  // fallback when no layers are pushed
-
-            Renderer::EndScene();
         }
 
         // ═══════════════════════════════════════════════════════════

@@ -53,6 +53,7 @@
 #include "DMGameEngine/Scene/SceneCamera.h"
 #include "DMGameEngine/Scene/OrthographicCameraController.h"
 #include "DMGameEngine/Scene/EditorCameraController.h"
+#include "DMGameEngine/Scene/DefaultSceneLayer.h"
 
 // ── ImGui ────────────────────────────────────────────────────────
 #include "DMGameEngine/ImGui/ImGuiLayer.h"

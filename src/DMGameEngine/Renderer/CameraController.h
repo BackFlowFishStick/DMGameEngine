@@ -15,8 +15,9 @@
  *      PerspectiveCamera (Scene/EditorCameraController.h).
  *
  * Controllers are intentionally not Layers: they expose the same
- * OnUpdate() / OnEvent() surface so a Layer (or Scene / Application)
- * can own one and forward its per-frame delta and events. SetEnabled
+ * OnUpdate() / OnEvent() surface so a Layer or Scene (e.g.
+ * DefaultSceneLayer) can own one and forward its per-frame delta and
+ * events. SetEnabled
  * (false) suspends input handling (e.g. while an ImGui panel captures
  * the pointer) while keeping the last camera transform intact.
  *

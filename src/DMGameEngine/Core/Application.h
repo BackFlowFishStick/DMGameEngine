@@ -11,6 +11,12 @@
  * automatically propagates OnUpdate, OnRender, OnImGuiRender, and OnEvent
  * to all layers each frame.
  *
+ * Rendering model: Application clears the framebuffer once per frame
+ * (Renderer::ClearFrame). It does NOT own a camera or call
+ * BeginScene/EndScene - each scene layer (e.g. DefaultSceneLayer) owns
+ * its camera and brackets its own render pass, so multiple cameras can
+ * render in a single frame.
+ *
  * Usage:
  *   class MyGame : public DMGameEngine::Application {
  *   public:
@@ -40,7 +46,6 @@
 namespace DMGameEngine {
 
 class ImGuiLayer;
-class CameraController;  // forward declaration - active camera controller
 
 class DMGE_API Application {
 public:
@@ -60,13 +65,6 @@ public:
 
     // ImGui overlay (attached automatically); null until Initialize()
     ImGuiLayer* GetImGuiLayer() const { return m_ImGuiLayer; }
-
-    // ── Active camera controller ───────────────────────────────
-    // If set, the controller owns its camera and advances it each frame
-    // (OnUpdate / OnEvent); the camera view-projection is fed to
-    // Renderer::BeginScene, otherwise the scene begins with identity.
-    void SetActiveCameraController(const DM::Ref<CameraController>& controller);
-    CameraController* GetActiveCameraController() const;
 
     // ── Singleton accessor ────────────────────────────────
     static Application& Get();
@@ -102,7 +100,6 @@ private:
     WindowProps               m_windowProps;
     LayerStack                m_layerStack;
     ImGuiLayer*               m_ImGuiLayer = nullptr;
-    DM::Ref<CameraController>  m_ActiveController;
 };
 
 } // namespace DMGameEngine

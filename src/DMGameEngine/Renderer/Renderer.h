@@ -1,13 +1,15 @@
 /*
  * DMGameEngine - Renderer (Scene Submission)
  *
- * High-level renderer surface. Brackets a frame with BeginScene /
- * EndScene, caching the camera view-projection for the frame.
- * Submit() enqueues draw requests into a per-frame RenderQueue rather
- * than issuing them immediately; the queue is sorted by material/shader
- * and flushed once at EndScene() (or on an explicit Flush()), so each
- * group binds its shader + uniforms only once per frame instead of once
- * per draw, and u_ViewProjection is uploaded once per shader.
+ * High-level renderer surface. The host clears the framebuffer once per
+ * frame via ClearFrame(); each scene layer brackets its own render pass
+ * with BeginScene / EndScene, caching the camera view-projection for the
+ * pass. Submit() enqueues draw requests into a per-pass RenderQueue
+ * rather than issuing them immediately; the queue is sorted by
+ * material/shader and flushed once at EndScene() (or on an explicit
+ * Flush()), so each group binds its shader + uniforms only once per pass
+ * instead of once per draw, and u_ViewProjection is uploaded once per
+ * shader.
  *
  * Low-level GPU commands (clear, viewport, blend / depth / cull state,
  * draw calls) are owned by RenderCommand, which holds the active
@@ -45,10 +47,17 @@ public:
     static void Init(const RendererAPIInitConfig& config = {});
     static void Shutdown();
 
+    // Clears the framebuffer (color + depth) once per frame. Called by
+    // the host (Application) before scene layers render. Separate from
+    // BeginScene so multiple scene layers can each run a render pass
+    // (BeginScene/EndScene) without wiping earlier passes' output.
+    static void ClearFrame();
+
     static void BeginScene();
-    // Clears the framebuffer and caches the camera's view-projection matrix
-    // for subsequent Submit() calls (fed to shaders as u_ViewProjection).
-    // The per-frame RenderQueue is also cleared here.
+    // Caches the identity view-projection and resets the per-pass
+    // RenderQueue for subsequent Submit() calls. The framebuffer is NOT
+    // cleared here - ClearFrame handles that once per frame so multi-pass
+    // rendering (multiple scene layers / cameras) keeps earlier output.
     static void BeginScene(const Camera& camera);
     static void EndScene();
 

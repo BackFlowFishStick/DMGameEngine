@@ -149,6 +149,7 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Scene/SceneCamera.h"
     "src/DMGameEngine/Scene/OrthographicCameraController.h"
     "src/DMGameEngine/Scene/EditorCameraController.h"
+    "src/DMGameEngine/Scene/DefaultSceneLayer.h"
 
     # ImGui
     "src/DMGameEngine/ImGui/ImGuiLayer.h"
