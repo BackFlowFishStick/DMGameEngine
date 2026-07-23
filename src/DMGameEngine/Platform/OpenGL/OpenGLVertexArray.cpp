@@ -89,6 +89,8 @@ void OpenGLVertexArray::AddVertexBuffer(const DM::Ref<VertexBuffer>& vertexBuffe
                     element.Normalized ? GL_TRUE : GL_FALSE,
                     layout.GetStride(),
                     reinterpret_cast<const void*>(static_cast<uintptr_t>(element.Offset))));
+                if (element.PerInstance)
+                    DMGE_GL_CALL(glVertexAttribDivisor(m_VertexBufferIndex, 1));
                 m_VertexBufferIndex++;
                 break;
             }
@@ -104,6 +106,8 @@ void OpenGLVertexArray::AddVertexBuffer(const DM::Ref<VertexBuffer>& vertexBuffe
                     ShaderDataTypeToOpenGLBaseType(element.Type),
                     layout.GetStride(),
                     reinterpret_cast<const void*>(static_cast<uintptr_t>(element.Offset))));
+                if (element.PerInstance)
+                    DMGE_GL_CALL(glVertexAttribDivisor(m_VertexBufferIndex, 1));
                 m_VertexBufferIndex++;
                 break;
             }

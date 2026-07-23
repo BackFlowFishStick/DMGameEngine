@@ -43,11 +43,23 @@ void VulkanVertexArray::RebuildLayout()
         VkVertexInputBindingDescription binding{};
         binding.binding   = bindingIndex;
         binding.stride    = layout.GetStride();
-        binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        bool anyPerInstance = false;
+        bool anyPerVertex = false;
+        for (const auto& e : layout.GetElements())
+        {
+            if (e.PerInstance) anyPerInstance = true;
+            else               anyPerVertex   = true;
+        }
+        DMGE_CORE_ASSERT(!(anyPerInstance && anyPerVertex),
+                         "VulkanVertexArray: cannot mix per-vertex and per-instance "
+                         "attributes in one vertex buffer; use a separate buffer!");
+        binding.inputRate = anyPerInstance ? VK_VERTEX_INPUT_RATE_INSTANCE
+                                           : VK_VERTEX_INPUT_RATE_VERTEX;
         m_BindingDescs.push_back(binding);
 
         HashCombine(m_LayoutHash, bindingIndex);
         HashCombine(m_LayoutHash, layout.GetStride());
+        HashCombine(m_LayoutHash, static_cast<uint64_t>(binding.inputRate));
 
         for (const auto& elem : layout.GetElements())
         {

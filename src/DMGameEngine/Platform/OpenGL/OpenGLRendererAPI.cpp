@@ -99,6 +99,26 @@ void OpenGLRendererAPI::DrawIndexed(const VertexArray& vertexArray)
                    nullptr));
 }
 
+void OpenGLRendererAPI::DrawIndexedInstanced(const VertexArray& vertexArray,
+                                             uint32_t instanceCount,
+                                             uint32_t baseInstance)
+{
+    vertexArray.Bind();
+
+    const auto& indexBuffer = vertexArray.GetIndexBuffer();
+    DMGE_CORE_ASSERT(indexBuffer, "VertexArray has no IndexBuffer attached!");
+
+    DMGE_GL_CALL(glDrawElementsInstanced(GL_TRIANGLES,
+                   static_cast<GLsizei>(indexBuffer->GetCount()),
+                   GL_UNSIGNED_INT,
+                   nullptr,
+                   static_cast<GLsizei>(instanceCount)));
+
+    // baseInstance requires GL 4.2 glDrawElementsInstancedBaseInstance;
+    // not issued here to stay compatible with core 3.3 loaders.
+    (void)baseInstance;
+}
+
 void OpenGLRendererAPI::SetBlendState(bool enable, BlendFactor srcFactor, BlendFactor dstFactor)
 {
     if (enable)

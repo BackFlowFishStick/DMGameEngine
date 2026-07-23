@@ -107,6 +107,13 @@ public:
     virtual void SetViewport(int x, int y, int width, int height) = 0;
 
     virtual void DrawIndexed(const VertexArray& vertexArray) = 0;
+    // Instanced indexed draw: renders instanceCount copies, advancing
+    // per-instance vertex attributes (BufferElement PerInstance) once per
+    // instance. baseInstance offsets the starting instance index (ignored on
+    // backends without base-instance support).
+    virtual void DrawIndexedInstanced(const VertexArray& vertexArray,
+                                      uint32_t instanceCount,
+                                      uint32_t baseInstance = 0) = 0;
 
     // ── Pipeline state ───────────────────────────────────────
     //  Blend: toggles GL_BLEND and sets the RGB/alpha blend function.

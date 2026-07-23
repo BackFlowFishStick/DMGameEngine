@@ -32,6 +32,7 @@ public:
     static void Clear();
     static void SetViewport(int x, int y, int width, int height);
     static void DrawIndexed(const VertexArray& vertexArray);
+    static void DrawIndexedInstanced(const VertexArray& vertexArray, uint32_t instanceCount, uint32_t baseInstance = 0);
 
     // ── Pipeline state ───────────────────────────────────────
     //  Blend / depth / cull toggles forwarded to the active backend.

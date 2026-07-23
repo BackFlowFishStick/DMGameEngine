@@ -179,9 +179,23 @@ void VulkanRendererAPI::SetViewport(int x, int y, int width, int height)
 
 void VulkanRendererAPI::DrawIndexed(const VertexArray& vertexArray)
 {
+    DrawIndexedCommon(vertexArray, 1, 0);
+}
+
+void VulkanRendererAPI::DrawIndexedInstanced(const VertexArray& vertexArray,
+                                             uint32_t instanceCount,
+                                             uint32_t baseInstance)
+{
+    DrawIndexedCommon(vertexArray, instanceCount, baseInstance);
+}
+
+void VulkanRendererAPI::DrawIndexedCommon(const VertexArray& vertexArray,
+                                          uint32_t instanceCount,
+                                          uint32_t firstInstance)
+{
     auto& ctx = VulkanGraphicsContext::Get();
     if (!ctx.IsFrameStarted())
-        return; // nothing to draw into
+        return;
 
     DMGE_CORE_ASSERT(m_CurrentShader, "Vulkan: DrawIndexed called with no shader bound!");
     auto& shader = *m_CurrentShader;
@@ -190,13 +204,11 @@ void VulkanRendererAPI::DrawIndexed(const VertexArray& vertexArray)
     VkCommandBuffer cmd = ctx.GetCurrentCommandBuffer();
     uint32_t frame = ctx.GetCurrentFrame();
 
-    // Commit this shader's named uniforms into the per-frame scratch buffer.
     VkDeviceSize dynamicOffset = 0;
     bool hasUBO = (shader.GetUniformBlockSize() > 0);
     if (hasUBO)
         dynamicOffset = CommitUniforms(shader, frame);
 
-    // Allocate + write a per-draw descriptor set (UBO + bound samplers).
     VkDescriptorSet set = VK_NULL_HANDLE;
     if (shader.GetDescriptorSetLayout() != VK_NULL_HANDLE)
     {
@@ -205,7 +217,6 @@ void VulkanRendererAPI::DrawIndexed(const VertexArray& vertexArray)
             WriteDescriptorSet(set, shader, frame, dynamicOffset);
     }
 
-    // Bind vertex/index buffers via the vertex array.
     va.Bind();
 
     VkPipeline pipeline = GetOrCreatePipeline(shader, va);
@@ -221,7 +232,7 @@ void VulkanRendererAPI::DrawIndexed(const VertexArray& vertexArray)
                                 hasUBO ? &dynOffset : nullptr);
     }
 
-    vkCmdDrawIndexed(cmd, va.GetIndexCount(), 1, 0, 0, 0);
+    vkCmdDrawIndexed(cmd, va.GetIndexCount(), instanceCount, 0, 0, firstInstance);
 }
 
 // ── Pipeline state setters ────────────────────────────────────────

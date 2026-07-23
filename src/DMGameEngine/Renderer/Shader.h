@@ -1,4 +1,4 @@
-﻿/*
+/*
  * DMGameEngine - Shader Abstraction
  *
  * Base class for all graphics API shader implementations.
@@ -62,15 +62,17 @@ struct DMGE_API BufferElement
     uint32_t       Size;
     uint32_t       Offset;
     bool           Normalized;
+    bool           PerInstance = false; // per-instance attribute (divisor=1 / INSTANCE rate)
 
     BufferElement() = default;
 
-    BufferElement(ShaderDataType type, std::string_view name, bool normalized = false)
+    BufferElement(ShaderDataType type, std::string_view name, bool normalized = false, bool perInstance = false)
         : Name(name)
         , Type(type)
         , Size(ShaderDataTypeSize(type))
         , Offset(0)
         , Normalized(normalized)
+        , PerInstance(perInstance)
     {
     }
 

@@ -62,6 +62,22 @@ void RenderCommand::DrawIndexed(const VertexArray& vertexArray)
     s_RendererAPI->DrawIndexed(vertexArray);
 }
 
+void RenderCommand::DrawIndexedInstanced(const VertexArray& vertexArray,
+                                         uint32_t instanceCount,
+                                         uint32_t baseInstance)
+{
+    DMGE_CORE_ASSERT(s_RendererAPI, "RenderCommand not initialized! Call RenderCommand::Init() first.");
+
+    // Account this instanced draw in the profiler (1 draw call; index
+    // count scaled by instanceCount since each instance reuses the mesh).
+    uint32_t indexCount = 0;
+    if (const auto& indexBuffer = vertexArray.GetIndexBuffer())
+        indexCount = indexBuffer->GetCount();
+    Profiler::Get().AddDrawCall(indexCount * instanceCount);
+
+    s_RendererAPI->DrawIndexedInstanced(vertexArray, instanceCount, baseInstance);
+}
+
 // ── Pipeline state ───────────────────────────────────────────────
 void RenderCommand::SetBlendState(bool enable, BlendFactor srcFactor, BlendFactor dstFactor)
 {

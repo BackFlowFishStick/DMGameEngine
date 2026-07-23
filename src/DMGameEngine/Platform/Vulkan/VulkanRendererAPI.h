@@ -51,6 +51,7 @@ public:
     void Clear() override;
     void SetViewport(int x, int y, int width, int height) override;
     void DrawIndexed(const VertexArray& vertexArray) override;
+    void DrawIndexedInstanced(const VertexArray& vertexArray, uint32_t instanceCount, uint32_t baseInstance = 0) override;
 
     void SetBlendState(bool enable, BlendFactor srcFactor, BlendFactor dstFactor) override;
     void SetBlendEquation(BlendEquation equation) override;
@@ -92,6 +93,10 @@ private:
     };
 
     VkPipeline GetOrCreatePipeline(VulkanShader& shader, const VulkanVertexArray& vertexArray);
+    // Shared by DrawIndexed (1 instance) and DrawIndexedInstanced (N).
+    void DrawIndexedCommon(const VertexArray& vertexArray,
+                           uint32_t instanceCount,
+                           uint32_t firstInstance);
 
     // ── Per-frame scratch ───────────────────────────────────────
     void CreateFrameResources();
