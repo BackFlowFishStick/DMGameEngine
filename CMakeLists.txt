@@ -52,6 +52,7 @@ set(DMGE_SOURCES
     # Platform / OpenGL
     "src/DMGameEngine/Platform/OpenGL/OpenGLGraphicsContext.cpp"
     "src/DMGameEngine/Platform/OpenGL/OpenGLIndexBuffer.cpp"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLFrameBuffer.cpp"
     "src/DMGameEngine/Platform/OpenGL/OpenGLRendererAPI.cpp"
     "src/DMGameEngine/Platform/OpenGL/OpenGLShader.cpp"
     "src/DMGameEngine/Platform/OpenGL/OpenGLTexture2D.cpp"
@@ -66,6 +67,7 @@ set(DMGE_SOURCES
 
     # Renderer
     "src/DMGameEngine/Renderer/IndexBuffer.cpp"
+    "src/DMGameEngine/Renderer/FrameBuffer.cpp"
     "src/DMGameEngine/Renderer/Renderer.cpp"
     "src/DMGameEngine/Renderer/RenderCommand.cpp"
     "src/DMGameEngine/Renderer/RenderQueue.cpp"
@@ -112,6 +114,7 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Platform/OpenGL/OpenGLDebug.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLGraphicsContext.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLIndexBuffer.h"
+    "src/DMGameEngine/Platform/OpenGL/OpenGLFrameBuffer.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLRendererAPI.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLShader.h"
     "src/DMGameEngine/Platform/OpenGL/OpenGLTextureUtils.h"
@@ -132,6 +135,7 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Renderer/PerspectiveCamera.h"
     "src/DMGameEngine/Renderer/GraphicsContext.h"
     "src/DMGameEngine/Renderer/IndexBuffer.h"
+    "src/DMGameEngine/Renderer/FrameBuffer.h"
     "src/DMGameEngine/Renderer/Renderer.h"
     "src/DMGameEngine/Renderer/RenderCommand.h"
     "src/DMGameEngine/Renderer/RenderQueue.h"
@@ -274,6 +278,7 @@ if(DMGE_VULKAN_BACKEND)
         "src/DMGameEngine/Platform/Vulkan/VulkanShader.cpp"
         "src/DMGameEngine/Platform/Vulkan/VulkanVertexBuffer.cpp"
         "src/DMGameEngine/Platform/Vulkan/VulkanIndexBuffer.cpp"
+        "src/DMGameEngine/Platform/Vulkan/VulkanFrameBuffer.cpp"
         "src/DMGameEngine/Platform/Vulkan/VulkanVertexArray.cpp"
         "src/DMGameEngine/Platform/Vulkan/VulkanTexture2D.cpp"
         "src/DMGameEngine/Platform/Vulkan/VulkanTexture2DArray.cpp"

@@ -25,6 +25,11 @@ class DMGE_API VulkanTexture2D : public Texture2D, public VulkanTexture
 public:
     explicit VulkanTexture2D(const Texture2DSpecification& spec);
     explicit VulkanTexture2D(std::string_view filepath);
+    // Render-target constructor: same as the spec ctor, but ORs extraUsage
+    // into the VkImage usage flags (e.g. COLOR_ATTACHMENT / DEPTH_STENCIL
+    // usage) so the texture can be a framebuffer attachment yet remain
+    // sampleable. Used by VulkanFrameBuffer.
+    VulkanTexture2D(const Texture2DSpecification& spec, VkImageUsageFlags extraUsage);
     ~VulkanTexture2D() override;
 
     void Bind(uint32_t slot = 0) const override;
@@ -52,6 +57,7 @@ private:
     uint32_t      m_MipLevels  = 1;
     uint32_t      m_RendererID = 0;
     Texture2DSpecification m_Spec;
+    VkImageUsageFlags m_ExtraUsage = 0;   // OR-ed into image usage (render-target textures)
     std::string   m_FilePath;
 
     static uint32_t s_IDCounter;

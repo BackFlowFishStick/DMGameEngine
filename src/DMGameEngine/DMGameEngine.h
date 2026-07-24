@@ -48,6 +48,7 @@
 #include "DMGameEngine/Renderer/VertexArray.h"
 #include "DMGameEngine/Renderer/VertexBuffer.h"
 #include "DMGameEngine/Renderer/IndexBuffer.h"
+#include "DMGameEngine/Renderer/FrameBuffer.h"
 
 // ── Scene ────────────────────────────────────────────────────────
 #include "DMGameEngine/Scene/SceneCamera.h"

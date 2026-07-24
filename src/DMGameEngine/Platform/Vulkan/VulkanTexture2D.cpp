@@ -40,6 +40,12 @@ VulkanTexture2D::VulkanTexture2D(const Texture2DSpecification& spec)
     Invalidate();
 }
 
+VulkanTexture2D::VulkanTexture2D(const Texture2DSpecification& spec, VkImageUsageFlags extraUsage)
+    : m_Spec(spec), m_ExtraUsage(extraUsage)
+{
+    Invalidate();
+}
+
 VulkanTexture2D::VulkanTexture2D(std::string_view filepath)
     : m_FilePath(filepath)
 {
@@ -115,7 +121,7 @@ void VulkanTexture2D::Invalidate()
 
     CreateImage(VK_IMAGE_TYPE_2D, format, m_Spec.Width, m_Spec.Height,
                 m_MipLevels, 1, 0,
-                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | m_ExtraUsage,
                 m_Image, m_Alloc);
 
     m_ImageView = CreateImageView(m_Image, VK_IMAGE_VIEW_TYPE_2D, format, aspect, m_MipLevels, 1);
