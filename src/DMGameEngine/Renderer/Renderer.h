@@ -31,6 +31,7 @@ class Camera;      // forward declaration - scene view-projection source
 class Shader;      // forward declaration - enqueued per draw submission
 class Material;    // forward declaration - shader + uniform bundle per draw
 class VertexArray; // forward declaration - vertex inputs for a draw
+class FrameBuffer; // forward declaration - optional render target (offscreen pass)
 
 class DMGE_API Renderer
 {
@@ -53,12 +54,24 @@ public:
     // (BeginScene/EndScene) without wiping earlier passes' output.
     static void ClearFrame();
 
-    static void BeginScene();
-    // Caches the identity view-projection and resets the per-pass
-    // RenderQueue for subsequent Submit() calls. The framebuffer is NOT
-    // cleared here - ClearFrame handles that once per frame so multi-pass
-    // rendering (multiple scene layers / cameras) keeps earlier output.
+    // Begins a render pass. target selects the render target: nullptr (or
+    // a FrameBuffer with SwapChainTarget) renders to the swapchain / default
+    // framebuffer; an offscreen FrameBuffer renders into it (render-to-texture)
+    // so multi-pass techniques (shadow maps, post-process, viewports) can run.
+    static void BeginScene(const DM::Ref<FrameBuffer>& target = nullptr);
+    // Convenience: begin a pass for the given camera, rendering into the
+    // camera's own render target when one is configured (Camera::GetRenderTarget),
+    // so offscreen rendering only needs the camera set up - no explicit target
+    // argument. Delegates to the explicit BeginScene(camera, target) below.
     static void BeginScene(const Camera& camera);
+
+    // Underlying implementation: caches the camera view-projection and resets
+    // the per-pass RenderQueue for subsequent Submit() calls. target selects
+    // the render target explicitly (it overrides the camera's); nullptr renders
+    // to the swapchain / default framebuffer. The framebuffer is NOT cleared
+    // here - ClearFrame handles that once per frame so multi-pass rendering
+    // keeps earlier output.
+    static void BeginScene(const Camera& camera, const DM::Ref<FrameBuffer>& target);
     static void EndScene();
 
     // Enqueues a shader-bound draw into the per-frame RenderQueue. The

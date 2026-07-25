@@ -111,6 +111,16 @@ public:
         SetViewportSize(width, height);
     }
 
+    // ── Render target (offscreen) ────────────────────────────────
+    //  An optional FrameBuffer this camera renders into. When set,
+    //  Renderer::BeginScene(*this) renders offscreen into it without the
+    //  caller passing the target explicitly (render-to-texture: shadow
+    //  maps, post-process, viewports, ...). A null target renders to the
+    //  swapchain / default framebuffer. An explicit BeginScene(*this, target)
+    //  still overrides this.
+    DM::Ref<FrameBuffer> GetRenderTarget() const override { return m_RenderTarget; }
+    void SetRenderTarget(const DM::Ref<FrameBuffer>& target) { m_RenderTarget = target; }
+
 private:
     void RecalculateProjection()
     {
@@ -142,6 +152,8 @@ private:
     float m_OrthographicFar  = 1000.0f;
 
     float m_AspectRatio = 16.0f / 9.0f;
+
+    DM::Ref<FrameBuffer> m_RenderTarget; // optional offscreen render target (nullptr = swapchain)
 };
 
 } // namespace DMGameEngine

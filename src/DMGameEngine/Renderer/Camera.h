@@ -20,10 +20,13 @@
 
 #pragma once
 
+#include "DMGameEngine/Core/Export.h"   // DM::Ref (render-target smart pointer)
 #include "glm/glm.hpp"
 #include <cstdint>
 
 namespace DMGameEngine {
+
+class FrameBuffer; // forward declaration - optional offscreen render target
 
 class Camera
 {
@@ -48,6 +51,15 @@ public:
         (void)width;
         (void)height;
     }
+
+    // ── Render target ─────────────────────────────────────────────────
+    //  Optional offscreen FrameBuffer this camera renders into. The base
+    //  returns nullptr (swapchain / default framebuffer); a camera that owns
+    //  a render target (e.g. SceneCamera) overrides this so
+    //  Renderer::BeginScene(camera) renders offscreen without the caller
+    //  passing the target explicitly (render-to-texture: shadow maps,
+    //  post-process, viewports, ...).
+    virtual DM::Ref<FrameBuffer> GetRenderTarget() const { return nullptr; }
 
     // ── Projection ───────────────────────────────────────────────
     //  The projection matrix (perspective / orthographic) transforming

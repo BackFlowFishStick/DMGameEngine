@@ -46,6 +46,7 @@ public:
 
     VkSampler   GetVkSampler()   const override { return m_Sampler; }
     VkImageView GetVkImageView() const override { return m_ImageView; }
+    VkImage     GetVkImage()     const          { return m_Image; }   // raw image (layout barriers / FBO attachments)
 
 private:
     void Invalidate();

@@ -11,6 +11,7 @@
 
 #include "DMGameEngine/Renderer/Renderer.h"
 #include "DMGameEngine/Renderer/RenderCommand.h"
+#include "DMGameEngine/Renderer/FrameBuffer.h"
 #include "DMGameEngine/Renderer/Camera.h"
 #include "DMGameEngine/Renderer/Shader.h"
 #include "DMGameEngine/Renderer/Material.h"
@@ -48,13 +49,21 @@ void Renderer::ClearFrame()
     RenderCommand::Clear();
 }
 
-void Renderer::BeginScene()
+void Renderer::BeginScene(const DM::Ref<FrameBuffer>& target)
 {
     s_SceneData.ViewProjectionMatrix = glm::mat4(1.0f);
     s_Queue.Clear();
+    RenderCommand::BeginRenderPass(target.get());
 }
 
 void Renderer::BeginScene(const Camera& camera)
+{
+    // Offscreen path "just configure the camera": render into the camera's
+    // own render target when one is set, otherwise the swapchain (nullptr).
+    BeginScene(camera, camera.GetRenderTarget());
+}
+
+void Renderer::BeginScene(const Camera& camera, const DM::Ref<FrameBuffer>& target)
 {
     s_SceneData.ViewProjectionMatrix = camera.GetViewProjection();
     if (s_API == API::Vulkan)
@@ -68,11 +77,13 @@ void Renderer::BeginScene(const Camera& camera)
         s_SceneData.ViewProjectionMatrix = flipY * s_SceneData.ViewProjectionMatrix;
     }
     s_Queue.Clear();
+    RenderCommand::BeginRenderPass(target.get());
 }
 
 void Renderer::EndScene()
 {
     Flush();
+    RenderCommand::EndRenderPass();
 }
 
 void Renderer::Submit(const DM::Ref<Shader>& shader,
