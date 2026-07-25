@@ -49,6 +49,7 @@ private:
         unsigned int    height = 0;
         bool            vSync  = false;
         EventCallbackFn callback;
+        GraphicsContext* context = nullptr;  // so the GLFW size callback can RequestResize
     };
 
     WindowData m_data;

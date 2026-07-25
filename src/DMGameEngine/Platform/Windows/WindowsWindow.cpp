@@ -103,6 +103,10 @@ void WindowsWindow::Init(const WindowProps& props) {
     }
     m_context->Init();
 
+    // Expose the context to the GLFW size callback so it can request a
+    // swapchain recreate on Vulkan (no-op on OpenGL).
+    m_data.context = m_context.get();
+
     SetVSync(true);
 
     // ── Window callbacks ─────────────────────────────────────────
@@ -110,6 +114,8 @@ void WindowsWindow::Init(const WindowProps& props) {
         auto& data = *static_cast<WindowData*>(glfwGetWindowUserPointer(window));
         data.width  = static_cast<unsigned int>(w);
         data.height = static_cast<unsigned int>(h);
+        if (data.context)
+            data.context->RequestResize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
         WindowResizeEvent event(data.width, data.height);
         data.callback(event);
     });

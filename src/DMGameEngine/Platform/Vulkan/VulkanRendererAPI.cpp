@@ -113,6 +113,7 @@ VulkanRendererAPI::~VulkanRendererAPI()
     if (m_PipelineCache != VK_NULL_HANDLE)
         vkDestroyPipelineCache(dev.Device, m_PipelineCache, nullptr);
 
+    DestroyDummyResources();
     DestroyFrameResources();
 
     if (s_Instance == this)
@@ -134,8 +135,25 @@ void VulkanRendererAPI::Init(const RendererAPIInitConfig& config)
     VK_CHECK(vkCreatePipelineCache(dev.Device, &cacheInfo, nullptr, &m_PipelineCache));
 
     CreateFrameResources();
+    CreateDummyResources();
 
     DMGE_LOG_INFO("Vulkan renderer API initialized.");
+}
+
+void VulkanRendererAPI::OnSwapchainRecreate()
+{
+    auto& dev = VulkanDevice::Get();
+
+    // Destroy all cached pipelines. The next Clear()/BeginRenderPass will
+    // refresh m_ActiveColorFormat/m_ActiveDepthFormat from the new swapchain
+    // (or offscreen target), so pipelines are recreated lazily with the
+    // correct format on their next draw. The VkPipelineCache object is kept.
+    for (auto& [key, pipeline] : m_Pipelines)
+    {
+        if (pipeline != VK_NULL_HANDLE)
+            vkDestroyPipeline(dev.Device, pipeline, nullptr);
+    }
+    m_Pipelines.clear();
 }
 
 // ── Frame / clear / viewport ──────────────────────────────────────
@@ -684,6 +702,97 @@ void VulkanRendererAPI::DestroyFrameResources()
     }
 }
 
+void VulkanRendererAPI::CreateDummyResources()
+{
+    auto& dev = VulkanDevice::Get();
+
+    // 1x1 RGBA8 image for unbound sampler slots. No pixel data is uploaded:
+    // an UNDEFINED -> SHADER_READ_ONLY_OPTIMAL transition is valid and leaves
+    // contents undefined (the dummy only exists to satisfy the descriptor
+    // binding; sampling it returns 0/black, acceptable for an unused slot).
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType     = VK_IMAGE_TYPE_2D;
+    imageInfo.extent        = { 1, 1, 1 };
+    imageInfo.mipLevels     = 1;
+    imageInfo.arrayLayers   = 1;
+    imageInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
+    imageInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage         = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    imageInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+
+    VmaAllocationCreateInfo allocInfo{};
+    allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    VK_CHECK(vmaCreateImage(dev.Allocator, &imageInfo, &allocInfo,
+                            &m_DummyImage, &m_DummyAlloc, nullptr));
+
+    dev.ImmediateSubmit([this](VkCommandBuffer cmd) {
+        VulkanGraphicsContext::TransitionImageLayout(cmd, m_DummyImage,
+            VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+    });
+
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image            = m_DummyImage;
+    viewInfo.viewType         = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format           = VK_FORMAT_R8G8B8A8_UNORM;
+    viewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel   = 0;
+    viewInfo.subresourceRange.levelCount     = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount     = 1;
+    VK_CHECK(vkCreateImageView(dev.Device, &viewInfo, nullptr, &m_DummyView));
+
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter     = VK_FILTER_NEAREST;
+    samplerInfo.minFilter     = VK_FILTER_NEAREST;
+    samplerInfo.addressModeU  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.maxAnisotropy    = 1.0f;
+    samplerInfo.borderColor      = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerInfo.compareEnable   = VK_FALSE;
+    samplerInfo.compareOp       = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.mipmapMode      = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    samplerInfo.mipLodBias       = 0.0f;
+    samplerInfo.minLod           = 0.0f;
+    samplerInfo.maxLod           = 0.0f;
+    VK_CHECK(vkCreateSampler(dev.Device, &samplerInfo, nullptr, &m_DummySampler));
+}
+
+void VulkanRendererAPI::DestroyDummyResources()
+{
+    auto& dev = VulkanDevice::Get();
+    if (dev.Device == VK_NULL_HANDLE)
+        return;
+
+    if (m_DummySampler != VK_NULL_HANDLE)
+    {
+        vkDestroySampler(dev.Device, m_DummySampler, nullptr);
+        m_DummySampler = VK_NULL_HANDLE;
+    }
+    if (m_DummyView != VK_NULL_HANDLE)
+    {
+        vkDestroyImageView(dev.Device, m_DummyView, nullptr);
+        m_DummyView = VK_NULL_HANDLE;
+    }
+    if (m_DummyImage != VK_NULL_HANDLE)
+    {
+        vmaDestroyImage(dev.Allocator, m_DummyImage, m_DummyAlloc);
+        m_DummyImage = VK_NULL_HANDLE;
+        m_DummyAlloc = VK_NULL_HANDLE;
+    }
+}
+
 void VulkanRendererAPI::ResetFrame(uint32_t frameIndex)
 {
     auto& dev = VulkanDevice::Get();
@@ -772,11 +881,21 @@ void VulkanRendererAPI::WriteDescriptorSet(VkDescriptorSet set, VulkanShader& sh
     {
         VulkanTexture* tex = (i < kMaxBoundTextures) ? m_BoundTextures[i] : nullptr;
         VkDescriptorImageInfo info{};
-        if (!tex)
-            continue; // unbound sampler slot: leave the binding unwritten
-
-        info.sampler     = tex->GetVkSampler();
-        info.imageView   = tex->GetVkImageView();
+        if (tex)
+        {
+            info.sampler   = tex->GetVkSampler();
+            info.imageView = tex->GetVkImageView();
+        }
+        else
+        {
+            // Unbound sampler slot: bind the global 1x1 dummy so the
+            // descriptor is valid (sampling returns black) instead of
+            // leaving the binding unwritten, which triggers
+            // "descriptor set encountered uninitialized binding"
+            // validation and undefined sampling results.
+            info.sampler   = m_DummySampler;
+            info.imageView = m_DummyView;
+        }
         info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         imageInfos.push_back(info);
 

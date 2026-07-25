@@ -70,5 +70,12 @@ inline const char* VKResultString(VkResult result)
                              static_cast<int>(_r), #x); \
         } while (false)
 #else
-    #define VK_CHECK(x) (void)(x)
+    #define VK_CHECK(x) \
+        do { \
+            VkResult _r = (x); \
+            if (_r != VK_SUCCESS) \
+                DMGE_LOG_ERROR("Vulkan error {} ({}) in: {}", \
+                    ::DMGameEngine::Detail::VKResultString(_r), \
+                    static_cast<int>(_r), #x); \
+        } while (false)
 #endif

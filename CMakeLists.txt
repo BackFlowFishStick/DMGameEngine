@@ -13,6 +13,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # ── Build Options ────────────────────────────────────────────────
 option(DMGE_BUILD_SHARED "Build DMGameEngine as a shared library (DLL)" ON)
 option(DMGE_BUILD_EXAMPLES "Build example projects" OFF)
+option(DMGE_BUILD_TESTS "Build unit tests (GoogleTest via FetchContent; needs network)" ON)
 option(DMGE_PROFILE "Enable engine CPU profiling instrumentation" ON)
 
 # ── ImGui multi-viewport: auto-detect the docking branch ─────────
@@ -328,6 +329,11 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 # ── Examples (optional) ──────────────────────────────────────────
+if(DMGE_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
 if(DMGE_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()

@@ -73,6 +73,14 @@ public:
     void SetCurrentShader(VulkanShader* shader) { m_CurrentShader = shader; }
     void SetBoundTexture(uint32_t slot, VulkanTexture* texture);
 
+    // Called by VulkanGraphicsContext after a swapchain recreate. Cached
+    // pipelines bake the swapchain's color/depth format into
+    // VkPipelineRenderingCreateInfo; destroy them so a changed format is not
+    // reused against the new swapchain (VUID-vkCmdBeginRendering-None-06197)
+    // and stale-format pipelines are not leaked. The VkPipelineCache object
+    // itself is retained for cold-start speed.
+    void OnSwapchainRecreate();
+
     static VulkanRendererAPI* Get() { return s_Instance; }
 
 private:
@@ -150,6 +158,17 @@ private:
 
     VulkanShader*   m_CurrentShader  = nullptr;
     VulkanTexture*  m_BoundTextures[kMaxBoundTextures] = {};
+
+    // Global 1x1 dummy texture bound to unused sampler slots so descriptors are
+    // always fully written (no "uninitialized binding" validation; sampling an
+    // unbound slot returns black instead of being undefined). Created in Init,
+    // destroyed in the dtor.
+    VkImage        m_DummyImage   = VK_NULL_HANDLE;
+    VmaAllocation  m_DummyAlloc   = VK_NULL_HANDLE;
+    VkImageView    m_DummyView    = VK_NULL_HANDLE;
+    VkSampler      m_DummySampler = VK_NULL_HANDLE;
+    void CreateDummyResources();
+    void DestroyDummyResources();
 
     static VulkanRendererAPI* s_Instance;
 };

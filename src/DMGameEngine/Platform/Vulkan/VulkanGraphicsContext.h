@@ -69,7 +69,7 @@ public:
 
     // Called when the window is resized so the swapchain is recreated
     // at the next BeginFrame().
-    void RequestResize(uint32_t width, uint32_t height)
+    void RequestResize(uint32_t width, uint32_t height) override
     {
         m_ResizeWidth  = width;
         m_ResizeHeight = height;

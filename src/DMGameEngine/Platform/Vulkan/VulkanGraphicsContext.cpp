@@ -5,6 +5,7 @@
 #include "DMGameEngine/Platform/Vulkan/VulkanGraphicsContext.h"
 #include "DMGameEngine/Platform/Vulkan/VulkanDevice.h"
 #include "DMGameEngine/Platform/Vulkan/VulkanDebug.h"
+#include "DMGameEngine/Platform/Vulkan/VulkanRendererAPI.h"
 
 #include "DMGameEngine/Core/Log.h"
 
@@ -256,20 +257,24 @@ void VulkanGraphicsContext::DestroyFrameResources()
 
 void VulkanGraphicsContext::RecreateSwapchain()
 {
+    // Always query the real framebuffer pixel size. RequestResize only sets
+    // the m_NeedsResize flag (the w/h it receives are window-space / logical
+    // units and may differ from framebuffer pixels under DPI scaling), so
+    // glfwGetFramebufferSize is the correct source for the swapchain extent.
     int width = 0, height = 0;
-    if (m_NeedsResize)
-    {
-        width  = static_cast<int>(m_ResizeWidth);
-        height = static_cast<int>(m_ResizeHeight);
-    }
-    else
-        glfwGetFramebufferSize(m_WindowHandle, &width, &height);
+    glfwGetFramebufferSize(m_WindowHandle, &width, &height);
 
     if (width == 0 || height == 0)
         return; // minimized window: defer until non-zero
 
     m_Swapchain.Recreate(static_cast<uint32_t>(width),
                          static_cast<uint32_t>(height));
+
+    // Invalidate cached pipelines: their PipelineKey bakes the swapchain
+    // color/depth format; if the new swapchain has a different format the
+    // cached pipelines would mismatch (VUID-vkCmdBeginRendering-None-06197).
+    if (auto* rapi = VulkanRendererAPI::Get())
+        rapi->OnSwapchainRecreate();
 }
 
 // ── Frame lifecycle ────────────────────────────────────────────────
