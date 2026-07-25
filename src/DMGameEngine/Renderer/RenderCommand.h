@@ -18,6 +18,8 @@
 
 namespace DMGameEngine {
 
+class FrameBuffer; // forward declaration (render-target pass)
+
 class DMGE_API RenderCommand
 {
 public:
@@ -31,6 +33,11 @@ public:
     static void SetClearColor(const glm::vec4& color);
     static void Clear();
     static void SetViewport(int x, int y, int width, int height);
+
+    // Begins/ends a render pass targeting target (nullptr = swapchain).
+    // Forwarded to the active backend. See RendererAPI.
+    static void BeginRenderPass(FrameBuffer* target);
+    static void EndRenderPass();
     static void DrawIndexed(const VertexArray& vertexArray);
     static void DrawIndexedInstanced(const VertexArray& vertexArray, uint32_t instanceCount, uint32_t baseInstance = 0);
 

@@ -9,6 +9,7 @@
 
 #include <glad/glad.h>
 #include "DMGameEngine/Platform/OpenGL/OpenGLDebug.h"
+#include "DMGameEngine/Platform/OpenGL/OpenGLFrameBuffer.h"
 
 namespace DMGameEngine {
 
@@ -71,6 +72,29 @@ GLenum DepthFuncToGL(DepthFunc func)
 } // anonymous namespace
 
 
+void OpenGLRendererAPI::BeginRenderPass(FrameBuffer* target)
+{
+    // nullptr / swapchain target: leave the default framebuffer bound.
+    if (!target || target->GetSpecification().SwapChainTarget)
+    {
+        m_ActiveTarget = nullptr;
+        return;
+    }
+    target->Bind();            // saves the previously-bound FBO for Unbind()
+    m_ActiveTarget = target;
+    // Mirror Vulkan loadOp = CLEAR: ClearFrame only cleared the default
+    // framebuffer, so clear the freshly-bound FBO to start the pass clean.
+    DMGE_GL_CALL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+}
+
+void OpenGLRendererAPI::EndRenderPass()
+{
+    if (m_ActiveTarget)
+    {
+        m_ActiveTarget->Unbind(); // restores the previously-bound FBO
+        m_ActiveTarget = nullptr;
+    }
+}
 void OpenGLRendererAPI::SetClearColor(const glm::vec4& color)
 {
     DMGE_GL_CALL(glClearColor(color.r, color.g, color.b, color.a));

@@ -8,6 +8,7 @@
 #include "DMGameEngine/Platform/Vulkan/VulkanShader.h"
 #include "DMGameEngine/Platform/Vulkan/VulkanVertexArray.h"
 #include "DMGameEngine/Platform/Vulkan/VulkanTexture.h"
+#include "DMGameEngine/Platform/Vulkan/VulkanFrameBuffer.h"
 
 #include "DMGameEngine/Renderer/VertexArray.h"
 
@@ -147,10 +148,207 @@ void VulkanRendererAPI::Clear()
         ctx.BeginFrame(m_ClearColor);
         ResetFrame(ctx.GetCurrentFrame());
     }
+    // The swapchain pass opened by BeginFrame is the active render target;
+    // record its formats as the baseline for PipelineKey (overridden by an
+    // offscreen BeginRenderPass).
+    m_ActiveColorFormat = ctx.GetSwapchain().GetImageFormat();
+    m_ActiveDepthFormat = ctx.GetSwapchain().GetDepthFormat();
     // If a frame is already started, the framebuffer was cleared at
     // BeginFrame (loadOp = CLEAR); nothing more to do.
 }
 
+void VulkanRendererAPI::BeginRenderPass(FrameBuffer* target)
+{
+    auto& ctx = VulkanGraphicsContext::Get();
+    if (!ctx.IsFrameStarted())
+        return; // no frame yet: nothing to bind (defensive)
+
+    VkCommandBuffer cmd = ctx.GetCurrentCommandBuffer();
+
+    // Default / swapchain target: the swapchain pass is already open from
+    // BeginFrame (Clear). Just record its formats as the active pipeline
+    // formats and leave the pass open.
+    const bool offscreen = (target != nullptr) && !target->GetSpecification().SwapChainTarget;
+    if (!offscreen)
+    {
+        auto& swap = ctx.GetSwapchain();
+        m_ActiveColorFormat = swap.GetImageFormat();
+        m_ActiveDepthFormat = swap.GetDepthFormat();
+        m_ActiveFrameBuffer = nullptr;
+        return;
+    }
+
+    auto* fbo = static_cast<VulkanFrameBuffer*>(target);
+    DMGE_CORE_ASSERT(fbo->GetColorAttachmentCount() > 0,
+                     "Vulkan: offscreen FrameBuffer has no color attachment (depth-only RT not supported yet).");
+    m_ActiveFrameBuffer = fbo;
+
+    // End the swapchain dynamic-rendering pass BeginFrame opened so we can
+    // begin one targeting the FBO (vkCmdBeginRendering cannot nest).
+    vkCmdEndRendering(cmd);
+
+    // Transition FBO color/depth images UNDEFINED -> attachment layout. UNDEFINED
+    // discards prior contents (we clear), so this is valid regardless of layout.
+    for (uint32_t i = 0; i < fbo->GetColorAttachmentCount(); ++i)
+    {
+        VulkanGraphicsContext::TransitionImageLayout(
+            cmd, fbo->GetColorImage(i), fbo->GetColorFormat(i),
+            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+    }
+    if (fbo->HasDepth())
+    {
+        VulkanGraphicsContext::TransitionImageLayout(
+            cmd, fbo->GetDepthImage(), fbo->GetDepthFormat(),
+            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_ASPECT_DEPTH_BIT,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
+            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+    }
+
+    VkClearValue colorClear{};
+    colorClear.color.float32[0] = m_ClearColor.r;
+    colorClear.color.float32[1] = m_ClearColor.g;
+    colorClear.color.float32[2] = m_ClearColor.b;
+    colorClear.color.float32[3] = m_ClearColor.a;
+
+    VkRenderingAttachmentInfo colorAttachment{};
+    colorAttachment.sType        = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    colorAttachment.imageView    = fbo->GetColorImageView(0);
+    colorAttachment.imageLayout  = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorAttachment.loadOp       = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp      = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.clearValue   = colorClear;
+
+    VkRenderingAttachmentInfo depthAttachment{};
+    if (fbo->HasDepth())
+    {
+        VkClearValue depthClear{};
+        depthClear.depthStencil.depth  = 1.0f;
+        depthClear.depthStencil.stencil = 0;
+        depthAttachment.sType        = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        depthAttachment.imageView    = fbo->GetDepthImageView();
+        depthAttachment.imageLayout  = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        depthAttachment.loadOp       = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.storeOp      = VK_ATTACHMENT_STORE_OP_STORE;
+        depthAttachment.clearValue  = depthClear;
+    }
+
+    VkRenderingInfo renderingInfo{};
+    renderingInfo.sType               = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    renderingInfo.renderArea.offset   = { 0, 0 };
+    renderingInfo.renderArea.extent   = { fbo->GetWidth(), fbo->GetHeight() };
+    renderingInfo.layerCount          = 1;
+    renderingInfo.colorAttachmentCount = 1; // single color attachment this iteration
+    renderingInfo.pColorAttachments   = &colorAttachment;
+    renderingInfo.pDepthAttachment    = fbo->HasDepth() ? &depthAttachment : nullptr;
+    vkCmdBeginRendering(cmd, &renderingInfo);
+
+    VkViewport viewport{};
+    viewport.x        = 0.0f;
+    viewport.y        = 0.0f;
+    viewport.width    = static_cast<float>(fbo->GetWidth());
+    viewport.height   = static_cast<float>(fbo->GetHeight());
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    VkRect2D scissor{};
+    scissor.offset = { 0, 0 };
+    scissor.extent = { fbo->GetWidth(), fbo->GetHeight() };
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    m_ActiveColorFormat = fbo->GetColorFormat(0);
+    m_ActiveDepthFormat = fbo->GetDepthFormat();
+    m_InOffscreenPass   = true;
+}
+
+void VulkanRendererAPI::EndRenderPass()
+{
+    if (!m_InOffscreenPass)
+        return; // swapchain pass: stays open until SwapBuffers (EndFrame).
+
+    auto& ctx = VulkanGraphicsContext::Get();
+    if (!ctx.IsFrameStarted())
+        return;
+    VkCommandBuffer cmd = ctx.GetCurrentCommandBuffer();
+    auto* fbo = m_ActiveFrameBuffer;
+
+    vkCmdEndRendering(cmd); // end the offscreen pass
+
+    // Transition the FBO color/depth images -> SHADER_READ_ONLY so the rendered
+    // result can be sampled by a later pass (post-process, shadow maps, ...).
+    if (fbo)
+    {
+        for (uint32_t i = 0; i < fbo->GetColorAttachmentCount(); ++i)
+        {
+            VulkanGraphicsContext::TransitionImageLayout(
+                cmd, fbo->GetColorImage(i), fbo->GetColorFormat(i),
+                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_IMAGE_ASPECT_COLOR_BIT,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+        }
+        if (fbo->HasDepth())
+        {
+            VulkanGraphicsContext::TransitionImageLayout(
+                cmd, fbo->GetDepthImage(), fbo->GetDepthFormat(),
+                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_IMAGE_ASPECT_DEPTH_BIT,
+                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+        }
+    }
+
+    // Restart the swapchain pass with loadOp = LOAD so earlier scene output is
+    // preserved and subsequent scene layers + ImGui keep drawing to the swapchain.
+    auto& swap = ctx.GetSwapchain();
+    VkRenderingAttachmentInfo colorAttachment{};
+    colorAttachment.sType        = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    colorAttachment.imageView    = swap.GetImageView(ctx.GetCurrentImageIndex());
+    colorAttachment.imageLayout  = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorAttachment.loadOp       = VK_ATTACHMENT_LOAD_OP_LOAD;
+    colorAttachment.storeOp      = VK_ATTACHMENT_STORE_OP_STORE;
+
+    VkRenderingAttachmentInfo depthAttachment{};
+    depthAttachment.sType        = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    depthAttachment.imageView    = swap.GetDepthView();
+    depthAttachment.imageLayout  = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    depthAttachment.loadOp       = VK_ATTACHMENT_LOAD_OP_LOAD;
+    depthAttachment.storeOp      = VK_ATTACHMENT_STORE_OP_STORE;
+
+    VkRenderingInfo renderingInfo{};
+    renderingInfo.sType               = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    renderingInfo.renderArea.offset   = { 0, 0 };
+    renderingInfo.renderArea.extent   = swap.GetExtent();
+    renderingInfo.layerCount          = 1;
+    renderingInfo.colorAttachmentCount = 1;
+    renderingInfo.pColorAttachments   = &colorAttachment;
+    renderingInfo.pDepthAttachment    = &depthAttachment;
+    vkCmdBeginRendering(cmd, &renderingInfo);
+
+    VkViewport viewport{};
+    viewport.x        = 0.0f;
+    viewport.y        = 0.0f;
+    viewport.width    = static_cast<float>(swap.GetExtent().width);
+    viewport.height   = static_cast<float>(swap.GetExtent().height);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    VkRect2D scissor{};
+    scissor.offset = { 0, 0 };
+    scissor.extent = swap.GetExtent();
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    m_ActiveColorFormat = swap.GetImageFormat();
+    m_ActiveDepthFormat = swap.GetDepthFormat();
+    m_InOffscreenPass   = false;
+    m_ActiveFrameBuffer = nullptr;
+}
 void VulkanRendererAPI::SetViewport(int x, int y, int width, int height)
 {
     m_ViewportX = x; m_ViewportY = y;
@@ -271,7 +469,9 @@ bool VulkanRendererAPI::PipelineKey::operator==(const PipelineKey& o) const
            blendEq           == o.blendEq &&
            depthTestEnabled == o.depthTestEnabled &&
            depthFunc         == o.depthFunc &&
-           cullMode          == o.cullMode;
+           cullMode          == o.cullMode &&
+           colorFormat      == o.colorFormat &&
+           depthFormat      == o.depthFormat;
 }
 
 size_t VulkanRendererAPI::PipelineKeyHash::operator()(const PipelineKey& k) const noexcept
@@ -285,6 +485,8 @@ size_t VulkanRendererAPI::PipelineKeyHash::operator()(const PipelineKey& k) cons
     h ^= std::hash<bool>{}(k.depthTestEnabled) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<uint8_t>{}(static_cast<uint8_t>(k.depthFunc)) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<uint8_t>{}(static_cast<uint8_t>(k.cullMode)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<uint32_t>{}(static_cast<uint32_t>(k.colorFormat)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<uint32_t>{}(static_cast<uint32_t>(k.depthFormat)) + 0x9e3779b9 + (h << 6) + (h >> 2);
     return h;
 }
 
@@ -301,15 +503,16 @@ VkPipeline VulkanRendererAPI::GetOrCreatePipeline(VulkanShader& shader,
     key.depthTestEnabled   = m_DepthTestEnabled;
     key.depthFunc          = m_DepthFunc;
     key.cullMode           = m_CullMode;
+    key.colorFormat        = m_ActiveColorFormat;
+    key.depthFormat        = m_ActiveDepthFormat;
 
     auto it = m_Pipelines.find(key);
     if (it != m_Pipelines.end())
         return it->second;
 
     auto& dev   = VulkanDevice::Get();
-    auto& swap  = VulkanGraphicsContext::Get().GetSwapchain();
-    VkFormat colorFormat = swap.GetImageFormat();
-    VkFormat depthFormat  = swap.GetDepthFormat();
+    VkFormat colorFormat = m_ActiveColorFormat;
+    VkFormat depthFormat  = m_ActiveDepthFormat;
 
     // ── Shader stages ────────────────────────────────────────────
     const auto& stages = shader.GetShaderStages();

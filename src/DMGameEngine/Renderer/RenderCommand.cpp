@@ -48,6 +48,18 @@ void RenderCommand::SetViewport(int x, int y, int width, int height)
     s_RendererAPI->SetViewport(x, y, width, height);
 }
 
+void RenderCommand::BeginRenderPass(FrameBuffer* target)
+{
+    DMGE_CORE_ASSERT(s_RendererAPI, "RenderCommand not initialized! Call RenderCommand::Init() first.");
+    s_RendererAPI->BeginRenderPass(target);
+}
+
+void RenderCommand::EndRenderPass()
+{
+    DMGE_CORE_ASSERT(s_RendererAPI, "RenderCommand not initialized! Call RenderCommand::Init() first.");
+    s_RendererAPI->EndRenderPass();
+}
+
 void RenderCommand::DrawIndexed(const VertexArray& vertexArray)
 {
     DMGE_CORE_ASSERT(s_RendererAPI, "RenderCommand not initialized! Call RenderCommand::Init() first.");

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * DMGameEngine - Vulkan Frame Buffer Implementation
  */
 
@@ -81,6 +81,17 @@ VkImageView VulkanFrameBuffer::GetDepthImageView() const
 
 // -- GPU resource (re)creation ------------------------------------
 
+VkImage VulkanFrameBuffer::GetColorImage(uint32_t index) const
+{
+    DMGE_CORE_ASSERT(index < m_ColorAttachments.size(),
+                     "FrameBuffer color attachment index out of range: {0}", index);
+    return m_ColorAttachments[index]->GetVkImage();
+}
+
+VkImage VulkanFrameBuffer::GetDepthImage() const
+{
+    return HasDepth() ? m_DepthAttachment->GetVkImage() : VK_NULL_HANDLE;
+}
 void VulkanFrameBuffer::Invalidate()
 {
     Destroy();

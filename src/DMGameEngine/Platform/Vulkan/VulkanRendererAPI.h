@@ -38,6 +38,7 @@ namespace DMGameEngine {
 class VulkanShader;
 class VulkanTexture;
 class VulkanVertexArray;
+class VulkanFrameBuffer;
 
 class DMGE_API VulkanRendererAPI : public RendererAPI
 {
@@ -58,6 +59,13 @@ public:
     void SetDepthTest(bool enable) override;
     void SetDepthFunc(DepthFunc func) override;
     void SetCullMode(CullMode mode) override;
+
+    // -- Render pass / target ----------------------------------------
+    // See RendererAPI. Begins/ends a dynamic-rendering pass targeting target
+    // (nullptr = swapchain, already open from BeginFrame). An offscreen
+    // FrameBuffer temporarily replaces the swapchain pass (multi-pass RTT).
+    void BeginRenderPass(FrameBuffer* target) override;
+    void EndRenderPass() override;
 
     // ── Backend interop hooks ───────────────────────────────────
     // VulkanShader/VulkanTexture call these during Bind() so DrawIndexed
@@ -84,6 +92,8 @@ private:
         bool     depthTestEnabled = true;
         DepthFunc depthFunc       = DepthFunc::Less;
         CullMode cullMode         = CullMode::None;
+        VkFormat colorFormat = VK_FORMAT_UNDEFINED;
+        VkFormat depthFormat = VK_FORMAT_UNDEFINED;
 
         bool operator==(const PipelineKey& other) const;
     };
@@ -120,6 +130,13 @@ private:
 
     // Cached viewport (recorded when a frame is active).
     int m_ViewportX = 0, m_ViewportY = 0, m_ViewportW = 0, m_ViewportH = 0;
+    // Active render-target formats (set when a pass begins). Fed into the
+    // PipelineKey so an offscreen HDR target (e.g. RGBA16F) gets its own
+    // cached pipeline instead of mismatching the swapchain format.
+    VkFormat m_ActiveColorFormat = VK_FORMAT_UNDEFINED;
+    VkFormat m_ActiveDepthFormat = VK_FORMAT_UNDEFINED;
+    bool            m_InOffscreenPass   = false;
+    VulkanFrameBuffer* m_ActiveFrameBuffer = nullptr;
 
     VkPipelineCache m_PipelineCache = VK_NULL_HANDLE;
     std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash> m_Pipelines;

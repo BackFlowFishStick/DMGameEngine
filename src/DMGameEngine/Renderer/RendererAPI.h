@@ -20,6 +20,7 @@
 namespace DMGameEngine {
 
 class VertexArray; // forward declaration
+class FrameBuffer; // forward declaration (render-target pass)
 
 // ── Blend Factor ─────────────────────────────────────────────
 enum class BlendFactor : uint8_t
@@ -105,6 +106,15 @@ public:
     virtual void SetClearColor(const glm::vec4& color) = 0;
     virtual void Clear() = 0;
     virtual void SetViewport(int x, int y, int width, int height) = 0;
+
+    // -- Render pass / target ----------------------------------------
+    // Begins a render pass targeting target (nullptr = default /
+    // swapchain). For Vulkan dynamic rendering this begins the pass;
+    // for OpenGL it binds the framebuffer. EndRenderPass ends/unbinds.
+    // A scene layer brackets its draws so it can render into an offscreen
+    // FrameBuffer (render-to-texture, multi-pass).
+    virtual void BeginRenderPass(FrameBuffer* target) = 0;
+    virtual void EndRenderPass() = 0;
 
     virtual void DrawIndexed(const VertexArray& vertexArray) = 0;
     // Instanced indexed draw: renders instanceCount copies, advancing

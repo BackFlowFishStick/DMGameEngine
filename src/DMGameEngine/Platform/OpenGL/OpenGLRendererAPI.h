@@ -26,6 +26,16 @@ public:
     void SetDepthTest(bool enable) override;
     void SetDepthFunc(DepthFunc func) override;
     void SetCullMode(CullMode mode) override;
+
+    // -- Render pass / target ----------------------------------------
+    // See RendererAPI. nullptr (or a swapchain target) is a no-op so the
+    // default framebuffer stays bound; an offscreen FrameBuffer is bound and
+    // later unbound (restoring the previous binding).
+    void BeginRenderPass(FrameBuffer* target) override;
+    void EndRenderPass() override;
+
+private:
+    FrameBuffer* m_ActiveTarget = nullptr;
 };
 
 } // namespace DMGameEngine

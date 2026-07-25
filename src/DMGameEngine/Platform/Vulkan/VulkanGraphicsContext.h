@@ -54,6 +54,15 @@ public:
     bool            IsFrameStarted()          const { return m_FrameStarted; }
 
     VulkanSwapchain& GetSwapchain() { return m_Swapchain; }
+
+    // Inserts an image layout transition barrier (sync1 API). Public so the
+    // renderer API can transition offscreen FrameBuffer attachments.
+    static void TransitionImageLayout(VkCommandBuffer cmd, VkImage image,
+                                      VkFormat format,
+                                      VkImageLayout oldLayout, VkImageLayout newLayout,
+                                      VkImageAspectFlags aspect,
+                                      VkPipelineStageFlags srcStage, VkAccessFlags srcAccess,
+                                      VkPipelineStageFlags dstStage, VkAccessFlags dstAccess);
     VkInstance       GetInstance() const { return m_Instance; }
 
     static VulkanGraphicsContext& Get() { return *s_Instance; }

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * DMGameEngine - Vulkan Frame Buffer
  *
  * Vulkan implementation of the FrameBuffer abstraction.
@@ -58,6 +58,8 @@ public:
     VkFormat    GetDepthFormat() const;
     VkImageView GetColorImageView(uint32_t index = 0) const;
     VkImageView GetDepthImageView() const;
+    VkImage    GetColorImage(uint32_t index = 0) const;
+    VkImage    GetDepthImage() const;
     bool        HasDepth() const { return m_DepthAttachment != nullptr; }
 
 private:
