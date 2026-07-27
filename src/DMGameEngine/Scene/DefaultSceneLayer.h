@@ -1,30 +1,21 @@
 /*
  * DMGameEngine - Default Scene Layer
  *
- * A Layer that owns a CameraController and brackets its own render
- * pass with Renderer::BeginScene(camera) / EndScene(). This is the
- * recommended base for gameplay / scene rendering: derive from it,
- * set a camera controller (SetCameraController), and override
- * OnSceneRender() to submit draw commands.
+ * A Layer that owns a CameraController and (optionally) a Scene, and
+ * brackets its own render pass with Renderer::BeginScene(camera) /
+ * EndScene(). Recommended base for gameplay / scene rendering.
  *
- * Why this exists:
- *   Application no longer holds a global "active camera" - that baked
- *   a single-camera model into the frame orchestrator and coupled
- *   Core (Application) to Renderer (CameraController). Each scene
- *   layer now owns its camera and brackets its own render pass, so
- *   multiple scene layers can render multiple cameras in one frame
- *   (split-screen, minimap RTT, etc.) by each calling
- *   BeginScene(cam) / EndScene().
+ * ECS integration (stage 1b): when a Scene is set via SetScene(), the
+ * layer ticks Scene::OnUpdate each frame and, by default, calls
+ * Scene::OnRender() inside the render bracket (running all registered
+ * Systems' OnRender - i.e. MeshRenderSystem submits draws). The bracket
+ * (BeginScene/EndScene) stays here so the camera - still CameraController -
+ * owns the view-projection. See ECS_DESIGN.md section 10, plan A.
+ * Override OnSceneRender() to add custom draws around the scene's output.
  *
  * The framebuffer is cleared once per frame by Application
- * (Renderer::ClearFrame); BeginScene / EndScene only cache the
- * view-projection and flush the per-pass render queue, so earlier
- * passes' output is preserved across multiple scene layers.
- *
- * Lifecycle hooks forwarded to the controller:
- *   - OnUpdate(Timestep): advances the camera from polled input.
- *   - OnEvent(Event):      routes discrete input (mouse / scroll /
- *                          resize) to the controller.
+ * (Renderer::ClearFrame); BeginScene/EndScene only cache the
+ * view-projection and flush the per-pass render queue.
  *
  * If no controller is set, the scene renders with an identity
  * view-projection (Renderer::BeginScene()).
@@ -40,6 +31,7 @@
 #include "DMGameEngine/Renderer/CameraController.h"
 #include "DMGameEngine/Renderer/Camera.h"
 #include "DMGameEngine/Renderer/Renderer.h"
+#include "DMGameEngine/Scene/Scene.h"
 
 namespace DMGameEngine {
 
@@ -50,19 +42,27 @@ public:
         : Layer(name, LayerType::Feature) {}
 
     // ── Camera controller ───────────────────────────────────────
-    //  The controller owns its camera and drives it from input. If null,
-    //  the scene renders with an identity view-projection.
+    // Owns its camera and drives it from input. If null, the scene
+    // renders with an identity view-projection.
     void SetCameraController(const DM::Ref<CameraController>& controller)
     {
         m_CameraController = controller;
     }
     CameraController* GetCameraController() const { return m_CameraController.get(); }
 
+    // ── Scene (ECS) ─────────────────────────────────────────────
+    // When set, the layer ticks the scene each frame and renders its
+    // Systems inside the camera's render bracket.
+    void SetScene(const DM::Ref<Scene>& scene) { m_Scene = scene; }
+    Scene* GetScene() const { return m_Scene.get(); }
+
     // ── Layer overrides ────────────────────────────────────────
     void OnUpdate(Timestep ts) override
     {
         if (m_CameraController)
             m_CameraController->OnUpdate(ts);
+        if (m_Scene)
+            m_Scene->OnUpdate(ts);   // tick Systems (TransformSystem computes world matrices)
     }
 
     void OnEvent(Event& event) override
@@ -73,9 +73,9 @@ public:
 
     void OnRender() override
     {
-        // Bracket this layer's render pass: cache the camera
-        // view-projection (identity if no controller), then flush the
-        // per-pass render queue after the scene submits its draws.
+        // Bracket this layer's render pass: cache the camera view-projection
+        // (identity if no controller), then flush the per-pass queue after
+        // the scene submits its draws.
         if (m_CameraController)
             Renderer::BeginScene(m_CameraController->GetCamera());
         else
@@ -87,11 +87,16 @@ public:
     }
 
 protected:
-    // Override to submit scene draw commands (Renderer::Submit) between
-    // the BeginScene / EndScene bracket established by OnRender.
-    virtual void OnSceneRender() {}
+    // Override to submit custom draws around the scene's system output.
+    // Default: render the Scene's Systems (MeshRenderSystem submits draws).
+    virtual void OnSceneRender()
+    {
+        if (m_Scene)
+            m_Scene->OnRender();
+    }
 
     DM::Ref<CameraController> m_CameraController;
+    DM::Ref<Scene>           m_Scene;
 };
 
 } // namespace DMGameEngine

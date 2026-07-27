@@ -81,6 +81,9 @@ set(DMGE_SOURCES
     "src/DMGameEngine/Renderer/VertexArray.cpp"
     "src/DMGameEngine/Renderer/VertexBuffer.cpp"
 
+    # Scene
+    "src/DMGameEngine/Scene/Scene.cpp"
+
     # ImGui
     "src/DMGameEngine/ImGui/ImGuiLayer.cpp"
 
@@ -155,6 +158,17 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Scene/OrthographicCameraController.h"
     "src/DMGameEngine/Scene/EditorCameraController.h"
     "src/DMGameEngine/Scene/DefaultSceneLayer.h"
+    "src/DMGameEngine/Scene/Entity.h"
+    "src/DMGameEngine/Scene/Components/Components.h"
+    "src/DMGameEngine/Scene/Components/IDComponent.h"
+    "src/DMGameEngine/Scene/Components/TagComponent.h"
+    "src/DMGameEngine/Scene/Components/TransformComponent.h"
+    "src/DMGameEngine/Scene/Components/MeshComponent.h"
+    "src/DMGameEngine/Scene/Components/CameraComponent.h"
+    "src/DMGameEngine/Scene/Scene.h"
+    "src/DMGameEngine/Scene/Systems/System.h"
+    "src/DMGameEngine/Scene/Systems/TransformSystem.h"
+    "src/DMGameEngine/Scene/Systems/MeshRenderSystem.h"
 
     # ImGui
     "src/DMGameEngine/ImGui/ImGuiLayer.h"
@@ -255,6 +269,22 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui.h")
         "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/backends/imgui_impl_opengl3.cpp"
     )
 endif()
+
+# ── entt (ECS, header-only via FetchContent) ───────────────────────
+# Entity-Component-System library used by the Scene module (ECS redesign,
+# see ECS_DESIGN.md). Header-only: FetchContent_MakeAvailable provides the
+# EnTT::EnTT interface target. PUBLIC because Scene/Entity.h exposes entt
+# types in the public API (see ECS_DESIGN.md §12 - strategy A, Hazel-style).
+include(FetchContent)
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+endif()
+FetchContent_Declare(
+    entt
+    URL https://github.com/skypjack/entt/archive/refs/tags/v3.13.2.zip
+)
+FetchContent_MakeAvailable(entt)
+target_link_libraries(DMGameEngine PUBLIC EnTT::EnTT)
 
 # ── Compiler Definitions ─────────────────────────────────────────
 # ── Vulkan backend (optional) ────────────────────────────────────
