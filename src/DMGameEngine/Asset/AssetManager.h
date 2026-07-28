@@ -57,7 +57,7 @@ public:
 
         auto resource = AssetLoader<T>::Load(meta.Path);
         if (resource)
-            m_Cache[uuid] = std::weak_ptr<void>(std::static_pointer_cast<void>(resource));
+            m_Cache[uuid] = DM::WeakRef<void>(std::static_pointer_cast<void>(resource));
         return resource;
     }
 
@@ -106,7 +106,7 @@ private:
 
     std::unordered_map<AssetUUID, AssetMetadata>       m_Registry;     // table 1
     std::unordered_map<std::string, AssetUUID>         m_PathToUUID;   // table 2
-    std::unordered_map<AssetUUID, std::weak_ptr<void>>  m_Cache;        // table 3
+    std::unordered_map<AssetUUID, DM::WeakRef<void>>  m_Cache;        // table 3
 };
 
 } // namespace DMGameEngine
