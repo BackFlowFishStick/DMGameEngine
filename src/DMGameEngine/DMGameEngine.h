@@ -62,6 +62,12 @@
 #include "DMGameEngine/Scene/Systems/TransformSystem.h"
 #include "DMGameEngine/Scene/Systems/MeshRenderSystem.h"
 
+// ── Asset ───────────────────────────────────────────────────────
+#include "DMGameEngine/Asset/AssetTypes.h"
+#include "DMGameEngine/Asset/AssetHandle.h"
+#include "DMGameEngine/Asset/AssetLoader.h"
+#include "DMGameEngine/Asset/AssetManager.h"
+
 // ── ImGui ────────────────────────────────────────────────────────
 #include "DMGameEngine/ImGui/ImGuiLayer.h"
 

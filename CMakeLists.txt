@@ -84,6 +84,9 @@ set(DMGE_SOURCES
     # Scene
     "src/DMGameEngine/Scene/Scene.cpp"
 
+    # Asset
+    "src/DMGameEngine/Asset/AssetManager.cpp"
+
     # ImGui
     "src/DMGameEngine/ImGui/ImGuiLayer.cpp"
 
@@ -169,6 +172,12 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Scene/Systems/System.h"
     "src/DMGameEngine/Scene/Systems/TransformSystem.h"
     "src/DMGameEngine/Scene/Systems/MeshRenderSystem.h"
+
+    # Asset
+    "src/DMGameEngine/Asset/AssetTypes.h"
+    "src/DMGameEngine/Asset/AssetHandle.h"
+    "src/DMGameEngine/Asset/AssetLoader.h"
+    "src/DMGameEngine/Asset/AssetManager.h"
 
     # ImGui
     "src/DMGameEngine/ImGui/ImGuiLayer.h"
@@ -285,6 +294,17 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(entt)
 target_link_libraries(DMGameEngine PUBLIC EnTT::EnTT)
+
+# ── nlohmann/json (JSON serialization, header-only via FetchContent) ────
+# Used by AssetManager registry persistence + stage 1c scene serialization.
+# PRIVATE: only AssetManager.cpp includes <nlohmann/json.hpp>; the public
+# API (AssetManager.h) does not expose json types.
+FetchContent_Declare(
+    nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+)
+FetchContent_MakeAvailable(nlohmann_json)
+target_link_libraries(DMGameEngine PRIVATE nlohmann_json::nlohmann_json)
 
 # ── Compiler Definitions ─────────────────────────────────────────
 # ── Vulkan backend (optional) ────────────────────────────────────
