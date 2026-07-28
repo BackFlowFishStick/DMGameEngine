@@ -25,6 +25,7 @@ FetchContent_MakeAvailable(googletest)
 add_executable(dmge_tests
     test_core.cpp
     test_ecs.cpp
+    test_asset.cpp
 )
 
 target_link_libraries(dmge_tests PRIVATE

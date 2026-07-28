@@ -5,6 +5,7 @@
 #include "DMGameEngine/Renderer/Shader.h"
 #include "DMGameEngine/Renderer/Renderer.h"
 #include "DMGameEngine/Platform/OpenGL/OpenGLShader.h"
+#include "DMGameEngine/Asset/AssetManager.h"  // ShaderLibrary::Load delegates to AssetManager
 #ifdef DMGE_VULKAN
 #include "DMGameEngine/Platform/Vulkan/VulkanShader.h"
 #endif
@@ -102,7 +103,10 @@ DM::Ref<Shader> ShaderLibrary::Load(const std::string& name, const std::string& 
     if (Exists(name))
         return Get(name);
 
-    auto shader = Shader::Create(filepath);
+    // Delegate to AssetManager for dedup + cache (UUID-based). ShaderLibrary
+    // keeps the name index (name -> Ref<Shader>); AssetManager owns the resource
+    // cache (UUID -> weak_ptr) so the same file loads once across the engine.
+    auto shader = AssetManager::Get().Load<Shader>(filepath);
     Add(name, shader);
     return shader;
 }

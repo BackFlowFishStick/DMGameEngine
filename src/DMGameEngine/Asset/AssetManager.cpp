@@ -48,6 +48,13 @@ const AssetMetadata* AssetManager::GetMetadata(AssetUUID uuid) const
     return nullptr;
 }
 
+void AssetManager::Clear()
+{
+    m_Registry.clear();
+    m_PathToUUID.clear();
+    m_Cache.clear();
+}
+
 void AssetManager::CleanUnused()
 {
     for (auto it = m_Cache.begin(); it != m_Cache.end(); )

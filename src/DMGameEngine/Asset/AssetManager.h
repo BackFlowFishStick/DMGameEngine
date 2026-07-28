@@ -97,6 +97,9 @@ public:
     // Drop cache entries whose weak_ptr expired.
     void CleanUnused();
 
+    // Clear all registry + cache (test helper / scene reset).
+    void Clear();
+
 private:
     AssetManager() = default;
     AssetManager(const AssetManager&) = delete;
