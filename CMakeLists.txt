@@ -83,6 +83,7 @@ set(DMGE_SOURCES
 
     # Scene
     "src/DMGameEngine/Scene/Scene.cpp"
+    "src/DMGameEngine/Scene/SceneSerializer.cpp"
 
     # Asset
     "src/DMGameEngine/Asset/AssetManager.cpp"
@@ -169,6 +170,7 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Scene/Components/MeshComponent.h"
     "src/DMGameEngine/Scene/Components/CameraComponent.h"
     "src/DMGameEngine/Scene/Scene.h"
+    "src/DMGameEngine/Scene/SceneSerializer.h"
     "src/DMGameEngine/Scene/Systems/System.h"
     "src/DMGameEngine/Scene/Systems/TransformSystem.h"
     "src/DMGameEngine/Scene/Systems/MeshRenderSystem.h"

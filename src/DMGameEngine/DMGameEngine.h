@@ -58,6 +58,7 @@
 #include "DMGameEngine/Scene/Entity.h"
 #include "DMGameEngine/Scene/Components/Components.h"
 #include "DMGameEngine/Scene/Scene.h"
+#include "DMGameEngine/Scene/SceneSerializer.h"
 #include "DMGameEngine/Scene/Systems/System.h"
 #include "DMGameEngine/Scene/Systems/TransformSystem.h"
 #include "DMGameEngine/Scene/Systems/MeshRenderSystem.h"
