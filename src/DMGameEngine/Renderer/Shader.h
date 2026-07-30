@@ -112,6 +112,9 @@ public:
     const std::vector<BufferElement>& GetElements() const { return m_Elements; }
     uint32_t GetStride() const { return m_Stride; }
 
+    // Add an element dynamically (AssetLoader<VertexArray> builds layout from .mesh JSON).
+    void AddElement(const BufferElement& e) { m_Elements.push_back(e); CalculateOffsetsAndStride(); }
+
     auto begin()       { return m_Elements.begin(); }
     auto end()         { return m_Elements.end();   }
     auto begin() const { return m_Elements.begin(); }

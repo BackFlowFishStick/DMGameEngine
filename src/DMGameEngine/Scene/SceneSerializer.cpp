@@ -10,6 +10,7 @@
 #include "DMGameEngine/Scene/Components/MeshComponent.h"
 #include "DMGameEngine/Scene/Components/CameraComponent.h"
 #include "DMGameEngine/Asset/AssetHandle.h"
+#include "DMGameEngine/Asset/AssetManager.h"  // Load<Material> in DeserializeMesh
 
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -86,7 +87,14 @@ void DeserializeMesh(Scene& scene, Entity e, const json& ej)
     auto& mc = scene.AddComponent<MeshComponent>(e);
     mc.MeshAsset     = AssetHandle(mj.value("meshAsset",  uint64_t(0)));
     mc.MaterialAsset = AssetHandle(mj.value("material",   uint64_t(0)));
-    // VAO/Material runtime load is stage 1c follow-up (AssetLoader<Mesh/Material>).
+    // Load Material via AssetManager (AssetLoader<Material> reads .mat JSON).
+    // Requires the Material UUID to be in the AssetManager registry (LoadRegistry)
+    // mapping to a .mat file path; returns null if not registered.
+    if (mc.MaterialAsset.IsValid())
+        mc.Material = AssetManager::Get().Load<Material>(mc.MaterialAsset);
+    // Load mesh (VertexArray) via AssetManager (AssetLoader<VertexArray> reads .mesh JSON).
+    if (mc.MeshAsset.IsValid())
+        mc.VAO = AssetManager::Get().Load<VertexArray>(mc.MeshAsset);
 }
 
 // ── CameraComponent ─────────────────────────────────────────────

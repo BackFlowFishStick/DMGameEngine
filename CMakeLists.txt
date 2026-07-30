@@ -87,6 +87,7 @@ set(DMGE_SOURCES
 
     # Asset
     "src/DMGameEngine/Asset/AssetManager.cpp"
+    "src/DMGameEngine/Asset/AssetLoader.cpp"
 
     # ImGui
     "src/DMGameEngine/ImGui/ImGuiLayer.cpp"
