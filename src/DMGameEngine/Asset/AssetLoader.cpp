@@ -140,4 +140,64 @@ DM::Ref<VertexArray> AssetLoader<VertexArray>::Load(const std::string& path)
     return va;
 }
 
+
+// ── Mesh ───────────────────────────────────────────────────────
+// .mesh JSON format (extends the VertexArray one with submeshes):
+//   { "layout": [{ "type": "Float3", "name": "a_Position" }, ...],
+//     "vertices": [float...],  "indices": [uint32...],
+//     "submeshes": [{ "indexOffset": 0, "indexCount": 6, "material": <uuid> }] }
+// If "submeshes" is absent, a single submesh covering all indices is assumed.
+
+DM::Ref<Mesh> AssetLoader<Mesh>::Load(const std::string& path)
+{
+    std::ifstream fin(path);
+    if (!fin.is_open()) return nullptr;
+    nlohmann::json j;
+    fin >> j;
+
+    auto mesh = DM::CreateRef<Mesh>();
+
+    // layout (dynamic via BufferLayout::AddElement)
+    if (j.contains("layout"))
+    {
+        for (const auto& el : j["layout"])
+        {
+            ShaderDataType type = ParseShaderDataType(el.value("type", ""));
+            std::string name = el.value("name", "");
+            mesh->Layout.AddElement(BufferElement(type, name));
+        }
+    }
+
+    // vertices
+    if (j.contains("vertices"))
+        mesh->Vertices = j["vertices"].get<std::vector<float>>();
+    if (mesh->Vertices.empty()) return nullptr;
+
+    // indices
+    if (j.contains("indices"))
+        mesh->Indices = j["indices"].get<std::vector<uint32_t>>();
+
+    // submeshes (material groups); default = one submesh over all indices
+    if (j.contains("submeshes"))
+    {
+        for (const auto& sm : j["submeshes"])
+        {
+            SubMesh s;
+            s.IndexOffset   = sm.value("indexOffset", 0u);
+            s.IndexCount    = sm.value("indexCount",  0u);
+            s.MaterialAsset = AssetHandle(sm.value("material", uint64_t(0)));
+            mesh->SubMeshes.push_back(s);
+        }
+    }
+    else if (!mesh->Indices.empty())
+    {
+        SubMesh s;
+        s.IndexOffset = 0;
+        s.IndexCount  = static_cast<uint32_t>(mesh->Indices.size());
+        mesh->SubMeshes.push_back(s);
+    }
+
+    return mesh;
+}
+
 } // namespace DMGameEngine

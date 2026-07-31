@@ -88,6 +88,7 @@ set(DMGE_SOURCES
     # Asset
     "src/DMGameEngine/Asset/AssetManager.cpp"
     "src/DMGameEngine/Asset/AssetLoader.cpp"
+    "src/DMGameEngine/Asset/Mesh.cpp"
 
     # ImGui
     "src/DMGameEngine/ImGui/ImGuiLayer.cpp"
@@ -180,6 +181,7 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Asset/AssetTypes.h"
     "src/DMGameEngine/Asset/AssetHandle.h"
     "src/DMGameEngine/Asset/AssetLoader.h"
+    "src/DMGameEngine/Asset/Mesh.h"
     "src/DMGameEngine/Asset/AssetManager.h"
 
     # ImGui

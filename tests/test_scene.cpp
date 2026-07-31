@@ -111,8 +111,7 @@ TEST_F(SceneSerializerTest, RoundTripPreservesMeshAssetUUID)
     Scene scene;
     Entity e = scene.CreateEntity();
     auto& mc = scene.AddComponent<MeshComponent>(e);
-    mc.MeshAsset     = AssetHandle(static_cast<uint64_t>(12345));
-    mc.MaterialAsset = AssetHandle(static_cast<uint64_t>(67890));
+    mc.MeshAsset = AssetHandle(static_cast<uint64_t>(12345));
     uint64_t uuid = scene.GetComponent<IDComponent>(e).UUID;
 
     SceneSerializer::Save(scene, kScenePath);
@@ -124,7 +123,6 @@ TEST_F(SceneSerializerTest, RoundTripPreservesMeshAssetUUID)
     ASSERT_TRUE(loaded.HasComponent<MeshComponent>(le));
     auto& lmc = loaded.GetComponent<MeshComponent>(le);
     EXPECT_EQ(lmc.MeshAsset.GetUUID(), 12345u);
-    EXPECT_EQ(lmc.MaterialAsset.GetUUID(), 67890u);
 }
 
 TEST_F(SceneSerializerTest, RoundTripPreservesCamera)

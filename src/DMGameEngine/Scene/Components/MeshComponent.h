@@ -1,30 +1,29 @@
 /*
- * DMGameEngine - MeshComponent (ECS stage 1b + 1c)
+ * DMGameEngine - MeshComponent (ECS stage 1b + 1c Mesh)
  *
- * Renderable mesh: VertexArray (vertex/index buffers) + Material (shader +
- * uniform bundle). Stage 1c adds AssetHandle fields (meshAsset/materialAsset
- * UUID) so the resource references serialize as stable UUIDs; the Ref<VAO> /
- * Ref<Material> are runtime-loaded from those UUIDs via AssetManager
- * (AssetLoader<Mesh/Material> is stage 1c follow-up, so they stay null after
- * deserialization until that lands).
- *
- * MeshRenderSystem calls Renderer::Submit(Material, VAO, WorldMatrix) - when
- * VAO/Material are null (resource not yet loaded) the draw is skipped.
+ * Holds a Mesh resource (UUID + runtime Ref<Mesh>). The Mesh owns its
+ * VertexArray (lazy upload) and SubMeshes (each with a material AssetHandle),
+ * so MeshComponent no longer carries VAO/Material/MaterialAsset directly -
+ * materials live per-SubMesh inside the Mesh. MeshRenderSystem walks SubMeshes
+ * to submit draws.
  */
 #pragma once
 #include "DMGameEngine/Core/Export.h"
-#include "DMGameEngine/Renderer/VertexArray.h"
-#include "DMGameEngine/Renderer/Material.h"
 #include "DMGameEngine/Asset/AssetHandle.h"
+#include "DMGameEngine/Asset/Mesh.h"
+#include "DMGameEngine/Renderer/Material.h"  // MaterialInstance for per-instance overrides
+#include <vector>
 
 namespace DMGameEngine {
 
 struct MeshComponent
 {
-    AssetHandle MeshAsset;        // UUID of mesh resource (serialized)
-    AssetHandle MaterialAsset;    // UUID of material resource (serialized)
-    DM::Ref<VertexArray> VAO;     // runtime, loaded from MeshAsset (AssetLoader<Mesh> follow-up)
-    DM::Ref<Material>    Material; // runtime, loaded from MaterialAsset (AssetLoader<Material> follow-up)
+    AssetHandle   MeshAsset;   // Mesh resource UUID (serialized)
+    DM::Ref<Mesh> Mesh;        // runtime, loaded from MeshAsset via AssetManager
+    // Per-instance material overrides (one per SubMesh; null = use the Mesh resource's
+    // default material from SubMesh.MaterialAsset). Set at runtime to tweak a specific
+    // entity's materials without affecting other entities sharing the same Mesh.
+    std::vector<DM::Ref<MaterialInstance>> MaterialOverrides;
 
     MeshComponent() = default;
     MeshComponent(const MeshComponent&) = default;

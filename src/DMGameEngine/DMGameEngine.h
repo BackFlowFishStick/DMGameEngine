@@ -67,6 +67,7 @@
 #include "DMGameEngine/Asset/AssetTypes.h"
 #include "DMGameEngine/Asset/AssetHandle.h"
 #include "DMGameEngine/Asset/AssetLoader.h"
+#include "DMGameEngine/Asset/Mesh.h"
 #include "DMGameEngine/Asset/AssetManager.h"
 
 // ── ImGui ────────────────────────────────────────────────────────

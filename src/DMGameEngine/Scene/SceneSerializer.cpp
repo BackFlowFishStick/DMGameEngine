@@ -76,7 +76,6 @@ void SerializeMesh(const Scene& scene, Entity e, json& j)
 
     json mj;
     mj["meshAsset"] = mc.MeshAsset.GetUUID();
-    mj["material"]  = mc.MaterialAsset.GetUUID();
     j["Mesh"] = mj;
 }
 
@@ -85,16 +84,12 @@ void DeserializeMesh(Scene& scene, Entity e, const json& ej)
     if (!ej.contains("Mesh")) return;
     const auto& mj = ej["Mesh"];
     auto& mc = scene.AddComponent<MeshComponent>(e);
-    mc.MeshAsset     = AssetHandle(mj.value("meshAsset",  uint64_t(0)));
-    mc.MaterialAsset = AssetHandle(mj.value("material",   uint64_t(0)));
-    // Load Material via AssetManager (AssetLoader<Material> reads .mat JSON).
-    // Requires the Material UUID to be in the AssetManager registry (LoadRegistry)
-    // mapping to a .mat file path; returns null if not registered.
-    if (mc.MaterialAsset.IsValid())
-        mc.Material = AssetManager::Get().Load<Material>(mc.MaterialAsset);
-    // Load mesh (VertexArray) via AssetManager (AssetLoader<VertexArray> reads .mesh JSON).
+    mc.MeshAsset = AssetHandle(mj.value("meshAsset", uint64_t(0)));
+    // Load Mesh via AssetManager (AssetLoader<Mesh> reads .mesh JSON; Mesh holds
+    // VertexArray + SubMeshes with per-submesh material UUIDs). Requires the Mesh
+    // UUID to be in the AssetManager registry (LoadRegistry).
     if (mc.MeshAsset.IsValid())
-        mc.VAO = AssetManager::Get().Load<VertexArray>(mc.MeshAsset);
+        mc.Mesh = AssetManager::Get().Load<Mesh>(mc.MeshAsset);
 }
 
 // ── CameraComponent ─────────────────────────────────────────────

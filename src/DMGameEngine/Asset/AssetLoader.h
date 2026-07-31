@@ -12,6 +12,7 @@
 #include "DMGameEngine/Renderer/Texture2D.h"
 #include "DMGameEngine/Renderer/Material.h"
 #include "DMGameEngine/Renderer/VertexArray.h"
+#include "DMGameEngine/Asset/Mesh.h"
 #include <string>
 
 namespace DMGameEngine {
@@ -49,6 +50,14 @@ template<>
 struct AssetLoader<VertexArray>
 {
     static DM::Ref<VertexArray> Load(const std::string& path);
+};
+
+// Mesh: reads .mesh JSON (layout + vertices + indices + submeshes) -> Mesh
+// (CPU data + lazy VertexArray). Implementation in AssetLoader.cpp.
+template<>
+struct AssetLoader<Mesh>
+{
+    static DM::Ref<Mesh> Load(const std::string& path);
 };
 
 } // namespace DMGameEngine
