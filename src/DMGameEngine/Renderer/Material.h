@@ -100,6 +100,10 @@ public:
 
     const DM::Ref<Material>& GetBaseMaterial() const { return m_BaseMaterial; }
 
+    // Read-only access to the override map (serialization: only overrides are
+    // persisted; the base Material is rebuilt on load from the Mesh resource).
+    const std::unordered_map<std::string, UniformValue>& GetOverrides() const { return m_Overrides; }
+
     // ── Uniform overrides (stored locally, never touch the base) ─
     void SetInt(std::string_view name, int value) override;
     void SetIntArray(std::string_view name, const int* values, uint32_t count) override;

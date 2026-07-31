@@ -10,7 +10,10 @@
 #include "DMGameEngine/Scene/Components/MeshComponent.h"
 #include "DMGameEngine/Scene/Components/CameraComponent.h"
 #include "DMGameEngine/Asset/AssetHandle.h"
-#include "DMGameEngine/Asset/AssetManager.h"  // Load<Material> in DeserializeMesh
+#include "DMGameEngine/Asset/AssetManager.h"  // Load<Material>/Load<Mesh> in DeserializeMesh
+#include "DMGameEngine/Asset/Mesh.h"          // SubMesh (base material source)
+#include "DMGameEngine/Renderer/Material.h"   // MaterialInstance (per-instance overrides)
+#include "DMGameEngine/Renderer/UniformSerializer.h"  // UniformValueToJson / ApplyUniform (shared)
 
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -76,6 +79,35 @@ void SerializeMesh(const Scene& scene, Entity e, json& j)
 
     json mj;
     mj["meshAsset"] = mc.MeshAsset.GetUUID();
+
+    // Per-instance material overrides (one MaterialInstance per SubMesh). Only
+    // the override map is persisted; the base Material is rebuilt on load from
+    // Mesh.SubMeshes[i].MaterialAsset (see DeserializeMesh), so it is never
+    // duplicated here. Null entries and empty override maps are skipped to keep
+    // the file compact and to avoid emitting a "materialOverrides" array at all
+    // when nothing is overridden.
+    if (!mc.MaterialOverrides.empty())
+    {
+        json overrides = json::array();
+        for (size_t i = 0; i < mc.MaterialOverrides.size(); ++i)
+        {
+            const auto& mi = mc.MaterialOverrides[i];
+            if (!mi) continue;
+            const auto& map = mi->GetOverrides();
+            if (map.empty()) continue;
+
+            json ov;
+            ov["submesh"] = i;
+            json uniforms;
+            for (const auto& [name, val] : map)
+                uniforms[name] = UniformValueToJson(val);
+            ov["uniforms"] = uniforms;
+            overrides.push_back(ov);
+        }
+        if (!overrides.empty())
+            mj["materialOverrides"] = overrides;
+    }
+
     j["Mesh"] = mj;
 }
 
@@ -90,6 +122,34 @@ void DeserializeMesh(Scene& scene, Entity e, const json& ej)
     // UUID to be in the AssetManager registry (LoadRegistry).
     if (mc.MeshAsset.IsValid())
         mc.Mesh = AssetManager::Get().Load<Mesh>(mc.MeshAsset);
+
+    // Rebuild per-instance MaterialOverrides from the serialized override maps.
+    // The base Material for SubMesh i comes from the loaded Mesh resource
+    // (SubMeshes[i].MaterialAsset -> AssetManager::Load<Material>); only the
+    // overridden uniforms are stored in the scene, so they are re-applied on top
+    // of the rebuilt base. If the Mesh is absent or a base Material can't be
+    // loaded (e.g. headless / missing registry entry), that SubMesh's override
+    // is skipped gracefully rather than leaving a dangling null entry.
+    if (mj.contains("materialOverrides") && mc.Mesh)
+    {
+        for (const auto& ov : mj["materialOverrides"])
+        {
+            size_t i = ov.value("submesh", 0);
+            if (i >= mc.Mesh->SubMeshes.size()) continue;
+
+            auto base = AssetManager::Get().Load<Material>(mc.Mesh->SubMeshes[i].MaterialAsset);
+            if (!base) continue;
+
+            auto mi = DM::CreateRef<MaterialInstance>(base);
+            if (ov.contains("uniforms"))
+                for (auto& [name, val] : ov["uniforms"].items())
+                    ApplyUniform(mi.get(), name, val);
+
+            if (mc.MaterialOverrides.size() <= i)
+                mc.MaterialOverrides.resize(i + 1);
+            mc.MaterialOverrides[i] = mi;
+        }
+    }
 }
 
 // ── CameraComponent ─────────────────────────────────────────────

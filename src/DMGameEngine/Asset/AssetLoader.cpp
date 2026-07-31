@@ -12,6 +12,7 @@
 #include "DMGameEngine/Asset/AssetLoader.h"
 #include "DMGameEngine/Asset/AssetManager.h"
 #include "DMGameEngine/Renderer/Material.h"
+#include "DMGameEngine/Renderer/UniformSerializer.h"  // ApplyUniform (shared .mat + scene override dispatch)
 #include "DMGameEngine/Renderer/Shader.h"
 
 #include <nlohmann/json.hpp>
@@ -37,36 +38,14 @@ DM::Ref<Material> AssetLoader<Material>::Load(const std::string& path)
     // 2. construct material (no Create() factory; direct ctor with Shader)
     auto material = DM::CreateRef<Material>(shader);
 
-    // 3. uniforms (type-tagged JSON -> Material::Set*)
+    // 3. uniforms (type-tagged JSON -> Material::Set*). The type dispatch lives
+    //    in the shared UniformSerializer.h (ApplyUniform) so .mat loading and
+    //    scene MaterialOverride deserialization use one code path and one
+    //    {type, value} shape.
     if (j.contains("uniforms"))
     {
         for (auto& [name, val] : j["uniforms"].items())
-        {
-            const std::string type = val.value("type", "");
-            const auto& v = val["value"];
-            if (type == "Int")
-                material->SetInt(name, v.get<int>());
-            else if (type == "Float")
-                material->SetFloat(name, v.get<float>());
-            else if (type == "Float2")
-                material->SetFloat2(name, glm::vec2(v[0], v[1]));
-            else if (type == "Float3")
-                material->SetFloat3(name, glm::vec3(v[0], v[1], v[2]));
-            else if (type == "Float4")
-                material->SetFloat4(name, glm::vec4(v[0], v[1], v[2], v[3]));
-            else if (type == "Mat4")
-            {
-                glm::mat4 m(1.0f);
-                for (int i = 0; i < 16; ++i)
-                    m[i / 4][i % 4] = v[i].get<float>();
-                material->SetMat4(name, m);
-            }
-            else if (type == "IntArray")
-            {
-                std::vector<int> arr = v.get<std::vector<int>>();
-                material->SetIntArray(name, arr.data(), static_cast<uint32_t>(arr.size()));
-            }
-        }
+            ApplyUniform(material.get(), name, val);
     }
     return material;
 }

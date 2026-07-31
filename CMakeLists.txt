@@ -152,6 +152,7 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Renderer/RendererAPI.h"
     "src/DMGameEngine/Renderer/Shader.h"
     "src/DMGameEngine/Renderer/Material.h"
+    "src/DMGameEngine/Renderer/UniformSerializer.h"  # internal: uniform<->JSON (shared .mat + scene override)
     "src/DMGameEngine/Renderer/Texture.h"
     "src/DMGameEngine/Renderer/Texture2D.h"
     "src/DMGameEngine/Renderer/TextureCube.h"
