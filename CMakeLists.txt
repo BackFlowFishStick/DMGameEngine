@@ -89,6 +89,7 @@ set(DMGE_SOURCES
     "src/DMGameEngine/Asset/AssetManager.cpp"
     "src/DMGameEngine/Asset/AssetLoader.cpp"
     "src/DMGameEngine/Asset/Mesh.cpp"
+    "src/DMGameEngine/Asset/MeshImporterAssimp.cpp"
 
     # ImGui
     "src/DMGameEngine/ImGui/ImGuiLayer.cpp"
@@ -311,6 +312,18 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 target_link_libraries(DMGameEngine PRIVATE nlohmann_json::nlohmann_json)
+
+# ── assimp (mesh import: FBX/OBJ/GLTF/..., source in dependencies/assimp) ──
+# Compiled from source via add_subdirectory. Disable tests/tools/samples/export
+# to cut build time; static link to avoid a separate assimp DLL. assimp ships
+# its own zlib (contrib/) so no external zlib is required.
+set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+set(ASSIMP_NO_EXPORT ON CACHE BOOL "" FORCE)   # import-only
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)  # static assimp
+add_subdirectory(dependencies/assimp)
+target_link_libraries(DMGameEngine PRIVATE assimp)
 
 # ── Compiler Definitions ─────────────────────────────────────────
 # ── Vulkan backend (optional) ────────────────────────────────────

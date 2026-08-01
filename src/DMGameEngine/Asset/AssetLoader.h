@@ -55,7 +55,7 @@ struct AssetLoader<VertexArray>
 // Mesh: reads .mesh JSON (layout + vertices + indices + submeshes) -> Mesh
 // (CPU data + lazy VertexArray). Implementation in AssetLoader.cpp.
 template<>
-struct AssetLoader<Mesh>
+struct DMGE_API AssetLoader<Mesh>
 {
     static DM::Ref<Mesh> Load(const std::string& path);
 };

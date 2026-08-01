@@ -19,6 +19,8 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include <algorithm>
+#include <cctype>
 
 namespace DMGameEngine {
 
@@ -120,14 +122,34 @@ DM::Ref<VertexArray> AssetLoader<VertexArray>::Load(const std::string& path)
 }
 
 
-// ── Mesh ───────────────────────────────────────────────────────
+// ── Mesh ──────────────────────────────────────────────────────────────
+// Dispatches by file extension:
+//   .mesh                -> .mesh JSON (layout + vertices + indices + submeshes)
+//   .fbx/.obj/.gltf/.glb -> assimp import (MeshImporterAssimp.cpp)
+//
 // .mesh JSON format (extends the VertexArray one with submeshes):
 //   { "layout": [{ "type": "Float3", "name": "a_Position" }, ...],
 //     "vertices": [float...],  "indices": [uint32...],
 //     "submeshes": [{ "indexOffset": 0, "indexCount": 6, "material": <uuid> }] }
 // If "submeshes" is absent, a single submesh covering all indices is assumed.
 
-DM::Ref<Mesh> AssetLoader<Mesh>::Load(const std::string& path)
+// assimp import entry point (defined in MeshImporterAssimp.cpp; keeps assimp
+// includes out of this translation unit).
+DM::Ref<Mesh> LoadMeshViaAssimp(const std::string& path);
+
+namespace {
+
+std::string GetLowerExtension(const std::string& path)
+{
+    const auto dot = path.find_last_of('.');
+    if (dot == std::string::npos) return {};
+    std::string ext = path.substr(dot);   // includes the leading '.'
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return ext;
+}
+
+DM::Ref<Mesh> LoadMeshFromMeshJSON(const std::string& path)
 {
     std::ifstream fin(path);
     if (!fin.is_open()) return nullptr;
@@ -177,6 +199,17 @@ DM::Ref<Mesh> AssetLoader<Mesh>::Load(const std::string& path)
     }
 
     return mesh;
+}
+
+} // namespace
+
+DM::Ref<Mesh> AssetLoader<Mesh>::Load(const std::string& path)
+{
+    const std::string ext = GetLowerExtension(path);
+    if (ext == ".mesh") return LoadMeshFromMeshJSON(path);
+    if (ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb")
+        return LoadMeshViaAssimp(path);
+    return nullptr;
 }
 
 } // namespace DMGameEngine

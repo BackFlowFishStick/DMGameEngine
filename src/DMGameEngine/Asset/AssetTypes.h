@@ -45,8 +45,12 @@ inline AssetType AssetTypeOf() { return AssetType::None; }
 // Forward declarations so specializations compile without pulling the full headers.
 class Shader;
 class Texture2D;
+class Material;
+class Mesh;
 
 template<> inline AssetType AssetTypeOf<Shader>()    { return AssetType::Shader; }
 template<> inline AssetType AssetTypeOf<Texture2D>()  { return AssetType::Texture2D; }
+template<> inline AssetType AssetTypeOf<Material>()   { return AssetType::Material; }
+template<> inline AssetType AssetTypeOf<Mesh>()       { return AssetType::Mesh; }
 
 } // namespace DMGameEngine
