@@ -15,6 +15,7 @@ option(DMGE_BUILD_SHARED "Build DMGameEngine as a shared library (DLL)" ON)
 option(DMGE_BUILD_EXAMPLES "Build example projects" OFF)
 option(DMGE_BUILD_TESTS "Build unit tests (GoogleTest via FetchContent; needs network)" ON)
 option(DMGE_PROFILE "Enable engine CPU profiling instrumentation" ON)
+option(DMGE_USE_PCH "Enable precompiled header for faster builds (MSVC/GCC/Clang)" ON)
 
 # ── ImGui multi-viewport: auto-detect the docking branch ─────────
 # The vendored master-branch ImGui does not define
@@ -147,6 +148,7 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Renderer/GraphicsContext.h"
     "src/DMGameEngine/Renderer/IndexBuffer.h"
     "src/DMGameEngine/Renderer/FrameBuffer.h"
+    "src/DMGameEngine/Renderer/Light.h"
     "src/DMGameEngine/Renderer/Renderer.h"
     "src/DMGameEngine/Renderer/RenderCommand.h"
     "src/DMGameEngine/Renderer/RenderQueue.h"
@@ -172,12 +174,14 @@ set(DMGE_HEADERS
     "src/DMGameEngine/Scene/Components/TagComponent.h"
     "src/DMGameEngine/Scene/Components/TransformComponent.h"
     "src/DMGameEngine/Scene/Components/MeshComponent.h"
+    "src/DMGameEngine/Scene/Components/LightComponent.h"
     "src/DMGameEngine/Scene/Components/CameraComponent.h"
     "src/DMGameEngine/Scene/Scene.h"
     "src/DMGameEngine/Scene/SceneSerializer.h"
     "src/DMGameEngine/Scene/Systems/System.h"
     "src/DMGameEngine/Scene/Systems/TransformSystem.h"
     "src/DMGameEngine/Scene/Systems/MeshRenderSystem.h"
+    "src/DMGameEngine/Scene/Systems/LightSystem.h"
 
     # Asset
     "src/DMGameEngine/Asset/AssetTypes.h"
@@ -364,6 +368,21 @@ target_compile_definitions(DMGameEngine
 
 if(MSVC)
     target_compile_options(DMGameEngine PRIVATE /W4 /utf-8)
+endif()
+
+# -- Precompiled Header --------------------------------------------
+# Caches the parse of stable, heavy, universally-included headers
+# (std lib + glm + spdlog) so every C++ TU reuses one snapshot instead
+# of re-parsing ~2 MB of templates per file. PRIVATE: build-time only,
+# never exported to consumers. The CXX generator-expression guard keeps
+# the C++ PCH off the C source (glad.c compiles as C).
+# Scope: only std lib + 3rd-party libs here - NO engine headers, NO
+# glad/GLFW/imgui/stb/Vulkan (platform/backend-specific). See
+# PRECOMPILED_HEADER.md for the full rationale.
+if(DMGE_USE_PCH)
+    target_precompile_headers(DMGameEngine PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/DMGameEngine/dmge_pch.h>
+    )
 endif()
 
 set_target_properties(DMGameEngine PROPERTIES

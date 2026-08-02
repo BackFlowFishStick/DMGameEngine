@@ -36,6 +36,14 @@ target_link_libraries(dmge_tests PRIVATE
     gtest_main
 )
 
+# NOTE: tests intentionally do NOT reuse the engine PCH (REUSE_FROM). When the
+# Vulkan backend is enabled, the engine PCH is built against the Vulkan SDK's
+# bundled glm (which shadows the vendored glm); the test target does not inherit
+# the PRIVATE Vulkan include dirs, so it resolves <glm/glm.hpp> to the vendored
+# copy and clashes with the PCH glm (C2011/C2995 redefinition). The 5 test TUs
+# are small, so compiling them without a PCH sidesteps the dual-glm conflict.
+# The engine PCH itself is unaffected. See PRECOMPILED_HEADER.md.
+
 # Tests are pure logic; never instantiate a window / graphics context.
 target_compile_definitions(dmge_tests PRIVATE DMGE_TEST_HEADLESS)
 

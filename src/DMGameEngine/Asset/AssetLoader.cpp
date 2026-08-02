@@ -14,6 +14,7 @@
 #include "DMGameEngine/Renderer/Material.h"
 #include "DMGameEngine/Renderer/UniformSerializer.h"  // ApplyUniform (shared .mat + scene override dispatch)
 #include "DMGameEngine/Renderer/Shader.h"
+#include "DMGameEngine/Renderer/Texture2D.h"
 
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -48,6 +49,23 @@ DM::Ref<Material> AssetLoader<Material>::Load(const std::string& path)
     {
         for (auto& [name, val] : j["uniforms"].items())
             ApplyUniform(material.get(), name, val);
+    }
+
+    // 4. textures (sampler name -> texture path + slot). Each entry loads
+    //    the texture via AssetManager (dedup) and binds it to the material.
+    if (j.contains("textures"))
+    {
+        for (auto& [name, val] : j["textures"].items())
+        {
+            std::string texPath = val.value("path", "");
+            uint32_t slot = val.value("slot", 0);
+            if (!texPath.empty())
+            {
+                auto texture = AssetManager::Get().Load<Texture2D>(texPath);
+                if (texture)
+                    material->SetTexture(name, texture, slot);
+            }
+        }
     }
     return material;
 }

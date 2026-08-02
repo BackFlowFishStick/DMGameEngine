@@ -11,3 +11,4 @@
 #include "DMGameEngine/Scene/Components/TransformComponent.h"
 #include "DMGameEngine/Scene/Components/MeshComponent.h"
 #include "DMGameEngine/Scene/Components/CameraComponent.h"
+#include "DMGameEngine/Scene/Components/LightComponent.h"

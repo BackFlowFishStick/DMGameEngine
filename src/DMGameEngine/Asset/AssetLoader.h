@@ -33,21 +33,20 @@ struct AssetLoader<Texture2D>
     static DM::Ref<Texture2D> Load(const std::string& path) { return Texture2D::Create(path); }
 };
 
-// Material: reads .mat JSON (shader path + uniforms). Implementation in
+// Material: reads .mat JSON (shader path + uniforms + textures). Impl in
 // AssetLoader.cpp (uses nlohmann/json). Material has no Create() factory -
-// constructed directly with a Shader; no texture binding (textures bound
-// elsewhere), so .mat has no "textures" field.
+// constructed directly with a Shader. .mat supports a "textures" field
+// (lighting stage A: sampler name -> texture path + slot).
 template<>
-struct AssetLoader<Material>
+struct DMGE_API AssetLoader<Material>
 {
     static DM::Ref<Material> Load(const std::string& path);
 };
-
 // VertexArray (mesh resource): reads .mesh JSON (layout + vertices + indices)
 // -> VertexArray (VB + IB). Implementation in AssetLoader.cpp. Standard
 // .obj/.gltf need a parser library (assimp/tinygltf) - follow-up.
 template<>
-struct AssetLoader<VertexArray>
+struct DMGE_API AssetLoader<VertexArray>
 {
     static DM::Ref<VertexArray> Load(const std::string& path);
 };

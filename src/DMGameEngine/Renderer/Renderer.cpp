@@ -23,6 +23,7 @@ namespace DMGameEngine {
 Renderer::API Renderer::s_API = Renderer::API::OpenGL;
 Renderer::SceneData Renderer::s_SceneData;
 RenderQueue Renderer::s_Queue;
+SceneLightData Renderer::s_LightData;
 
 void Renderer::Init(const RendererAPIInitConfig& config)
 {
@@ -52,6 +53,8 @@ void Renderer::ClearFrame()
 void Renderer::BeginScene(const DM::Ref<FrameBuffer>& target)
 {
     s_SceneData.ViewProjectionMatrix = glm::mat4(1.0f);
+    s_SceneData.CameraPosition = glm::vec3(0.0f);
+    s_LightData.Clear();
     s_Queue.Clear();
     RenderCommand::BeginRenderPass(target.get());
 }
@@ -66,6 +69,7 @@ void Renderer::BeginScene(const Camera& camera)
 void Renderer::BeginScene(const Camera& camera, const DM::Ref<FrameBuffer>& target)
 {
     s_SceneData.ViewProjectionMatrix = camera.GetViewProjection();
+    s_SceneData.CameraPosition = glm::vec3(glm::inverse(camera.GetView())[3]);
     if (s_API == API::Vulkan)
     {
         // Vulkan clip space Y points down (OpenGL Y points up), so an
@@ -76,6 +80,7 @@ void Renderer::BeginScene(const Camera& camera, const DM::Ref<FrameBuffer>& targ
         flipY[1][1] = -1.0f;
         s_SceneData.ViewProjectionMatrix = flipY * s_SceneData.ViewProjectionMatrix;
     }
+    s_LightData.Clear();
     s_Queue.Clear();
     RenderCommand::BeginRenderPass(target.get());
 }
@@ -106,7 +111,12 @@ void Renderer::Submit(const DM::Ref<Material>& material,
 
 void Renderer::Flush()
 {
-    s_Queue.Flush(s_SceneData.ViewProjectionMatrix);
+    s_Queue.Flush(s_SceneData.ViewProjectionMatrix, s_SceneData.CameraPosition, s_LightData);
+}
+
+void Renderer::SubmitLightData(const SceneLightData& data)
+{
+    s_LightData = data;
 }
 
 void Renderer::OnWindowResize(int width, int height)

@@ -9,6 +9,7 @@
 #include "DMGameEngine/Scene/Components/TransformComponent.h"
 #include "DMGameEngine/Scene/Components/MeshComponent.h"
 #include "DMGameEngine/Scene/Components/CameraComponent.h"
+#include "DMGameEngine/Scene/Components/LightComponent.h"
 #include "DMGameEngine/Asset/AssetHandle.h"
 #include "DMGameEngine/Asset/AssetManager.h"  // Load<Material>/Load<Mesh> in DeserializeMesh
 #include "DMGameEngine/Asset/Mesh.h"          // SubMesh (base material source)
@@ -189,11 +190,50 @@ void DeserializeCamera(Scene& scene, Entity e, const json& ej)
     cc.Camera.SetOrthographicFarClip(cj["orthographic"][2]);
 }
 
+// ── LightComponent ─────────────────────────────────────────────
+void SerializeLight(const Scene& scene, Entity e, json& j)
+{
+    auto& s = const_cast<Scene&>(scene);
+    if (!s.HasComponent<LightComponent>(e)) return;
+    auto& lc = s.GetComponent<LightComponent>(e);
+
+    json lj;
+    lj["type"]             = static_cast<int>(lc.LightType);
+    lj["color"]            = { lc.Color.x, lc.Color.y, lc.Color.z };
+    lj["intensity"]        = lc.Intensity;
+    lj["constant"]         = lc.Constant;
+    lj["linear"]           = lc.Linear;
+    lj["quadratic"]        = lc.Quadratic;
+    lj["innerConeAngle"]   = lc.InnerConeAngle;
+    lj["outerConeAngle"]   = lc.OuterConeAngle;
+    lj["ambientIntensity"] = lc.AmbientIntensity;
+
+    j["Light"] = lj;
+}
+
+void DeserializeLight(Scene& scene, Entity e, const json& ej)
+{
+    if (!ej.contains("Light")) return;
+    const auto& lj = ej["Light"];
+    auto& lc = scene.AddComponent<LightComponent>(e);
+    lc.LightType        = static_cast<LightComponent::Type>(lj.value("type", 0));
+    if (lj.contains("color"))
+        lc.Color        = { lj["color"][0], lj["color"][1], lj["color"][2] };
+    lc.Intensity        = lj.value("intensity", 1.0f);
+    lc.Constant         = lj.value("constant", 1.0f);
+    lc.Linear           = lj.value("linear", 0.09f);
+    lc.Quadratic        = lj.value("quadratic", 0.032f);
+    lc.InnerConeAngle   = lj.value("innerConeAngle", 12.5f);
+    lc.OuterConeAngle   = lj.value("outerConeAngle", 17.5f);
+    lc.AmbientIntensity = lj.value("ambientIntensity", 0.15f);
+}
+
 // Static registration of built-in components (runs at program start).
 bool s_Registered = []() {
     Registry()["Transform"] = { SerializeTransform, DeserializeTransform };
     Registry()["Mesh"]      = { SerializeMesh,      DeserializeMesh };
     Registry()["Camera"]    = { SerializeCamera,    DeserializeCamera };
+    Registry()["Light"]     = { SerializeLight,     DeserializeLight };
     return true;
 }();
 

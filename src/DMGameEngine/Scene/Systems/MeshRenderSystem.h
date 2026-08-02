@@ -20,7 +20,7 @@ namespace DMGameEngine {
 class MeshRenderSystem : public System
 {
 public:
-    using System::System;
+    explicit MeshRenderSystem(Scene& scene) : System(scene) {}
 
     void OnRender() override
     {

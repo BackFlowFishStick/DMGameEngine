@@ -49,6 +49,7 @@
 #include "DMGameEngine/Renderer/VertexBuffer.h"
 #include "DMGameEngine/Renderer/IndexBuffer.h"
 #include "DMGameEngine/Renderer/FrameBuffer.h"
+#include "DMGameEngine/Renderer/Light.h"
 
 // ── Scene ────────────────────────────────────────────────────────
 #include "DMGameEngine/Scene/SceneCamera.h"
@@ -62,6 +63,7 @@
 #include "DMGameEngine/Scene/Systems/System.h"
 #include "DMGameEngine/Scene/Systems/TransformSystem.h"
 #include "DMGameEngine/Scene/Systems/MeshRenderSystem.h"
+#include "DMGameEngine/Scene/Systems/LightSystem.h"
 
 // ── Asset ───────────────────────────────────────────────────────
 #include "DMGameEngine/Asset/AssetTypes.h"

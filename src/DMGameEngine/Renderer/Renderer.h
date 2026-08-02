@@ -22,6 +22,7 @@
 #include "DMGameEngine/Core/Export.h"
 #include "DMGameEngine/Renderer/RendererAPI.h"
 #include "DMGameEngine/Renderer/RenderQueue.h"
+#include "DMGameEngine/Renderer/Light.h"
 #include "glm/glm.hpp"
 #include <memory>
 
@@ -92,6 +93,10 @@ public:
     // to submit the queue so far (e.g. between render passes).
     static void Flush();
 
+    // Uploads aggregated light data for the current frame. Called by
+    // LightSystem::OnRender before EndScene flushes the render queue.
+    static void SubmitLightData(const SceneLightData& data);
+
     static void OnWindowResize(int width, int height);
 
     static API  GetAPI()      { return s_API; }
@@ -101,10 +106,12 @@ private:
     struct SceneData
     {
         glm::mat4 ViewProjectionMatrix = glm::mat4(1.0f);
+        glm::vec3 CameraPosition       = glm::vec3(0.0f);
     };
 
     static API s_API;
-    static SceneData s_SceneData;
+    static SceneData    s_SceneData;
+    static SceneLightData s_LightData;
     static RenderQueue s_Queue;
 };
 

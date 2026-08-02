@@ -11,15 +11,22 @@
  * uniform values on top at Bind() time, so many instances sharing one
  * Material can each tweak parameters without affecting one another.
  *
+ * Texture support (lighting stage A): Material also holds named texture
+ * slots (sampler name -> Ref<Texture> + unit). Bind() binds each texture
+ * to its unit and sets the sampler uniform so the shader can sample it.
+ * MaterialInstance overrides texture slots the same way it overrides
+ * scalar uniforms.
+ *
  * Material / MaterialInstance are backend-agnostic: they operate purely
- * through the Shader abstraction, so no platform-specific factory or
- * subclass is needed.
+ * through the Shader + Texture abstractions, so no platform-specific
+ * factory or subclass is needed.
  */
 
 #pragma once
 
 #include "DMGameEngine/Core/Export.h"
 #include "DMGameEngine/Renderer/Shader.h"
+#include "DMGameEngine/Renderer/Texture.h"
 #include "glm/glm.hpp"
 
 #include <cstdint>
@@ -33,12 +40,6 @@
 namespace DMGameEngine {
 
 // ── Uniform Value Storage ──────────────────────────────────────────
-//
-// A type-erased container for a single uniform value. Each alternative
-// corresponds to one of the Shader uniform setters. Integer arrays are
-// stored as std::vector<int> so the owner keeps a stable copy that can
-// be re-uploaded on every Bind() without the caller keeping it alive.
-
 using UniformValue = std::variant<
     int,
     float,
@@ -49,6 +50,16 @@ using UniformValue = std::variant<
     std::vector<int>
 >;
 
+// ── Texture Slot ────────────────────────────────────────────────────
+// Maps a shader sampler uniform name to a Texture and the texture unit
+// (slot) it should be bound to. Bind() calls texture->Bind(slot) then
+// shader->SetInt(name, slot) so the shader samples the right unit.
+struct DMGE_API TextureSlot
+{
+    DM::Ref<Texture> Texture;
+    uint32_t         Slot = 0;
+};
+
 // ── Material ───────────────────────────────────────────────────────
 
 class DMGE_API Material
@@ -57,8 +68,8 @@ public:
     explicit Material(DM::Ref<Shader> shader);
     virtual ~Material() = default;
 
-    // Binds the shader and uploads every stored uniform value.
-    // Virtual so MaterialInstance can layer overrides on top of the base.
+    // Binds the shader, uploads every stored uniform value, then binds
+    // every stored texture and sets its sampler uniform.
     virtual void Bind() const;
 
     const DM::Ref<Shader>& GetShader() const { return m_Shader; }
@@ -76,33 +87,30 @@ public:
     virtual bool Has(std::string_view name) const;
     virtual const UniformValue* Get(std::string_view name) const;
 
+    // ── Texture slots ──────────────────────────────────────────
+    virtual void SetTexture(std::string_view name, const DM::Ref<Texture>& texture, uint32_t slot = 0);
+    virtual bool HasTexture(std::string_view name) const;
+    virtual const TextureSlot* GetTexture(std::string_view name) const;
+    const std::unordered_map<std::string, TextureSlot>& GetTextures() const { return m_Textures; }
+
 private:
     DM::Ref<Shader>                       m_Shader;
     std::unordered_map<std::string, UniformValue> m_Uniforms;
+    std::unordered_map<std::string, TextureSlot>  m_Textures;
 };
 
 // ── MaterialInstance ──────────────────────────────────────────────
-//
-// Shares a base Material (its Shader + default uniforms) but keeps a
-// private override map. Bind() applies the base first, then the
-// overridden uniforms of this instance on top, so sibling instances do
-// not affect one another. Because it derives from Material it can be
-// passed to Renderer::Submit(const DM::Ref<Material>&, ...).
-
 class DMGE_API MaterialInstance : public Material
 {
 public:
     explicit MaterialInstance(DM::Ref<Material> baseMaterial);
 
-    // Binds the base material (shader + base uniforms), then uploads
-    // this instance's overridden uniforms on top of them.
     void Bind() const override;
 
     const DM::Ref<Material>& GetBaseMaterial() const { return m_BaseMaterial; }
 
-    // Read-only access to the override map (serialization: only overrides are
-    // persisted; the base Material is rebuilt on load from the Mesh resource).
     const std::unordered_map<std::string, UniformValue>& GetOverrides() const { return m_Overrides; }
+    const std::unordered_map<std::string, TextureSlot>& GetTextureOverrides() const { return m_TextureOverrides; }
 
     // ── Uniform overrides (stored locally, never touch the base) ─
     void SetInt(std::string_view name, int value) override;
@@ -117,9 +125,15 @@ public:
     bool Has(std::string_view name) const override;
     const UniformValue* Get(std::string_view name) const override;
 
+    // ── Texture overrides (stored locally, never touch the base) ─
+    void SetTexture(std::string_view name, const DM::Ref<Texture>& texture, uint32_t slot = 0) override;
+    bool HasTexture(std::string_view name) const override;
+    const TextureSlot* GetTexture(std::string_view name) const override;
+
 private:
     DM::Ref<Material>                       m_BaseMaterial;
-    std::unordered_map<std::string, UniformValue>   m_Overrides;
+    std::unordered_map<std::string, UniformValue> m_Overrides;
+    std::unordered_map<std::string, TextureSlot>  m_TextureOverrides;
 };
 
 } // namespace DMGameEngine

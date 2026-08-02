@@ -265,7 +265,14 @@ GLint OpenGLShader::GetUniformLocation(std::string_view name) const
         return it->second;
 
     GLint location = glGetUniformLocation(m_RendererID, key.c_str());
-    DMGE_CORE_ASSERT(location != -1, "Uniform '{0}' not found in shader!", name);
+    // Tolerant of missing uniforms: shaders that don't declare a uniform
+    // (e.g. an unlit shader without u_CameraPosition) get -1, and glUniform*
+    // calls with location -1 are silently ignored per the GL spec.
+    if (location == -1)
+    {
+        m_UniformLocationCache[key] = -1;
+        return -1;
+    }
 
     m_UniformLocationCache[key] = location;
     return location;

@@ -19,6 +19,7 @@
 #include "glm/glm.hpp"
 #include <cstddef>
 #include <vector>
+#include "DMGameEngine/Renderer/Light.h"  // SceneLightData for Flush
 
 namespace DMGameEngine {
 
@@ -57,7 +58,9 @@ public:
     // Sort by material/shader, then submit every queued renderable:
     // same group binds state + view-projection only once. The queue is
     // drained (cleared) after submission so it is ready for the next frame.
-    void Flush(const glm::mat4& viewProjection);
+    void Flush(const glm::mat4& viewProjection,
+                  const glm::vec3& cameraPosition,
+                  const SceneLightData& lightData);
 
     // Number of renderables currently queued (read before Flush).
     std::size_t GetCount() const { return m_Queue.size(); }
