@@ -109,6 +109,15 @@ void Renderer::Submit(const DM::Ref<Material>& material,
     s_Queue.Submit(material, vertexArray, transform);
 }
 
+void Renderer::SubmitInstanced(const DM::Ref<Material>& material,
+                                const DM::Ref<VertexArray>& vertexArray,
+                                uint32_t instanceCount)
+{
+    DMGE_CORE_ASSERT(material, "Renderer::SubmitInstanced - material is null!");
+    DMGE_CORE_ASSERT(vertexArray, "Renderer::SubmitInstanced - vertexArray is null!");
+    s_Queue.SubmitInstanced(material, vertexArray, instanceCount);
+}
+
 void Renderer::Flush()
 {
     s_Queue.Flush(s_SceneData.ViewProjectionMatrix, s_SceneData.CameraPosition, s_LightData);

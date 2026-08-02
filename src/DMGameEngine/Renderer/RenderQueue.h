@@ -7,8 +7,8 @@
  * material uniforms bind once per group, and the per-frame
  * view-projection is uploaded once per shader rather than once per draw.
  *
- * Each draw still issues a separate DrawIndexed (no geometry merging or
- * instancing) -- this is the first tier of batching: it removes redundant
+ * Supports two paths: per-draw (DrawIndexed) for small / transparent groups,
+ * and instanced (DrawIndexedInstanced) for large groups sharing the same
  * state binds and uniform uploads, leaving the draw-call count unchanged
  * but cutting per-draw CPU/GPU state churn.
  */
@@ -40,6 +40,18 @@ struct Renderable
     glm::mat4            Transform = glm::mat4(1.0f);
 };
 
+// ── Instanced draw request ─────────────────────────────────────
+// A batch of instances sharing the same Material + VertexArray.
+// The VA must contain a per-instance buffer (mat4 model matrix
+// at locations 0-3) alongside the mesh's per-vertex attributes.
+// RenderQueue issues one DrawIndexedInstanced per batch.
+struct InstancedRenderable
+{
+    DM::Ref<Material>    Material;
+    DM::Ref<VertexArray> VertexArray;  // mesh VB + instance VB
+    uint32_t             InstanceCount = 0;
+};
+
 class DMGE_API RenderQueue
 {
 public:
@@ -55,6 +67,13 @@ public:
                 const DM::Ref<VertexArray>& vertexArray,
                 const glm::mat4& transform = glm::mat4(1.0f));
 
+    // Enqueue an instanced batch: one DrawIndexedInstanced for
+    // instanceCount instances sharing the same material + VA.
+    // The VA must contain a per-instance buffer (already filled).
+    void SubmitInstanced(const DM::Ref<Material>& material,
+                         const DM::Ref<VertexArray>& vertexArray,
+                         uint32_t instanceCount);
+
     // Sort by material/shader, then submit every queued renderable:
     // same group binds state + view-projection only once. The queue is
     // drained (cleared) after submission so it is ready for the next frame.
@@ -66,7 +85,7 @@ public:
     std::size_t GetCount() const { return m_Queue.size(); }
 
 private:
-    std::vector<Renderable> m_Queue;
+    std::vector<Renderable>         m_Queue;
 };
 
 } // namespace DMGameEngine

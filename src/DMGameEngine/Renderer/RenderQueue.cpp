@@ -13,6 +13,10 @@
  * lights, ambient). Shaders that don't declare these uniforms get -1
  * from glGetUniformLocation and the glUniform* calls are silently
  * ignored (see OpenGLShader::GetUniformLocation).
+ *
+ * Instanced path: SubmitInstanced enqueues a batch that Flush draws
+ * with DrawIndexedInstanced. Uses a fixed-capacity array instead of
+ * std::vector to avoid DLL-boundary vector state issues.
  */
 
 #include "DMGameEngine/Renderer/RenderQueue.h"
@@ -85,9 +89,19 @@ void UploadSceneLighting(const DM::Ref<Shader>& shader,
 
 } // anonymous namespace
 
+// ── Fixed-capacity instanced batch storage ──────────────────────
+// A simple fixed array avoids std::vector DLL-boundary state issues
+// (the vector object lives in the DLL but is modified from the exe
+// via MeshRenderSystem; iterator debugging level mismatches can
+// corrupt the vector's internal bookkeeping across the boundary).
+static constexpr uint32_t kMaxInstancedBatches = 32;
+static InstancedRenderable s_InstancedBatches[kMaxInstancedBatches];
+static uint32_t s_InstancedBatchCount = 0;
+
 void RenderQueue::Clear()
 {
     m_Queue.clear();
+    s_InstancedBatchCount = 0;
 }
 
 void RenderQueue::Submit(const DM::Ref<Material>& material,
@@ -106,6 +120,19 @@ void RenderQueue::Submit(const DM::Ref<Shader>& shader,
     DMGE_CORE_ASSERT(shader, "RenderQueue::Submit - shader is null!");
     DMGE_CORE_ASSERT(vertexArray, "RenderQueue::Submit - vertexArray is null!");
     m_Queue.push_back({ nullptr, shader, vertexArray, transform });
+}
+
+void RenderQueue::SubmitInstanced(const DM::Ref<Material>& material,
+                                  const DM::Ref<VertexArray>& vertexArray,
+                                  uint32_t instanceCount)
+{
+    DMGE_CORE_ASSERT(material, "RenderQueue::SubmitInstanced - material is null!");
+    DMGE_CORE_ASSERT(vertexArray, "RenderQueue::SubmitInstanced - vertexArray is null!");
+    DMGE_CORE_ASSERT(instanceCount > 0, "RenderQueue::SubmitInstanced - instanceCount is 0!");
+    DMGE_CORE_ASSERT(s_InstancedBatchCount < kMaxInstancedBatches,
+                     "RenderQueue::SubmitInstanced - too many instanced batches!");
+    s_InstancedBatches[s_InstancedBatchCount] = { material, vertexArray, instanceCount };
+    ++s_InstancedBatchCount;
 }
 
 void RenderQueue::Flush(const glm::mat4& viewProjection,
@@ -134,6 +161,7 @@ void RenderQueue::Flush(const glm::mat4& viewProjection,
     const Material* lastMaterial = nullptr;
     const Shader*   lastShader   = nullptr;
 
+    // ── Per-draw queue ──────────────────────────────────────────
     for (const auto& r : m_Queue)
     {
         const DM::Ref<Shader>& shader = r.Material
@@ -145,8 +173,6 @@ void RenderQueue::Flush(const glm::mat4& viewProjection,
 
         if (r.Material)
         {
-            // New material group: rebind shader + uniforms + textures, then
-            // upload per-frame view-projection and lighting data once.
             if (r.Material.get() != lastMaterial)
             {
                 r.Material->Bind();
@@ -170,8 +196,6 @@ void RenderQueue::Flush(const glm::mat4& viewProjection,
         // Per-draw uniforms: model transform + normal matrix.
         shader->SetMat4("u_Transform", r.Transform);
 
-        // Normal matrix = transpose(inverse(mat3(model))). Uploaded as mat4
-        // (upper-left 3x3 + identity w) since the Shader API has SetMat4.
         glm::mat3 normalMat3 = glm::transpose(glm::inverse(glm::mat3(r.Transform)));
         glm::mat4 normalMat4(
             glm::vec4(normalMat3[0], 0.0f),
@@ -184,6 +208,30 @@ void RenderQueue::Flush(const glm::mat4& viewProjection,
     }
 
     m_Queue.clear();
+
+    // ── Instanced batches ──────────────────────────────────────
+    // Each batch: bind material once, upload VP + lighting once,
+    // then one DrawIndexedInstanced. No per-draw uniform uploads
+    // (transforms are per-instance vertex attributes).
+    const Material* lastInstancedMaterial = nullptr;
+    for (uint32_t i = 0; i < s_InstancedBatchCount; ++i)
+    {
+        const auto& r = s_InstancedBatches[i];
+        const DM::Ref<Shader>& shader = r.Material->GetShader();
+        DMGE_CORE_ASSERT(shader, "RenderQueue::Flush - instanced renderable has no shader!");
+
+        if (r.Material.get() != lastInstancedMaterial)
+        {
+            r.Material->Bind();
+            shader->SetMat4("u_ViewProjection", viewProjection);
+            UploadSceneLighting(shader, cameraPosition, lightData);
+            lastInstancedMaterial = r.Material.get();
+        }
+
+        RenderCommand::DrawIndexedInstanced(*r.VertexArray, r.InstanceCount);
+    }
+
+    s_InstancedBatchCount = 0;
 }
 
 } // namespace DMGameEngine

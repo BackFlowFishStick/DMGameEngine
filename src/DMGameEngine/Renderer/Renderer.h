@@ -87,6 +87,12 @@ public:
                       const DM::Ref<VertexArray>& vertexArray,
                       const glm::mat4& transform = glm::mat4(1.0f));
 
+    // Enqueues an instanced batch: one DrawIndexedInstanced for
+    // instanceCount instances sharing the same material + VA.
+    static void SubmitInstanced(const DM::Ref<Material>& material,
+                                const DM::Ref<VertexArray>& vertexArray,
+                                uint32_t instanceCount);
+
     // Flushes the per-frame RenderQueue: sorts by material/shader and
     // submits every queued draw, binding each group's state only once.
     // Called automatically by EndScene(); can also be called mid-frame
