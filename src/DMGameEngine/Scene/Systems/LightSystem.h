@@ -43,6 +43,8 @@ class LightSystem : public System
 public:
     explicit LightSystem(Scene& scene) : System(scene) {}
 
+    const char* GetName() const override { return "LightSystem"; }
+
     void OnRender() override
     {
         auto& reg  = m_Scene.GetRegistry();

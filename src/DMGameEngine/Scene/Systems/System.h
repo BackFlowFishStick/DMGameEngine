@@ -25,6 +25,9 @@ public:
     virtual void OnRender() {}
     virtual void OnEvent(Event& event) {}
 
+    // Human-readable name for tooling / editor display.
+    virtual const char* GetName() const { return "System"; }
+
 protected:
     Scene& m_Scene;  // reach the registry through the owning Scene
     explicit System(Scene& scene) : m_Scene(scene) {}

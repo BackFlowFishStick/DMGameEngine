@@ -210,6 +210,16 @@ else()
     add_library(DMGameEngine STATIC ${DMGE_SOURCES} ${DMGE_HEADERS})
 endif()
 
+# Export ImGui symbols via IMGUI_API so external consumers
+# (the editor) can use ImGui via the engine DLL (shared context).
+set_source_files_properties(
+      "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui_draw.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui_tables.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui_widgets.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui/imgui_demo.cpp"
+      PROPERTIES COMPILE_DEFINITIONS "IMGUI_API=__declspec(dllexport)")
+
 target_include_directories(DMGameEngine
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>

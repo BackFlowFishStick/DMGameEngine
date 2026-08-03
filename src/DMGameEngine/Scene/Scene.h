@@ -82,6 +82,9 @@ public:
     entt::registry&       GetRegistry()       { return m_Registry; }
     const entt::registry& GetRegistry() const { return m_Registry; }
 
+    // Systems (read-only access for tooling / editor display).
+    const std::vector<DM::Ref<System>>& GetSystems() const { return m_Systems; }
+
 private:
     // DMGE Entity (uint32_t) <-> entt::entity conversion at the boundary.
     static entt::entity ToEntt(Entity e)        { return static_cast<entt::entity>(e); }

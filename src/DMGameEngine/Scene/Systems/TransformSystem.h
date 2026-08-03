@@ -29,6 +29,8 @@ class TransformSystem : public System
 public:
     explicit TransformSystem(Scene& scene) : System(scene) {}
 
+    const char* GetName() const override { return "TransformSystem"; }
+
     void OnUpdate(Timestep /*ts*/) override
     {
         auto& reg = m_Scene.GetRegistry();
