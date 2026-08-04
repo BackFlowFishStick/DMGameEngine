@@ -47,10 +47,10 @@ rules.ninja
 *.user
 *.userosscache
 *.sln.docstates
-x64/
-Debug/
-Release/
-Win32/
+/x64/
+/Debug/
+/Release/
+/Win32/
 
 # IDE
 .vscode/
@@ -70,6 +70,13 @@ $RECYCLE.BIN/
 # Package Managers
 vcpkg_installed/
 
+# Vendored third-party dependencies are committed (clone-and-build).
+# Exclude only build-irrelevant bulk (assimp test models, 200+ MB):
+engine/dependencies/assimp/test/
+
+# ImGui runtime layout file (regenerated at runtime)
+imgui.ini
+
 # Misc
 *.log
 *.tmp
@@ -80,3 +87,11 @@ vcpkg_installed/
 .svn/
 
 vc140.pdb
+
+# Engine design/notes docs - kept local, not version-controlled
+engine/**/*.md
+
+# Documents
+documents/
+# Local documents directory (managed via SVN, not version-controlled by git)
+documents/

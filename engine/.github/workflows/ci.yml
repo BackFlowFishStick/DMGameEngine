@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build-and-test:
+    # Build the engine + run the pure-logic unit tests on Windows and Linux.
+    # The OpenGL backend is the default (no Vulkan SDK needed); enable the
+    # Vulkan job once a Vulkan SDK install step is added (see comment below).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # NOTE: dependencies/ (glad, glfw-3.4, glm-master, spdlog-1.x, imgui, stb,
+      # box3d-main) are expected to be vendored in the repo. If they are gitignored
+      # or fetched at configure time, add a step here to restore them.
+
+      - name: Install Linux graphics deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev xorg-dev
+
+      - name: Configure CMake
+        run: cmake -S . -B build -DDMGE_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build --config Debug
+
+      - name: Test
+        run: ctest --test-dir build --build-config Debug --output-on-failure
+
+  # Vulkan backend compile gate (no Vulkan SDK yet - extend with a Vulkan SDK
+  # install step to actually build this job).
+  vulkan-compile:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (Vulkan backend)
+        run: cmake -S . -B build -DDMGE_VULKAN_BACKEND=ON -DCMAKE_BUILD_TYPE=Debug
+        continue-on-error: true # until Vulkan SDK is installed on the runner
+      - name: Build (Vulkan)
+        run: cmake --build build --config Debug
+        if: success()

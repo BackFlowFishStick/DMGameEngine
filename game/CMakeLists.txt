@@ -1,0 +1,33 @@
+cmake_minimum_required(VERSION 3.20)
+project(DMGameDemo
+    VERSION 0.1.0
+    DESCRIPTION "Demo game using DMGameEngine"
+    LANGUAGES CXX
+)
+
+# ── C++ Standard ─────────────────────────────────────────────────
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ── Game Executable ──────────────────────────────────────────────
+set(GAME_SOURCES
+    "src/main.cpp"
+)
+add_executable(DMGameDemo ${GAME_SOURCES})
+
+# DMGameEngine target is provided by top-level CMakeLists.txt
+target_link_libraries(DMGameDemo PRIVATE DMGameEngine)
+
+# ── Copy DMGameEngine DLL to runtime output directory ────────────
+add_custom_command(TARGET DMGameDemo POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+        "$<TARGET_FILE:DMGameEngine>"
+        "$<TARGET_FILE_DIR:DMGameDemo>"
+    COMMENT "Copying DMGameEngine.dll to runtime directory"
+)
+
+# ── MSVC Options ─────────────────────────────────────────────────
+if(MSVC)
+    target_compile_options(DMGameDemo PRIVATE /W4 /utf-8)
+endif()
