@@ -84,9 +84,6 @@ void EditorScene::SetupDefaultScene() {
 }
 
 void EditorScene::OnUpdate(Timestep ts) {
-    // Always tick the scene (TransformSystem computes world matrices, etc.)
-    // so edits are reflected immediately in edit mode. Play/Pause gates
-    // simulation logic (not yet present) rather than transform recompute.
     if (m_Scene)
         m_Scene->OnUpdate(ts);
     if (m_Camera)

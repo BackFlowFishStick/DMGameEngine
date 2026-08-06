@@ -256,7 +256,6 @@ public:
         if (m_elapsedTime >= 1.0f)
         {
             const float fps = static_cast<float>(m_frameCount) / m_elapsedTime;
-            DMGE_CLIENT_INFO("FPS: {0:.1f}  |  dt: {1:.4f}s", fps, ts.GetSeconds());
             m_frameCount = 0; m_elapsedTime = 0.0f;
         }
     }

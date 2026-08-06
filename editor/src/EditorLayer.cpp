@@ -62,9 +62,16 @@ EditorLayer::EditorLayer()
     : Layer("EditorLayer", LayerType::Tool) {}
 
 void EditorLayer::OnAttach() {
+    ImGuiIO& io = ImGui::GetIO();
 #ifdef IMGUI_HAS_DOCK
-    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 #endif
+    // The engine enables multi-viewport (ViewportsEnable) which makes
+    // io.MousePos global-screen while some ImGui window rects use a different
+    // origin -> ImGuizmo hit-testing breaks (mouse vs rect mismatch). The
+    // editor docks everything in the main window, so disable multi-viewport.
+    // Docking still works; only OS-level detached windows are turned off.
+    io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
     DMGE_CLIENT_INFO("EditorLayer attached");
     m_Log.OnAttach();
 }
@@ -87,6 +94,7 @@ void EditorLayer::OnRender() {
 }
 
 void EditorLayer::OnImGuiRender() {
+    ImGuizmo::BeginFrame();
     DrawDockspace();
     DrawMenuBar();
     DrawViewport();
@@ -192,8 +200,27 @@ void EditorLayer::DrawMenuBar() {
 }
 
 void EditorLayer::DrawViewport() {
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::Begin("Viewport");
+    // Gizmo mode toolbar (screen buttons + 1/2/3/4 keys; does not conflict
+    // with camera WASD/QE dolly).
+    {
+        auto modeBtn = [&](const char* label, int v) {
+            bool active = (m_GizmoType == v);
+            if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+            if (ImGui::Button(label)) m_GizmoType = v;
+            if (active) ImGui::PopStyleColor();
+            ImGui::SameLine();
+        };
+        modeBtn("Translate", 0);
+        modeBtn("Rotate", 1);
+        modeBtn("Scale", 2);
+        modeBtn("None", -1);
+        ImGui::NewLine();
+        if (ImGui::IsKeyPressed(ImGuiKey_1)) m_GizmoType = 0;
+        if (ImGui::IsKeyPressed(ImGuiKey_2)) m_GizmoType = 1;
+        if (ImGui::IsKeyPressed(ImGuiKey_3)) m_GizmoType = 2;
+        if (ImGui::IsKeyPressed(ImGuiKey_4)) m_GizmoType = -1;
+    }
     m_ViewportFocused = ImGui::IsWindowFocused();
     m_ViewportHovered = ImGui::IsWindowHovered();
 
@@ -205,6 +232,33 @@ void EditorLayer::DrawViewport() {
     if (w > 0 && h > 0)
         m_Scene.Resize(w, h);
 
+    // Camera control via ImGui mouse state. ImGuiLayer intercepts engine mouse
+    // events over the viewport (io.WantCaptureMouse) so EditorCameraController::OnEvent
+    // never receives them - drive the camera directly here instead.
+    // Right-drag = orbit, Middle-drag = pan, Wheel = zoom. Left = pick/gizmo.
+    if (m_ViewportHovered && m_ViewportFocused && !ImGuizmo::IsUsing()) {
+        auto* cam = m_Scene.GetCamera();
+        if (cam) {
+            ImGuiIO& io = ImGui::GetIO();
+            const glm::vec2 d(io.MouseDelta.x, io.MouseDelta.y);
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
+                cam->SetYaw(cam->GetYaw() - d.x * cam->GetRotateSpeed());
+                cam->SetPitch(cam->GetPitch() + d.y * cam->GetRotateSpeed());
+            } else if (ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
+                glm::vec3 fwd = glm::normalize(cam->GetTarget() - cam->GetPosition());
+                glm::vec3 rgt = glm::normalize(glm::cross(fwd, glm::vec3(0.0f, 1.0f, 0.0f)));
+                glm::vec3 up  = glm::normalize(glm::cross(rgt, fwd));
+                const float s = cam->GetPanSpeed() * cam->GetDistance();
+                glm::vec3 t = cam->GetTarget();
+                t -= rgt * d.x * s;
+                t += up  * d.y * s;
+                cam->SetTarget(t);
+            }
+            if (io.MouseWheel != 0.0f)
+                cam->SetDistance(cam->GetDistance() - io.MouseWheel * cam->GetZoomSpeed());
+        }
+    }
+
     if (avail.x > 0.0f && avail.y > 0.0f && m_Scene.GetTarget() &&
         m_Scene.GetTarget()->GetColorAttachmentCount() > 0) {
         ImTextureID texID = (ImTextureID)(uintptr_t)
@@ -212,7 +266,7 @@ void EditorLayer::DrawViewport() {
         ImGui::Image(texID, avail, ImVec2(0, 1), ImVec2(1, 0));
 
         // Mouse pick: click the viewport to select the nearest mesh entity.
-        if (m_ViewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGuizmo::IsUsing()) {
+        if (m_ViewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGuizmo::IsUsing() && !ImGuizmo::IsOver()) {
             ImVec2 imMin = ImGui::GetItemRectMin();
             ImVec2 imMax = ImGui::GetItemRectMax();
             ImVec2 mp = ImGui::GetMousePos();
@@ -258,17 +312,17 @@ void EditorLayer::DrawViewport() {
             }
         }
 
-        // ImGuizmo: W=translate, E=rotate, R=scale, Q=off. Operates on selected entity.
-        if (m_ViewportHovered) {
-            if (ImGui::IsKeyPressed(ImGuiKey_Q)) m_GizmoType = -1;
-            if (ImGui::IsKeyPressed(ImGuiKey_W)) m_GizmoType = 0;
-            if (ImGui::IsKeyPressed(ImGuiKey_E)) m_GizmoType = 1;
-            if (ImGui::IsKeyPressed(ImGuiKey_R)) m_GizmoType = 2;
-        }
         if (m_Selected != NullEntity && m_GizmoType >= 0) {
+
             Scene* sc = m_Scene.GetScene();
             if (sc && sc->HasComponent<TransformComponent>(m_Selected)) {
-                ImGuizmo::BeginFrame();
+                // Draw into the Viewport window's own draw list. ImGuizmo's
+                // IsHoveringWindow() resolves the owning window from
+                // gContext.mDrawList->_OwnerName to set mbMouseOver (hit-testing);
+                // ForegroundDrawList has no owning window, so mbMouseOver was always
+                // false and IsOver()/IsUsing() silently failed. Drawing here (after
+                // ImGui::Image) also keeps the gizmo above the viewport image.
+                ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
                 ImGuizmo::SetOrthographic(false);
                 ImVec2 rmin = ImGui::GetItemRectMin();
                 ImVec2 rmax = ImGui::GetItemRectMax();
@@ -294,7 +348,6 @@ void EditorLayer::DrawViewport() {
         }
     }
     ImGui::End();
-    ImGui::PopStyleVar();
 }
 
 void EditorLayer::DrawHierarchy() {
@@ -423,7 +476,7 @@ void EditorLayer::DrawComponents(Entity e) {
         }
     }
     if (s->HasComponent<MeshComponent>(e)) {
-        if (ImGui::CollapsingHeader("Mesh")) {
+        if (ImGui::CollapsingHeader("Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
             auto& mc = s->GetComponent<MeshComponent>(e);
             ImGui::Text("Mesh: %s", mc.Mesh ? "loaded" : "(null)");
             if (mc.Mesh)
@@ -434,12 +487,25 @@ void EditorLayer::DrawComponents(Entity e) {
             ImGui::Button("Drop [mesh] asset here", ImVec2(-1, 0));
             if (ImGui::BeginDragDropTarget()) {
                 if (auto* pl = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
-                    std::string path((const char*)pl->Data, pl->DataSize);
+                    std::string path((const char*)pl->Data);  // to null terminator
                     auto ext = std::filesystem::path(path).extension().string();
                     if (ext == ".mesh" || ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb") {
                         auto mesh = AssetManager::Get().Load<Mesh>(path);
                         if (mesh) {
                             mc.Mesh = mesh;
+                            AABBd lb;
+                            if (MeshLocalBounds(*mesh, lb)) {
+                                // fbx models vary wildly in scale (e.g. this one is 200 units).
+                                // Normalize so max extent ~= 2 units -> visible at default camera.
+                                float maxExt = std::max({lb.max.x - lb.min.x, lb.max.y - lb.min.y, lb.max.z - lb.min.z});
+                                if (maxExt > 0.0001f && s->HasComponent<TransformComponent>(e)) {
+                                    float sc = 2.0f / maxExt;
+                                    auto& tc = s->GetComponent<TransformComponent>(e);
+                                    tc.Scale = {sc, sc, sc};
+                                    tc.Dirty = true;
+                                    s->MarkSubtreeDirty(e);
+                                }
+                            }
                             mc.MaterialOverrides.clear();
                             // assimp imports carry no material -> assign a default
                             // Blinn-Phong material so the mesh actually renders.
@@ -455,7 +521,7 @@ void EditorLayer::DrawComponents(Entity e) {
                                 for (auto& ov : mc.MaterialOverrides)
                                     ov = DM::CreateRef<MaterialInstance>(baseMat);
                             }
-                            DMGE_CLIENT_INFO("Loaded mesh into entity: %s", path.c_str());
+                            DMGE_CLIENT_INFO("Loaded mesh into entity: {0}", path);
                         }
                     }
                 }
@@ -541,7 +607,7 @@ void EditorLayer::DrawAssetBrowser() {
             if (ImGui::Selectable(label.c_str(), m_SelectedAsset == path))
                 m_SelectedAsset = path;
             // Drag source: carries the asset path to MeshComponent drop target.
-            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+            if (ImGui::BeginDragDropSource()) {
                 ImGui::SetDragDropPayload("ASSET_PATH", path.c_str(), path.size() + 1);
                 ImGui::Text("%s %s", icon, rel.c_str());
                 ImGui::EndDragDropSource();
