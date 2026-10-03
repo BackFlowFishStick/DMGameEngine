@@ -6,7 +6,9 @@
 #include <imgui_internal.h>
 #include <ImGuizmo.h>
 #include <filesystem>
+#include <fstream>
 #include <cstdio>
+#include <cstring>
 #include <cctype>
 #include <cfloat>
 #include <cmath>
@@ -90,6 +92,9 @@ static void AssignDefaultMaterial(MeshComponent& mc) {
         ov = DM::CreateRef<MaterialInstance>(baseMat);
 }
 
+static constexpr const char* kConfigPath = "editor_config.ini";
+static constexpr size_t kMaxRecentScenes = 8;
+
 EditorLayer::EditorLayer()
     : Layer("EditorLayer", LayerType::Tool) {}
 
@@ -106,9 +111,13 @@ void EditorLayer::OnAttach() {
     io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
     DMGE_CLIENT_INFO("EditorLayer attached");
     m_Log.OnAttach();
+    LoadConfig();
 }
 
-void EditorLayer::OnDetach() { m_Log.OnDetach(); }
+void EditorLayer::OnDetach() {
+    SaveConfig();
+    m_Log.OnDetach();
+}
 
 void EditorLayer::OnUpdate(Timestep ts) {
     if (auto* cam = m_Scene.GetCamera())
@@ -127,6 +136,7 @@ void EditorLayer::OnRender() {
 
 void EditorLayer::OnImGuiRender() {
     ImGuizmo::BeginFrame();
+    DrawModalDialogs();
     DrawDockspace();
     DrawMenuBar();
     DrawViewport();
@@ -164,6 +174,136 @@ void EditorLayer::EndPlay() {
     }
     m_SelectedUUID = 0;
     DMGE_CLIENT_INFO("Play mode stopped - edit state restored");
+}
+
+// ── Scene management (stage 3) ──────────────────────────────────
+
+void EditorLayer::OpenSceneFromPath(const std::string& path) {
+    if (path.empty()) return;
+    if (m_Scene.IsPlaying())
+        EndPlay();   // opening a scene always leaves play mode
+    if (m_Scene.LoadSceneFromFile(path)) {
+        m_ScenePath = path;
+        PushRecentScene(path);
+        m_Selected = NullEntity;
+        DMGE_CLIENT_INFO("Scene loaded: {0}", path);
+    } else {
+        DMGE_CLIENT_WARN("Failed to load scene: {0}", path);
+    }
+}
+
+void EditorLayer::SaveSceneToPath(const std::string& path) {
+    Scene* s = m_Scene.GetEditScene();
+    if (!s || path.empty()) return;
+    // Always serialize the EDIT scene - never the play copy - so a save during
+    // play cannot capture transient play-mode state.
+    SceneSerializer::Save(*s, path);
+    m_ScenePath = path;
+    PushRecentScene(path);
+    DMGE_CLIENT_INFO("Scene saved: {0}", path);
+}
+
+void EditorLayer::PushRecentScene(const std::string& path) {
+    std::erase(m_RecentScenes, path);
+    m_RecentScenes.insert(m_RecentScenes.begin(), path);
+    if (m_RecentScenes.size() > kMaxRecentScenes)
+        m_RecentScenes.resize(kMaxRecentScenes);
+    SaveConfig();
+}
+
+void EditorLayer::LoadConfig() {
+    m_RecentScenes.clear();
+    std::ifstream in(kConfigPath);
+    if (!in.is_open()) return;
+    std::string line;
+    while (std::getline(in, line)) {
+        constexpr const char* kPrefix = "recent=";
+        if (line.rfind(kPrefix, 0) == 0 && line.size() > std::strlen(kPrefix))
+            m_RecentScenes.push_back(line.substr(std::strlen(kPrefix)));
+    }
+}
+
+void EditorLayer::SaveConfig() {
+    std::ofstream out(kConfigPath);
+    if (!out.is_open()) return;
+    for (const auto& p : m_RecentScenes)
+        out << "recent=" << p << "\n";
+}
+
+// ── Modal dialogs ───────────────────────────────────────────────
+
+void EditorLayer::DrawModalDialogs() {
+    if (m_DialogOpenPending) {
+        ImGui::OpenPopup("EditorDialog");
+        m_DialogOpenPending = false;
+    }
+    if (!ImGui::BeginPopupModal("EditorDialog", nullptr,
+                                ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+
+    switch (m_Dialog) {
+    case Dialog::ConfirmNewScene: {
+        ImGui::Text("Create a new scene?");
+        if (m_Scene.IsPlaying())
+            ImGui::TextWrapped("Play mode will be stopped; all changes made during play are discarded.");
+        ImGui::TextDisabled("Unsaved changes to the current scene will be lost.");
+        if (ImGui::Button("OK", ImVec2(120, 0))) {
+            if (m_Scene.IsPlaying()) EndPlay();
+            m_Scene.NewScene();
+            m_Selected = NullEntity;
+            m_ScenePath = "scene.scene";
+            m_Dialog = Dialog::None;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            m_Dialog = Dialog::None;
+            ImGui::CloseCurrentPopup();
+        }
+        break;
+    }
+    case Dialog::OpenScene: {
+        ImGui::Text("Open scene file (.scene):");
+        ImGui::InputText("Path", m_PathBuf, sizeof(m_PathBuf));
+        bool exists = m_PathBuf[0] && std::filesystem::exists(m_PathBuf);
+        if (m_PathBuf[0] && !exists)
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "File not found.");
+        if (ImGui::Button("Open", ImVec2(120, 0))) {
+            if (exists) {
+                OpenSceneFromPath(m_PathBuf);
+                m_Dialog = Dialog::None;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            m_Dialog = Dialog::None;
+            ImGui::CloseCurrentPopup();
+        }
+        break;
+    }
+    case Dialog::SaveSceneAs: {
+        ImGui::Text("Save scene as (.scene):");
+        ImGui::InputText("Path", m_PathBuf, sizeof(m_PathBuf));
+        if (ImGui::Button("Save", ImVec2(120, 0))) {
+            if (m_PathBuf[0]) {
+                SaveSceneToPath(m_PathBuf);
+                m_Dialog = Dialog::None;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            m_Dialog = Dialog::None;
+            ImGui::CloseCurrentPopup();
+        }
+        break;
+    }
+    case Dialog::None:
+        ImGui::CloseCurrentPopup();
+        break;
+    }
+    ImGui::EndPopup();
 }
 
 void EditorLayer::DrawDockspace() {
@@ -211,25 +351,27 @@ void EditorLayer::DrawMenuBar() {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("New Scene", "Ctrl+N")) {
-                m_Scene.NewScene();
-                m_Selected = NullEntity;
+                m_Dialog = Dialog::ConfirmNewScene;
+                m_DialogOpenPending = true;
             }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
-                if (auto* s = m_Scene.GetScene())
-                    SceneSerializer::Save(*s, m_ScenePath);
+            if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) {
+                std::snprintf(m_PathBuf, sizeof(m_PathBuf), "%s", m_ScenePath.c_str());
+                m_Dialog = Dialog::OpenScene;
+                m_DialogOpenPending = true;
             }
-            if (ImGui::MenuItem("Load Scene", "Ctrl+O")) {
-                if (auto* s = m_Scene.GetScene()) {
-                    SceneSerializer::Load(*s, m_ScenePath);
-                    m_Selected = NullEntity;
-                }
+            if (ImGui::MenuItem("Save Scene", "Ctrl+S"))
+                SaveSceneToPath(m_ScenePath);
+            if (ImGui::MenuItem("Save Scene As...", nullptr, false, !m_Scene.IsPlaying())) {
+                std::snprintf(m_PathBuf, sizeof(m_PathBuf), "%s", m_ScenePath.c_str());
+                m_Dialog = Dialog::SaveSceneAs;
+                m_DialogOpenPending = true;
             }
-            ImGui::Separator();
-            char pathBuf[512];
-            std::snprintf(pathBuf, sizeof(pathBuf), "%s", m_ScenePath.c_str());
-            if (ImGui::InputText("Scene path", pathBuf, 512))
-                m_ScenePath = pathBuf;
+            if (!m_RecentScenes.empty() && ImGui::BeginMenu("Recent Scenes")) {
+                for (const auto& p : m_RecentScenes)
+                    if (ImGui::MenuItem(p.c_str()))
+                        OpenSceneFromPath(p);
+                ImGui::EndMenu();
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Quit", "Alt+F4"))
                 Application::Get().Quit();
@@ -699,6 +841,7 @@ void EditorLayer::DrawAssetBrowser() {
             else if (ext == ".glsl") icon = "[shader]";
             else if (ext == ".png" || ext == ".jpg" || ext == ".tga" || ext == ".dds") icon = "[tex]";
             else if (ext == ".mat") icon = "[mat]";
+            else if (ext == ".scene") icon = "[scene]";
             std::string label = std::string(icon) + "  " + rel;
             ImGui::PushID(path.c_str());
             // full-width row; clear, not cramped.

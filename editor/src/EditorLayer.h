@@ -3,6 +3,7 @@
 #include "EditorScene.h"
 #include "LogPanel.h"
 #include <string>
+#include <vector>
 #include <cstdint>
 
 class EditorLayer : public DMGameEngine::Layer {
@@ -22,6 +23,7 @@ public:
 private:
     void DrawDockspace();
     void DrawMenuBar();
+    void DrawModalDialogs();
     void DrawViewport();
     void DrawHierarchy();
     void DrawEntityNode(DMGameEngine::Entity e);
@@ -41,6 +43,15 @@ private:
     // model file. No-op during play mode (edits blocked).
     bool CreateEntityFromModel(const std::string& path);
 
+    // ── Scene management (stage 3) ──────────────────────────────
+    void OpenSceneFromPath(const std::string& path);
+    void SaveSceneToPath(const std::string& path);
+
+    // ── Recent-files persistence (editor_config.ini) ────────────
+    void LoadConfig();
+    void SaveConfig();
+    void PushRecentScene(const std::string& path);
+
     EditorScene m_Scene;
     DMGameEngine::Entity m_Selected = DMGameEngine::NullEntity;
     glm::vec2 m_ViewportSize{0.0f, 0.0f};
@@ -53,4 +64,13 @@ private:
 
     // Play-mode selection preservation.
     uint64_t m_SelectedUUID = 0;
+
+    // Modal dialogs (New Scene confirm / Open / Save As).
+    enum class Dialog { None, ConfirmNewScene, OpenScene, SaveSceneAs };
+    Dialog m_Dialog = Dialog::None;
+    bool m_DialogOpenPending = false;
+    char m_PathBuf[512] = {};
+
+    // Scene management state.
+    std::vector<std::string> m_RecentScenes;
 };

@@ -77,6 +77,9 @@ engine/dependencies/assimp/test/
 # ImGui runtime layout file (regenerated at runtime)
 imgui.ini
 
+# Editor runtime config (recent scene files, regenerated at runtime)
+editor_config.ini
+
 # Misc
 *.log
 *.tmp
