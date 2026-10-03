@@ -1,4 +1,6 @@
 #include "EditorLayer.h"
+#include "EditorScene.h"
+#include "ProjectExporter.h"
 #include "SceneDuplicator.h"
 #include <DMGameEngine/Core/Log.h>
 #include <DMGameEngine/Scene/SceneSerializer.h>
@@ -149,6 +151,7 @@ void EditorLayer::OnImGuiRender() {
     DrawModalDialogs();
     DrawDockspace();
     DrawMenuBar();
+    DrawSceneTabs();
     DrawViewport();
     DrawHierarchy();
     DrawInspector();
@@ -157,61 +160,131 @@ void EditorLayer::OnImGuiRender() {
     m_Log.OnImGuiRender();
 }
 
-// ── Play mode isolation (stage 4) ───────────────────────────────
+// ── Play mode isolation (stage 4, per active tab) ───────────────
 
 void EditorLayer::BeginPlay() {
-    if (m_Scene.IsPlaying()) return;
-    // Remember the selection by UUID so it can be restored on the edit scene
-    // after Stop (runtime entity ids differ between the two scenes).
-    Scene* s = m_Scene.GetEditScene();
-    m_SelectedUUID = 0;
-    if (s && m_Selected != NullEntity && s->HasComponent<IDComponent>(m_Selected))
-        m_SelectedUUID = s->GetComponent<IDComponent>(m_Selected).UUID;
+    auto* tab = m_Scene.GetActiveTab();
+    if (!tab || tab->Playing) return;
+    if (m_Scene.FindPlayingTab() != -1) {
+        // Multi-scene policy: at most one runtime at a time.
+        auto* playing = m_Scene.GetTab(m_Scene.FindPlayingTab());
+        DMGE_CLIENT_WARN("Scene '{0}' is already playing - stop it before playing another scene.",
+                         playing ? playing->Name : "?");
+        return;
+    }
+    // Remember the selection by UUID so it can be re-resolved on the edit
+    // scene after Stop (runtime entity ids differ between the two scenes).
+    uint64_t uuid = 0;
+    Scene* edit = tab->EditScene.get();
+    const Entity sel = tab->Selected;
+    if (edit && sel != NullEntity && edit->HasComponent<IDComponent>(sel))
+        uuid = edit->GetComponent<IDComponent>(sel).UUID;
+    tab->SelectedUUIDBeforePlay = uuid;
     m_Scene.EnterPlayMode();
-    DMGE_CLIENT_INFO("Play mode entered - edit state snapshotted, changes during play will be discarded on Stop");
+    // Re-resolve the selection onto the play copy so the read-only inspector
+    // keeps showing the same logical entity while playing.
+    if (tab->Playing && uuid != 0) {
+        Scene* play = tab->PlayScene.get();
+        if (play) {
+            play->GetRegistry().view<IDComponent>().each([&](auto eh, IDComponent& idc) {
+                if (idc.UUID == uuid)
+                    m_Scene.SetSelected(static_cast<Entity>(eh));
+            });
+        }
+    }
+    DMGE_CLIENT_INFO("Play mode entered on '{0}' - edit state snapshotted, changes during play will be discarded on Stop",
+                     tab->Name);
 }
 
 void EditorLayer::EndPlay() {
-    if (!m_Scene.IsPlaying()) return;
+    auto* tab = m_Scene.GetActiveTab();
+    if (!tab || !tab->Playing) return;
+    const uint64_t uuid = tab->SelectedUUIDBeforePlay;
     m_Scene.ExitPlayMode();   // discards the play copy, restores the edit scene
-    m_Selected = NullEntity;
-    Scene* s = m_Scene.GetEditScene();
-    if (s && m_SelectedUUID != 0) {
-        s->GetRegistry().view<IDComponent>().each([&](auto eh, IDComponent& idc) {
-            if (idc.UUID == m_SelectedUUID)
-                m_Selected = static_cast<Entity>(eh);
+    m_Scene.SetSelected(NullEntity);
+    Scene* edit = tab->EditScene.get();
+    if (edit && uuid != 0) {
+        edit->GetRegistry().view<IDComponent>().each([&](auto eh, IDComponent& idc) {
+            if (idc.UUID == uuid)
+                m_Scene.SetSelected(static_cast<Entity>(eh));
         });
     }
-    m_SelectedUUID = 0;
-    DMGE_CLIENT_INFO("Play mode stopped - edit state restored");
+    tab->SelectedUUIDBeforePlay = 0;
+    DMGE_CLIENT_INFO("Play mode stopped on '{0}' - edit state restored", tab->Name);
 }
 
-// ── Scene management (stage 3) ──────────────────────────────────
+// ── Scene management (stage 3, multi-tab) ───────────────────────
 
 void EditorLayer::OpenSceneFromPath(const std::string& path) {
     if (path.empty()) return;
-    if (m_Scene.IsPlaying())
-        EndPlay();   // opening a scene always leaves play mode
-    if (m_Scene.LoadSceneFromFile(path)) {
-        m_ScenePath = path;
+    // Already open? Just focus its tab (no duplicate tabs for one file).
+    if (int existing = m_Scene.FindTabByPath(path); existing != -1) {
+        m_Scene.SetActive(existing);
+        DMGE_CLIENT_INFO("Scene already open - focused tab '{0}'", m_Scene.GetTab(existing)->Name);
+        return;
+    }
+    int idx = m_Scene.AddTabFromFile(path);
+    if (idx != -1) {
+        m_Scene.SetActive(idx);
         PushRecentScene(path);
-        m_Selected = NullEntity;
-        DMGE_CLIENT_INFO("Scene loaded: {0}", path);
+        DMGE_CLIENT_INFO("Scene loaded into new tab: {0}", path);
     } else {
         DMGE_CLIENT_WARN("Failed to load scene: {0}", path);
     }
 }
 
 void EditorLayer::SaveSceneToPath(const std::string& path) {
+    auto* tab = m_Scene.GetActiveTab();
     Scene* s = m_Scene.GetEditScene();
-    if (!s || path.empty()) return;
+    if (!s || !tab || path.empty()) return;
     // Always serialize the EDIT scene - never the play copy - so a save during
     // play cannot capture transient play-mode state.
     SceneSerializer::Save(*s, path);
-    m_ScenePath = path;
+    tab->Path = path;
+    auto stem = std::filesystem::path(path).stem().string();
+    if (!stem.empty()) tab->Name = stem;
+    tab->Dirty = false;
     PushRecentScene(path);
     DMGE_CLIENT_INFO("Scene saved: {0}", path);
 }
+
+void EditorLayer::RequestCloseTab(int index) {
+    auto* tab = m_Scene.GetTab(index);
+    if (!tab) return;
+    if (tab->Dirty) {
+        m_PendingCloseTab = index;
+        m_Dialog = Dialog::ConfirmCloseTab;
+        m_DialogOpenPending = true;
+    } else {
+        m_Scene.CloseTab(index);
+    }
+}
+
+void EditorLayer::MarkActiveDirty() {
+    if (auto* tab = m_Scene.GetActiveTab())
+        tab->Dirty = true;
+}
+
+// ── Runnable project export (stage 4) ───────────────────────────
+
+void EditorLayer::ExportRunnableProject(const std::string& outputDir) {
+    // Always export the EDIT scene - never the play copy.
+    Scene* edit = m_Scene.GetEditScene();
+    if (!edit || outputDir.empty()) return;
+    auto res = ProjectExporter::Export(outputDir, *edit);
+    if (res.Ok) {
+        DMGE_CLIENT_INFO("Runnable project exported to '{0}'", res.OutputDir);
+        DMGE_CLIENT_INFO("  Scene: assets/scene/main.scene, models copied: {0}, shaders: shaders/", res.ModelsCopied);
+        if (res.ProceduralMeshes > 0)
+            DMGE_CLIENT_WARN("  {0} procedural mesh entity/entities were NOT exported (in-editor meshes cannot be serialized, see KB-07 K-012) - they will not render in the exported game.", res.ProceduralMeshes);
+        DMGE_CLIENT_INFO("  Build it yourself (we do not build automatically): "
+                         "cmake -B build -DDMGE_ENGINE_DIR=\"<repo>/engine\" && cmake --build build - see README.md in the output directory.");
+    } else {
+        DMGE_CLIENT_ERROR("Export failed: {0}", res.Error);
+    }
+}
+
+// ── Recent-files persistence ────────────────────────────────────
 
 void EditorLayer::PushRecentScene(const std::string& path) {
     std::erase(m_RecentScenes, path);
@@ -252,28 +325,27 @@ void EditorLayer::DrawModalDialogs() {
         return;
 
     switch (m_Dialog) {
-    case Dialog::ConfirmNewScene: {
-        ImGui::Text("Create a new scene?");
-        if (m_Scene.IsPlaying())
-            ImGui::TextWrapped("Play mode will be stopped; all changes made during play are discarded.");
-        ImGui::TextDisabled("Unsaved changes to the current scene will be lost.");
+    case Dialog::ConfirmCloseTab: {
+        const SceneTab* tab = m_Scene.GetTab(m_PendingCloseTab);
+        ImGui::Text("Close scene '%s'?", tab ? tab->Name.c_str() : "?");
+        ImGui::TextDisabled("Unsaved changes will be lost.");
         if (ImGui::Button("OK", ImVec2(120, 0))) {
-            if (m_Scene.IsPlaying()) EndPlay();
-            m_Scene.NewScene();
-            m_Selected = NullEntity;
-            m_ScenePath = "scene.scene";
+            const int idx = m_PendingCloseTab;
             m_Dialog = Dialog::None;
+            m_PendingCloseTab = -1;
             ImGui::CloseCurrentPopup();
+            m_Scene.CloseTab(idx);
         }
         ImGui::SameLine();
         if (ImGui::Button("Cancel", ImVec2(120, 0))) {
             m_Dialog = Dialog::None;
+            m_PendingCloseTab = -1;
             ImGui::CloseCurrentPopup();
         }
         break;
     }
     case Dialog::OpenScene: {
-        ImGui::Text("Open scene file (.scene):");
+        ImGui::Text("Open scene file (.scene) in a NEW tab:");
         ImGui::InputText("Path", m_PathBuf, sizeof(m_PathBuf));
         bool exists = m_PathBuf[0] && std::filesystem::exists(m_PathBuf);
         if (m_PathBuf[0] && !exists)
@@ -345,6 +417,25 @@ void EditorLayer::DrawModalDialogs() {
         }
         break;
     }
+    case Dialog::ExportProject: {
+        ImGui::Text("Export runnable project to directory:");
+        ImGui::InputText("Directory", m_ExportDirBuf, sizeof(m_ExportDirBuf));
+        ImGui::TextDisabled("Generates CMakeLists.txt + main.cpp + README + assets");
+        ImGui::TextDisabled("(scene / shaders / referenced models). Not built automatically.");
+        if (ImGui::Button("Export", ImVec2(120, 0))) {
+            if (m_ExportDirBuf[0]) {
+                ExportRunnableProject(m_ExportDirBuf);
+                m_Dialog = Dialog::None;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            m_Dialog = Dialog::None;
+            ImGui::CloseCurrentPopup();
+        }
+        break;
+    }
     case Dialog::None:
         ImGui::CloseCurrentPopup();
         break;
@@ -372,17 +463,20 @@ void EditorLayer::DrawDockspace() {
     ImGuiID dockspaceId = ImGui::GetID("DMEditorDock");
     ImGui::DockSpace(dockspaceId, ImVec2(0, 0),
                      ImGuiDockNodeFlags_PassthruCentralNode);
-    // Unity-style default layout on first launch: left hierarchy, center
-    // viewport, right inspector, bottom asset browser. ImGui persists the
-    // layout to imgui.ini afterwards, so the user can rearrange freely.
+    // Unity-style default layout on first launch: scene tabs above the
+    // viewport, left hierarchy, center viewport, right inspector, bottom
+    // asset browser. ImGui persists the layout to imgui.ini afterwards, so
+    // the user can rearrange freely.
     if (ImGui::DockBuilderGetNode(dockspaceId) == nullptr) {
         ImGui::DockBuilderRemoveNode(dockspaceId);
         ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodeSize(dockspaceId, vp->WorkSize);
         ImGuiID dockMain = dockspaceId;
+        ImGuiID dockTop   = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Up,    0.06f, nullptr, &dockMain);
         ImGuiID dockLeft  = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Left,  0.18f, nullptr, &dockMain);
         ImGuiID dockRight = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Right, 0.24f, nullptr, &dockMain);
         ImGuiID dockDown  = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Down,  0.28f, nullptr, &dockMain);
+        ImGui::DockBuilderDockWindow("Scenes",           dockTop);
         ImGui::DockBuilderDockWindow("Scene Hierarchy", dockLeft);
         ImGui::DockBuilderDockWindow("Inspector",        dockRight);
         ImGui::DockBuilderDockWindow("Systems",          dockRight);
@@ -398,21 +492,33 @@ void EditorLayer::DrawDockspace() {
 // ── Menu bar ────────────────────────────────────────────────────
 
 void EditorLayer::DrawMenuBar() {
+    auto* activeTab = m_Scene.GetActiveTab();
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
+            // New = fresh tab: nothing is replaced, so no confirm needed.
             if (ImGui::MenuItem("New Scene", "Ctrl+N")) {
-                m_Dialog = Dialog::ConfirmNewScene;
-                m_DialogOpenPending = true;
+                int idx = m_Scene.AddUntitledTab();
+                m_Scene.SetActive(idx);
+                m_Scene.SetSelected(NullEntity);
             }
             if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) {
-                std::snprintf(m_PathBuf, sizeof(m_PathBuf), "%s", m_ScenePath.c_str());
+                std::snprintf(m_PathBuf, sizeof(m_PathBuf), "%s",
+                              activeTab ? activeTab->Path.c_str() : "");
                 m_Dialog = Dialog::OpenScene;
                 m_DialogOpenPending = true;
             }
-            if (ImGui::MenuItem("Save Scene", "Ctrl+S"))
-                SaveSceneToPath(m_ScenePath);
+            if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
+                if (activeTab && activeTab->Path.empty()) {
+                    m_PathBuf[0] = '\0';
+                    m_Dialog = Dialog::SaveSceneAs;   // never-saved scene: ask where
+                    m_DialogOpenPending = true;
+                } else if (activeTab) {
+                    SaveSceneToPath(activeTab->Path);
+                }
+            }
             if (ImGui::MenuItem("Save Scene As...", nullptr, false, !m_Scene.IsPlaying())) {
-                std::snprintf(m_PathBuf, sizeof(m_PathBuf), "%s", m_ScenePath.c_str());
+                std::snprintf(m_PathBuf, sizeof(m_PathBuf), "%s",
+                              activeTab ? activeTab->Path.c_str() : "");
                 m_Dialog = Dialog::SaveSceneAs;
                 m_DialogOpenPending = true;
             }
@@ -423,6 +529,16 @@ void EditorLayer::DrawMenuBar() {
                 ImGui::EndMenu();
             }
             ImGui::Separator();
+            if (ImGui::MenuItem("Close Tab")) {
+                RequestCloseTab(m_Scene.GetActive());
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Export Runnable Project...", nullptr, false, !m_Scene.IsPlaying())) {
+                m_ExportDirBuf[0] = '\0';
+                m_Dialog = Dialog::ExportProject;
+                m_DialogOpenPending = true;
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Quit", "Alt+F4"))
                 Application::Get().Quit();
             ImGui::EndMenu();
@@ -430,23 +546,32 @@ void EditorLayer::DrawMenuBar() {
         if (ImGui::BeginMenu("Entity")) {
             // Play-mode isolation: entity CRUD only in edit mode.
             if (ImGui::MenuItem("Create Empty", "Ctrl+Shift+A", false, !m_Scene.IsPlaying())) {
-                if (auto* s = m_Scene.GetScene())
-                    m_Selected = s->CreateEntity("Entity");
-            }
-            if (m_Selected != NullEntity && ImGui::MenuItem("Delete", "Del", false, !m_Scene.IsPlaying())) {
                 if (auto* s = m_Scene.GetScene()) {
-                    s->DestroyEntity(m_Selected);
-                    m_Selected = NullEntity;
+                    m_Scene.SetSelected(s->CreateEntity("Entity"));
+                    MarkActiveDirty();
+                }
+            }
+            const Entity sel = m_Scene.GetSelected();
+            if (sel != NullEntity && ImGui::MenuItem("Delete", "Del", false, !m_Scene.IsPlaying())) {
+                if (auto* s = m_Scene.GetScene()) {
+                    s->DestroyEntity(sel);
+                    m_Scene.SetSelected(NullEntity);
+                    MarkActiveDirty();
                 }
             }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Play")) {
+            auto* playingTab = m_Scene.GetTab(m_Scene.FindPlayingTab());
             if (m_Scene.IsPlaying()) {
                 if (ImGui::MenuItem(m_Scene.IsPaused() ? "Resume" : "Pause", "F5"))
                     m_Scene.SetPaused(!m_Scene.IsPaused());
                 if (ImGui::MenuItem("Stop", "F6"))
                     EndPlay();
+            } else if (playingTab) {
+                // Another tab owns the single runtime slot.
+                ImGui::MenuItem(playingTab->Name.c_str(), nullptr, false, false);
+                ImGui::TextDisabled("is playing - stop it first");
             } else if (ImGui::MenuItem("Play", "F5")) {
                 BeginPlay();
             }
@@ -454,6 +579,39 @@ void EditorLayer::DrawMenuBar() {
         }
         ImGui::EndMainMenuBar();
     }
+}
+
+// ── Scene tabs (stage 3) ────────────────────────────────────────
+
+void EditorLayer::DrawSceneTabs() {
+    ImGui::Begin("Scenes");
+    int closeRequested = -1;
+    if (ImGui::BeginTabBar("SceneTabBar", ImGuiTabBarFlags_Reorderable)) {
+        for (int i = 0; i < m_Scene.GetTabCount(); ++i) {
+            auto* tab = m_Scene.GetTab(i);
+            if (!tab) continue;
+            std::string label = tab->Name;
+            if (tab->Dirty) label += " *";
+            if (tab->Playing) label += " (Playing)";
+            bool open = true;
+            ImGuiTabItemFlags flags = (i == m_Scene.GetActive())
+                ? ImGuiTabItemFlags_SetSelected : 0;
+            if (ImGui::BeginTabItem(label.c_str(), &open, flags)) {
+                // Clicking a tab activates its scene; play/camera/selection
+                // state is untouched (background play keeps running).
+                if (m_Scene.GetActive() != i)
+                    m_Scene.SetActive(i);
+                ImGui::EndTabItem();
+            }
+            if (!open)   // close button ('x') on the tab item
+                closeRequested = i;
+        }
+        ImGui::EndTabBar();
+    }
+    ImGui::End();
+    // Handle close after the loop: closing mutates the tab list.
+    if (closeRequested != -1)
+        RequestCloseTab(closeRequested);
 }
 
 // ── Viewport ────────────────────────────────────────────────────
@@ -576,7 +734,7 @@ void EditorLayer::DrawViewport() {
                         float t;
                         if (RayAABB(ro, rd, wmn, wmx, t) && t < bestT) { bestT = t; best = e; }
                     });
-                    m_Selected = best;
+                    m_Scene.SetSelected(best);
                 }
             }
         }
@@ -584,10 +742,11 @@ void EditorLayer::DrawViewport() {
         // Gizmo editing only in edit mode: writing transforms during play
         // would desync the play copy from what gets discarded on Stop anyway,
         // and the inspector is read-only then - keep them consistent.
-        if (!m_Scene.IsPlaying() && m_Selected != NullEntity && m_GizmoType >= 0) {
+        if (!m_Scene.IsPlaying() && m_Scene.GetSelected() != NullEntity && m_GizmoType >= 0) {
 
             Scene* sc = m_Scene.GetScene();
-            if (sc && sc->HasComponent<TransformComponent>(m_Selected)) {
+            const Entity sel = m_Scene.GetSelected();
+            if (sc && sc->HasComponent<TransformComponent>(sel)) {
                 // Draw into the Viewport window's own draw list. ImGuizmo's
                 // IsHoveringWindow() resolves the owning window from
                 // gContext.mDrawList->_OwnerName to set mbMouseOver (hit-testing);
@@ -602,7 +761,7 @@ void EditorLayer::DrawViewport() {
                 auto* cam = m_Scene.GetCamera();
                 glm::mat4 view = cam->GetCamera().GetView();
                 glm::mat4 proj = cam->GetCamera().GetProjection();
-                auto& tc = sc->GetComponent<TransformComponent>(m_Selected);
+                auto& tc = sc->GetComponent<TransformComponent>(sel);
                 glm::mat4 matrix = tc.WorldMatrix;
                 ImGuizmo::OPERATION op = (m_GizmoType == 0) ? ImGuizmo::TRANSLATE
                                          : (m_GizmoType == 1) ? ImGuizmo::ROTATE
@@ -615,7 +774,8 @@ void EditorLayer::DrawViewport() {
                 tc.RotationEuler = glm::radians(glm::vec3(rotDeg[0], rotDeg[1], rotDeg[2]));
                 tc.Scale = glm::vec3(sca[0], sca[1], sca[2]);
                 tc.Dirty = true;
-                sc->MarkSubtreeDirty(m_Selected);
+                sc->MarkSubtreeDirty(sel);
+                MarkActiveDirty();
             }
         }
     }
@@ -639,7 +799,7 @@ void EditorLayer::DrawHierarchy() {
         });
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsWindowHovered()
             && !ImGui::IsAnyItemHovered())
-            m_Selected = NullEntity;
+            m_Scene.SetSelected(NullEntity);
     }
     // Window-wide drop target: dropping a model asset into the hierarchy
     // creates a new root entity with a MeshComponent.
@@ -673,13 +833,13 @@ void EditorLayer::DrawEntityNode(Entity e) {
         hasChildren = s->GetComponent<TransformComponent>(e).FirstChild != NullEntity;
     if (!hasChildren)
         flags |= ImGuiTreeNodeFlags_Leaf;
-    if (e == m_Selected)
+    if (e == m_Scene.GetSelected())
         flags |= ImGuiTreeNodeFlags_Selected;
 
     bool open = ImGui::TreeNodeEx(reinterpret_cast<void*>((uintptr_t)e),
         flags, "%s", tag.c_str());
     if (ImGui::IsItemClicked())
-        m_Selected = e;
+        m_Scene.SetSelected(e);
     // Right-click context menu: prefab save / instantiate (stage 3).
     if (ImGui::BeginPopupContextItem("EntityContextMenu")) {
         m_ContextEntity = e;
@@ -717,9 +877,10 @@ void EditorLayer::DrawEntityNode(Entity e) {
 void EditorLayer::DrawInspector() {
     ImGui::Begin("Inspector");
     Scene* s = m_Scene.GetScene();
-    if (m_Selected != NullEntity && s &&
-        s->GetRegistry().valid(static_cast<entt::entity>(m_Selected))) {
-        DrawComponents(m_Selected);
+    const Entity sel = m_Scene.GetSelected();
+    if (sel != NullEntity && s &&
+        s->GetRegistry().valid(static_cast<entt::entity>(sel))) {
+        DrawComponents(sel);
     } else {
         ImGui::TextDisabled("No entity selected");
     }
@@ -743,8 +904,10 @@ void EditorLayer::DrawComponents(Entity e) {
         auto& tag = s->GetComponent<TagComponent>(e).Tag;
         char buf[256];
         std::snprintf(buf, sizeof(buf), "%s", tag.c_str());
-        if (ImGui::InputText("Tag", buf, 256))
+        if (ImGui::InputText("Tag", buf, 256)) {
             tag = buf;
+            MarkActiveDirty();
+        }
     }
     if (s->HasComponent<IDComponent>(e)) {
         auto& id = s->GetComponent<IDComponent>(e);
@@ -761,7 +924,11 @@ void EditorLayer::DrawComponents(Entity e) {
                 changed = true;
             }
             changed |= ImGui::DragFloat3("Scale", glm::value_ptr(tc.Scale), 0.1f, 0.01f, 100.0f);
-            if (changed) { tc.Dirty = true; s->MarkSubtreeDirty(e); }
+            if (changed) {
+                tc.Dirty = true;
+                s->MarkSubtreeDirty(e);
+                MarkActiveDirty();
+            }
         }
     }
     if (s->HasComponent<CameraComponent>(e)) {
@@ -825,6 +992,7 @@ void EditorLayer::DrawComponents(Entity e) {
                                 }
                             }
                             AssignDefaultMaterial(mc);
+                            MarkActiveDirty();
                             DMGE_CLIENT_INFO("Loaded mesh into entity: {0}", path);
                         }
                     }
@@ -839,24 +1007,36 @@ void EditorLayer::DrawComponents(Entity e) {
     if (ImGui::Button("Add Component"))
         ImGui::OpenPopup("AddComponentPopup");
     if (ImGui::BeginPopup("AddComponentPopup")) {
-        if (!s->HasComponent<CameraComponent>(e) && ImGui::MenuItem("Camera"))
+        if (!s->HasComponent<CameraComponent>(e) && ImGui::MenuItem("Camera")) {
             s->AddComponent<CameraComponent>(e);
-        if (!s->HasComponent<LightComponent>(e) && ImGui::MenuItem("Light"))
+            MarkActiveDirty();
+        }
+        if (!s->HasComponent<LightComponent>(e) && ImGui::MenuItem("Light")) {
             s->AddComponent<LightComponent>(e);
-        if (!s->HasComponent<MeshComponent>(e) && ImGui::MenuItem("Mesh"))
+            MarkActiveDirty();
+        }
+        if (!s->HasComponent<MeshComponent>(e) && ImGui::MenuItem("Mesh")) {
             s->AddComponent<MeshComponent>(e);
+            MarkActiveDirty();
+        }
         ImGui::EndPopup();
     }
     ImGui::SameLine();
     if (ImGui::Button("Remove..."))
         ImGui::OpenPopup("RemoveComponentPopup");
     if (ImGui::BeginPopup("RemoveComponentPopup")) {
-        if (s->HasComponent<CameraComponent>(e) && ImGui::MenuItem("Camera"))
+        if (s->HasComponent<CameraComponent>(e) && ImGui::MenuItem("Camera")) {
             s->RemoveComponent<CameraComponent>(e);
-        if (s->HasComponent<LightComponent>(e) && ImGui::MenuItem("Light"))
+            MarkActiveDirty();
+        }
+        if (s->HasComponent<LightComponent>(e) && ImGui::MenuItem("Light")) {
             s->RemoveComponent<LightComponent>(e);
-        if (s->HasComponent<MeshComponent>(e) && ImGui::MenuItem("Mesh"))
+            MarkActiveDirty();
+        }
+        if (s->HasComponent<MeshComponent>(e) && ImGui::MenuItem("Mesh")) {
             s->RemoveComponent<MeshComponent>(e);
+            MarkActiveDirty();
+        }
         ImGui::EndPopup();
     }
 
@@ -879,14 +1059,20 @@ void EditorLayer::DrawSystems() {
             ImGui::Text("%d. %s", i++, sys ? sys->GetName() : "(null)");
         }
         ImGui::Separator();
-        ImGui::Text("Play mode: %s",
-            m_Scene.IsPlaying() ? (m_Scene.IsPaused() ? "PAUSED" : "PLAYING") : "Editing");
+        auto* playingTab = m_Scene.GetTab(m_Scene.FindPlayingTab());
         if (m_Scene.IsPlaying()) {
+            ImGui::Text("Play mode ('%s'): %s",
+                m_Scene.GetActiveTab() ? m_Scene.GetActiveTab()->Name.c_str() : "?",
+                m_Scene.IsPaused() ? "PAUSED" : "PLAYING");
             if (ImGui::Button(m_Scene.IsPaused() ? "Resume##sys" : "Pause##sys"))
                 m_Scene.SetPaused(!m_Scene.IsPaused());
             ImGui::SameLine();
             if (ImGui::Button("Stop##sys"))
                 EndPlay();
+        } else if (playingTab) {
+            ImGui::Text("Play mode ('%s'): PLAYING (background)",
+                        playingTab->Name.c_str());
+            ImGui::TextDisabled("Switch to that tab to control it.");
         } else if (ImGui::Button("Play##sys")) {
             BeginPlay();
         }
@@ -985,7 +1171,8 @@ bool EditorLayer::CreateEntityFromModel(const std::string& path) {
             s->MarkSubtreeDirty(e);
         }
     }
-    m_Selected = e;
+    m_Scene.SetSelected(e);
+    MarkActiveDirty();
     DMGE_CLIENT_INFO("Created entity '{0}' from model {1}", name, path);
     return true;
 }
@@ -1028,7 +1215,8 @@ Entity EditorLayer::InstantiatePrefab(const std::string& path) {
             firstNew = ne;
     });
     if (firstNew != NullEntity) {
-        m_Selected = firstNew;
+        m_Scene.SetSelected(firstNew);
+        MarkActiveDirty();
         DMGE_CLIENT_INFO("Prefab instantiated: {0}", path);
     }
     return firstNew;
