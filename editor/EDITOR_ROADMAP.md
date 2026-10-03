@@ -149,14 +149,14 @@ EditorLayer::OnImGuiRender
 - **多 Scene / Scene 标签页**：同时编辑多个场景。
 - **Prefab / Entity 预制件**：保存/实例化 Entity 模板。
 
-> 状态标注（2026-10-03）：Asset Browser 拖拽建实体（拖到 Viewport/Hierarchy）+ 类型图标 ✅（缩略图渲染未做）；Scene 管理（New 确认/Open/Save/Save As/最近文件持久化 editor_config.ini）✅，多 Scene 标签页未做；Prefab 最小版（Hierarchy 右键 Save As Prefab / Instantiate，临时 Scene + SceneSerializer，引擎零改动）✅。
+> 状态标注（2026-10-03）：Asset Browser 拖拽建实体（拖到 Viewport/Hierarchy）+ 类型图标 ✅（缩略图渲染未做）；Scene 管理（New 确认/Open/Save/Save As/最近文件持久化 editor_config.ini）✅；Prefab 最小版（Hierarchy 右键 Save As Prefab / Instantiate，临时 Scene + SceneSerializer，引擎零改动）✅。多 Scene 标签页 ✅（2026-10-03 第二波：`SceneTab` + `EditorScene` 多标签管理，顶部 "Scenes" TabBar（dock 在 Viewport 上方，旧 imgui.ini 需删除才有新默认布局），每 tab 独立选中/相机/Play 状态，同一时刻仅一个场景可 Play，后台 Play 的场景模拟继续 tick 不渲染，File 菜单语义适配多标签（New/Open 开新标签、Save 作用当前标签、Close Tab 未保存确认弹窗），未保存以 `*` 标注（Dirty 跟踪覆盖 CRUD/gizmo/Inspector/拖拽/Prefab）。
 
 ### 阶段 4：工程化（你说的"可创建可运行工程"）
 - **导出可运行工程**：编辑器生成一个引用 `DMGameEngine` 的最小 game 工程（CMakeLists + main + 加载 `.scene`），脱离编辑器独立运行。
 - **Play mode 增强**：play 时隔离编辑（不可改 Transform 等），保证一致性；stop 后恢复编辑态。
 - **编辑器配置持久化**：窗口布局 / 最近场景 / 设置（`editor.ini`）。
 
-> 状态标注（2026-10-03）：Play mode 隔离 ✅（编辑态/运行态双 Scene + SceneDuplicator 深拷贝，Stop 恢复快照，选中按 UUID 回映射）；最近场景配置持久化 ✅（editor_config.ini）；导出可运行工程未做。
+> 状态标注（2026-10-03）：Play mode 隔离 ✅（编辑态/运行态双 Scene + SceneDuplicator 深拷贝，Stop 恢复快照，选中按 UUID 回映射；多标签下按场景生效，全局单 runtime 槽位）；最近场景配置持久化 ✅（editor_config.ini）。导出可运行工程 ✅（2026-10-03 第二波：`editor/src/ProjectExporter.{h,cpp}` + File > Export Runnable Project... 对话框——生成 CMakeLists/main.cpp/README/assets（场景 JSON + UUID registry + 引用模型拷贝 + shaders 目录）；因引擎 install(EXPORT) 无法生成、无 Config 文件（KB-07 K-014），find_package 不可用，模板走 `add_subdirectory(DMGE_ENGINE_DIR)` 由用户填引擎路径；导出不自动执行构建，人工验证步骤见 agent 报告）。
 
 ### 阶段 5：质量
 - Vulkan 后端适配：viewport 的 `ImGui::Image` 当前用 OpenGL 纹理 ID；切 Vulkan 时 `ImTextureID` 是 `VkDescriptorSet`，需后端适配。
