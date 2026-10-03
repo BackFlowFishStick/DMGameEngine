@@ -428,7 +428,16 @@ endif()
 
 # ── Examples (optional) ──────────────────────────────────────────
 if(DMGE_BUILD_TESTS)
-    enable_testing()
+    if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+        # Standalone engine build: the workspace root's enable_testing() was
+        # never reached, so enable it here too (otherwise add_test is a no-op).
+        enable_testing()
+    endif()
+    # NOTE: enable_testing() lives in the TOP-LEVEL CMakeLists.txt (before
+    # add_subdirectory) so the build root gets a CTestTestfile.cmake and
+    # `ctest --test-dir <build>` works. It covers all subdirectories, so
+    # add_test()/gtest_discover_tests() in tests/ are unaffected.
+    # History: kb/KB-07 K-011 (root ctest used to report "No tests were found").
     add_subdirectory(tests)
 endif()
 
