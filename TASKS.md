@@ -8,7 +8,8 @@
 
 | 任务 | 状态 | 备注 |
 |---|---|---|
-| guide/ 建库：GettingStarted + ArchitectureOverview | 🚧 @docs-agent docs/guide-foundation 2026-10-03 | worktree `.worktrees/docs-agent-guide`；交付以本地文件落库（documents/ 纳入 git 追踪，见收口 commit） |
+| 编辑器功能补完：Play 隔离 + Asset Browser 拖拽 + Scene 管理 + Prefab | 🚧 @editor-agent agent/editor-agent/stage3-4 2026-10-03 | worktree `.worktrees/editor-agent`；EDITOR_ROADMAP 阶段 2 已核验落地（gizmo/拾取/Add Component），本波做阶段 3/4 功能缺口 |
+| guide/ P1 文档：渲染 Subsystem Tour + 学习路线图 | 🚧 @docs-agent docs/guide-p1 2026-10-03 | worktree `.worktrees/docs-agent`；guide/ 已建库（✅ 见下方已合并） |
 
 ## 已合并 ✅
 
