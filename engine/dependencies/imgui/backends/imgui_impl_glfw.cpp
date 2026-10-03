@@ -1678,6 +1678,16 @@ static ImGuiMouseSource GetMouseSourceFromMessageExtraInfo()
 static LRESULT CALLBACK ImGui_ImplGlfw_WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     ImGui_ImplGlfw_Data* bd = (ImGui_ImplGlfw_Data*)::GetPropA(hWnd, "IMGUI_BACKEND_DATA");
+    // [DMGE patch 2026-10-03] Messages can be dispatched while the backend/context
+    // is not fully alive (startup/shutdown message ordering, teardown races). With a
+    // stale or empty 'bd' this used to assert in ImGui::GetIO() ("No current context")
+    // and abort. Forward to the previous WndProc / DefWindowProc instead.
+    if (bd == nullptr || bd->Context == nullptr || ImGui::GetCurrentContext() == nullptr)
+    {
+        if (bd != nullptr && bd->PrevWndProc != nullptr)
+            return ::CallWindowProcW(bd->PrevWndProc, hWnd, msg, wParam, lParam);
+        return ::DefWindowProcW(hWnd, msg, wParam, lParam);
+    }
     ImGuiIO& io = ImGui::GetIO(bd->Context);
 
     WNDPROC prev_wndproc = bd->PrevWndProc;

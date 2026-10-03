@@ -177,6 +177,10 @@ void ImGuiLayer::OnImGuiRender() {
 // ── Input capture ────────────────────────────────────────────────
 
 void ImGuiLayer::OnEvent(Event& event) {
+    // Context may be gone during shutdown ordering - window messages can
+    // still arrive after ImGuiLayer::OnDetach destroyed it (kb/KB-07 K-018).
+    if (ImGui::GetCurrentContext() == nullptr)
+        return;
     const ImGuiIO& io = ImGui::GetIO();
 
     // Cursor is over an ImGui window - let ImGui own the mouse.

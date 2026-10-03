@@ -2304,3 +2304,14 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 **涉及文件：** `editor/src/EditorScene.h/.cpp`（重写）、`editor/src/EditorLayer.h/.cpp`（重写）、`editor/src/ProjectExporter.h/.cpp`（新增）、`editor/CMakeLists.txt`、kb/KB-07、`editor/EDITOR_ROADMAP.md`。引擎侧零改动（只读核查 install 规则）。
 
 **验证：** 全量构建（engine+editor+game+tests，build-agent）零 error、/W4 零新增；ctest --test-dir build-agent/engine 全绿。GUI 多标签操作流与导出工程的实际构建验证待人工执行（步骤见 agent 报告）。
+
+### 2026-10-03 - 编辑器启动崩溃修复：负尺寸帧缓冲 + ImGui WndProc 断言（管理员 PB-04 热修）
+
+用户报告编辑器启动即崩（ImGui "No current context" 断言 ×3）。排查：先以 VEH + CaptureStackBackTrace 抓到 `glfwPollEvents → ImGui_ImplGlfw_WndProc → ImGui::GetIO → abort` 的调用栈；加 ASAN（`_DISABLE_STRING_ANNOTATION` 对齐预编译 shaderc 后可链接）后定位到第二处：`EditorLayer::DrawViewport` 把 `GetContentRegionAvail()` 的**负值** cast 成 uint32（≈43 亿）传入 `OpenGLFrameBuffer::Resize` → `glTexStorage2D` GL_INVALID_VALUE → `DMGE_GL_CALL` 断言 `__debugbreak`（无调试器 = 进程终止）。两处均已修复：
+
+- `editor/src/EditorLayer.cpp`：DrawViewport 尺寸在 cast 前做符号与上限（8192）判断（K-017 根因）。
+- `engine/src/DMGameEngine/Platform/OpenGL/OpenGLFrameBuffer.cpp`：Resize 拒绝 >16384 的异常尺寸并记错误日志（纵深防御）。
+- `engine/dependencies/imgui/backends/imgui_impl_glfw.cpp`：WndProc 入口对 bd/Context/current context 加保护，无效时转发到前一个 WndProc（K-018，`[DMGE patch]` 标记，更新 vendored ImGui 时需重新套用）。
+- `engine/src/DMGameEngine/ImGui/ImGuiLayer.cpp`：OnEvent 加 context 空守卫。
+
+**验证：** 全量构建零 error、/W4 零新增警告、ctest 37/37 全绿；编辑器连续 10 次启动全部稳定（修复前约 50% 概率 1~2 秒内崩溃）。GUI 交互（多标签/Play/导出）仍建议人工过一遍。

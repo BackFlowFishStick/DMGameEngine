@@ -644,10 +644,12 @@ void EditorLayer::DrawViewport() {
     ImVec2 avail = ImGui::GetContentRegionAvail();
     m_ViewportSize = glm::vec2(avail.x, avail.y);
 
-    uint32_t w = static_cast<uint32_t>(avail.x);
-    uint32_t h = static_cast<uint32_t>(avail.y);
-    if (w > 0 && h > 0)
-        m_Scene.Resize(w, h);
+    // avail can be NEGATIVE while the dock layout is still settling (first
+    // frames / tab switches); casting that straight to uint32 produces a
+    // ~4-billion size that used to reach glTexStorage2D and die on the GL
+    // assert (kb/KB-07 K-017). Guard the float BEFORE the cast.
+    if (avail.x >= 1.0f && avail.y >= 1.0f && avail.x <= 8192.0f && avail.y <= 8192.0f)
+        m_Scene.Resize(static_cast<uint32_t>(avail.x), static_cast<uint32_t>(avail.y));
 
     // Camera control via ImGui mouse state. ImGuiLayer intercepts engine mouse
     // events over the viewport (io.WantCaptureMouse) so EditorCameraController::OnEvent

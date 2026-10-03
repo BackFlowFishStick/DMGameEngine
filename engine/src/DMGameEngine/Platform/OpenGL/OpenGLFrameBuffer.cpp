@@ -73,6 +73,16 @@ void OpenGLFrameBuffer::Resize(uint32_t width, uint32_t height)
     if (width == 0 || height == 0)
         return;
 
+    // Defense in depth (kb/KB-07 K-017): absurd dimensions (e.g. a negative
+    // float cast to uint32 upstream) used to reach glTexStorage2D and die on
+    // the GL assert. Reject instead of building garbage GPU state.
+    constexpr uint32_t kMaxDim = 16384;
+    if (width > kMaxDim || height > kMaxDim)
+    {
+        DMGE_LOG_ERROR("OpenGLFrameBuffer::Resize rejected absurd size {}x{}", width, height);
+        return;
+    }
+
     if (width == m_Spec.Width && height == m_Spec.Height)
         return;
 
