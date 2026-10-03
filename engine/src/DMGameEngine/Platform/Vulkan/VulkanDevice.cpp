@@ -329,6 +329,15 @@ uint32_t VulkanDevice::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags
 
 void VulkanDevice::ImmediateSubmit(const std::function<void(VkCommandBuffer)>& fn)
 {
+    if (m_BatchActive)
+    {
+        // Inside a batch (P0-2): record only into the open batch command
+        // buffer. The single submit + fence drain happens in
+        // EndImmediateBatch, which is what turns N full stalls into one.
+        fn(m_ImmediateCmd);
+        return;
+    }
+
     vkResetCommandBuffer(m_ImmediateCmd, 0);
 
     VkCommandBufferBeginInfo beginInfo{};
@@ -347,6 +356,43 @@ void VulkanDevice::ImmediateSubmit(const std::function<void(VkCommandBuffer)>& f
 
     vkResetFences(Device, 1, &m_ImmediateFence);
     VK_CHECK(vkQueueSubmit(GraphicsQueue, 1, &submitInfo, m_ImmediateFence));
+    VK_CHECK(vkQueueWaitIdle(GraphicsQueue));
+}
+
+void VulkanDevice::BeginImmediateBatch()
+{
+    DMGE_CORE_ASSERT(!m_BatchActive, "Vulkan: BeginImmediateBatch called while a batch is already active!");
+    if (m_BatchActive)
+        return;
+
+    vkResetCommandBuffer(m_ImmediateCmd, 0);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    VK_CHECK(vkBeginCommandBuffer(m_ImmediateCmd, &beginInfo));
+
+    m_BatchActive = true;
+}
+
+void VulkanDevice::EndImmediateBatch()
+{
+    DMGE_CORE_ASSERT(m_BatchActive, "Vulkan: EndImmediateBatch without a matching BeginImmediateBatch!");
+    if (!m_BatchActive)
+        return;
+    m_BatchActive = false;
+
+    VK_CHECK(vkEndCommandBuffer(m_ImmediateCmd));
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers     = &m_ImmediateCmd;
+
+    vkResetFences(Device, 1, &m_ImmediateFence);
+    VK_CHECK(vkQueueSubmit(GraphicsQueue, 1, &submitInfo, m_ImmediateFence));
+    // Drain the queue: identical completion guarantee to the unbatched path
+    // (everything the batch recorded is finished when this returns).
     VK_CHECK(vkQueueWaitIdle(GraphicsQueue));
 }
 

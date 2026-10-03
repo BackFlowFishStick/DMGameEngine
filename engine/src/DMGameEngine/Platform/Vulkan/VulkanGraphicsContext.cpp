@@ -312,6 +312,14 @@ void VulkanGraphicsContext::BeginFrame(const glm::vec4& clearColor)
 {
     auto& dev = VulkanDevice::Get();
 
+    // P0-2 guard: a batch spans frames only by caller error. BeginFrame
+    // flushes the deletion buckets below; a resource deferred-destroyed
+    // while its copy command is still recorded-but-unsubmitted inside an
+    // open batch would be destroyed before that command executes.
+    DMGE_CORE_ASSERT(!dev.IsImmediateBatchActive(),
+                     "Vulkan: immediate submit batch still open at BeginFrame - "
+                     "end it before starting a frame (see VulkanDevice::BeginImmediateBatch).");
+
     if (m_NeedsResize)
     {
         RecreateSwapchain();

@@ -44,7 +44,27 @@ public:
     // Records and submits a one-time command buffer on the graphics queue,
     // waiting on a fence until it completes. Used for staging uploads
     // (buffer/image data, layout transitions).
+    //
+    // P0-2 batching: inside an immediate batch (BeginImmediateBatch ...
+    // EndImmediateBatch) calls only RECORD into the shared batch command
+    // buffer; EndImmediateBatch performs the single submit + queue drain.
+    // This turns N full submit+stall cycles into one.
     void ImmediateSubmit(const std::function<void(VkCommandBuffer)>& fn);
+
+    // ── Batched one-time submissions (P0-2) ──────────────────────
+    // Scope: asset-upload bursts (texture loads, mesh staging). A batch must
+    // NOT span a BeginFrame: BeginFrame flushes the deletion buckets, and a
+    // resource deferred-destroyed while its copy command sits recorded-but-
+    // unsubmitted in the open batch would be destroyed before its command
+    // executes. BeginFrame asserts against this; keep batches between frames.
+    //   BeginImmediateBatch();                    // open + begin recording
+    //   for (...) ImmediateSubmit(recorder);      // record-only
+    //   EndImmediateBatch();                      // 1 submit + queue drain
+    // Nested batches are rejected; EndImmediateBatch with nothing recorded
+    // still submits (an empty command buffer) so the wait semantics hold.
+    void BeginImmediateBatch();
+    void EndImmediateBatch();
+    bool IsImmediateBatchActive() const { return m_BatchActive; }
 
     // ── Deferred destruction (review item B) ────────────────────
     // GPU objects must not be destroyed directly from a resource destructor:
@@ -105,6 +125,7 @@ private:
     // Immediate-submit transient resources.
     VkCommandBuffer m_ImmediateCmd = VK_NULL_HANDLE;
     VkFence         m_ImmediateFence = VK_NULL_HANDLE;
+    bool            m_BatchActive    = false;
 
     static VulkanDevice* s_Instance;
 };
