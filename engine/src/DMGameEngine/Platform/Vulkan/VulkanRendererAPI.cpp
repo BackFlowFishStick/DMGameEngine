@@ -15,7 +15,9 @@
 #include "DMGameEngine/Core/Log.h"
 
 #include <cstring>
+#include <cstdio>
 #include <functional>
+#include <vector>
 
 namespace DMGameEngine {
 
@@ -158,6 +160,152 @@ void PurgeShaderFromDescriptorCache(uint64_t shaderID)
     }
 }
 
+// ── Pipeline cache serialization (P1: cold-start pipeline build skip) ──
+//
+// The VkPipelineCache is dumped to disk when the renderer API shuts down and
+// loaded back at Init, so the second launch reuses the driver's pipeline
+// binaries instead of recompiling every pipeline from SPIR-V.
+//
+// File: "vulkan_pipeline_cache.bin" in the process CWD (next to where the
+// editor/game exe runs). Format:
+//   [PipelineCacheHeader (44 bytes, little-endian host layout)] [driver blob]
+// The header pins the file to the exact device identity (vendor/device IDs,
+// driver version, API version, pipelineCacheUUID) - any mismatch, corruption,
+// truncation or version bump discards the file and starts with an empty
+// cache (safe fallback; the file is simply rewritten on the next clean
+// shutdown). Driver pipeline-cache blobs are opaque and keyed by the
+// pipelineCacheUUID, which is why the UUID is the primary validator.
+constexpr uint32_t kPipelineCacheMagic   = 0x43504D44; // "DMPC" (LE)
+constexpr uint32_t kPipelineCacheVersion = 1;
+constexpr size_t   kPipelineCacheMaxSize = 64ull * 1024 * 1024; // sanity cap
+
+struct PipelineCacheHeader
+{
+    uint32_t Magic;
+    uint32_t Version;
+    uint32_t VendorID;
+    uint32_t DeviceID;
+    uint32_t DriverVersion;
+    uint32_t ApiVersion;
+    uint8_t  CacheUUID[VK_UUID_SIZE];
+    uint32_t DataSize; // bytes of driver blob following the header
+};
+static_assert(sizeof(PipelineCacheHeader) == 24 + VK_UUID_SIZE + 4,
+              "PipelineCacheHeader layout must be padding-free");
+
+const char* PipelineCacheFilePath() { return "vulkan_pipeline_cache.bin"; }
+
+FILE* OpenFileOrNull(const char* path, const char* mode)
+{
+    FILE* f = nullptr;
+#if defined(_MSC_VER)
+    fopen_s(&f, path, mode);
+#else
+    f = std::fopen(path, mode);
+#endif
+    return f;
+}
+
+// Returns the driver blob if the on-disk cache is valid for THIS device,
+// empty otherwise (any failure logs a warning and degrades to empty).
+std::vector<uint8_t> LoadPipelineCacheData(const VulkanDevice& dev)
+{
+    const char* path = PipelineCacheFilePath();
+    FILE* f = OpenFileOrNull(path, "rb");
+    if (!f)
+        return {}; // first run / no file: normal, not a warning
+
+    auto discard = [f](const char* why) {
+        DMGE_LOG_WARN("Vulkan: ignoring pipeline cache file ({0}).", why);
+        std::fclose(f);
+        return std::vector<uint8_t>{};
+    };
+
+    PipelineCacheHeader h{};
+    if (std::fread(&h, 1, sizeof(h), f) != sizeof(h))
+        return discard("truncated header");
+
+    const auto& p = dev.Properties;
+    if (h.Magic != kPipelineCacheMagic)
+        return discard("bad magic");
+    if (h.Version != kPipelineCacheVersion)
+        return discard("version mismatch");
+    if (h.VendorID != p.vendorID || h.DeviceID != p.deviceID ||
+        h.DriverVersion != p.driverVersion || h.ApiVersion != p.apiVersion)
+        return discard("device/driver identity mismatch");
+    if (std::memcmp(h.CacheUUID, p.pipelineCacheUUID, VK_UUID_SIZE) != 0)
+        return discard("pipelineCacheUUID mismatch");
+    if (h.DataSize == 0 || h.DataSize > kPipelineCacheMaxSize)
+        return discard("unreasonable payload size");
+
+    std::vector<uint8_t> data(h.DataSize);
+    if (std::fread(data.data(), 1, data.size(), f) != data.size())
+        return discard("truncated payload");
+    if (std::fgetc(f) != EOF)
+        return discard("trailing garbage");
+
+    std::fclose(f);
+    DMGE_LOG_INFO("Vulkan: pipeline cache loaded ({0} bytes, {1}).",
+                  data.size(), path);
+    return data;
+}
+
+// Dumps the cache (header + driver blob) to a temp file, then atomically
+// replaces the real one. Failure to save is a warning only - the cache is a
+// pure optimization and the next run simply rebuilds pipelines.
+void SavePipelineCacheData(const VulkanDevice& dev, VkPipelineCache cache)
+{
+    size_t size = 0;
+    if (vkGetPipelineCacheData(dev.Device, cache, &size, nullptr) != VK_SUCCESS || size == 0)
+    {
+        DMGE_LOG_WARN("Vulkan: vkGetPipelineCacheData returned no data; pipeline cache not saved.");
+        return;
+    }
+    if (size > kPipelineCacheMaxSize)
+    {
+        DMGE_LOG_WARN("Vulkan: pipeline cache too large ({0} bytes); not saved.", size);
+        return;
+    }
+
+    std::vector<uint8_t> data(size);
+    if (vkGetPipelineCacheData(dev.Device, cache, &size, data.data()) != VK_SUCCESS)
+    {
+        DMGE_LOG_WARN("Vulkan: vkGetPipelineCacheData failed on second query; pipeline cache not saved.");
+        return;
+    }
+
+    const auto& p = dev.Properties;
+    PipelineCacheHeader h{};
+    h.Magic         = kPipelineCacheMagic;
+    h.Version       = kPipelineCacheVersion;
+    h.VendorID      = p.vendorID;
+    h.DeviceID      = p.deviceID;
+    h.DriverVersion = p.driverVersion;
+    h.ApiVersion    = p.apiVersion;
+    std::memcpy(h.CacheUUID, p.pipelineCacheUUID, VK_UUID_SIZE);
+    h.DataSize = static_cast<uint32_t>(data.size());
+
+    const char* path = PipelineCacheFilePath();
+    const char* tmpPath = "vulkan_pipeline_cache.bin.tmp";
+    FILE* f = OpenFileOrNull(tmpPath, "wb");
+    if (!f)
+    {
+        DMGE_LOG_WARN("Vulkan: cannot open '{0}' for writing; pipeline cache not saved.", tmpPath);
+        return;
+    }
+    const bool ok = std::fwrite(&h, 1, sizeof(h), f) == sizeof(h) &&
+                    std::fwrite(data.data(), 1, data.size(), f) == data.size();
+    std::fclose(f);
+
+    if (!ok || std::remove(path) != 0 || std::rename(tmpPath, path) != 0)
+    {
+        std::remove(tmpPath);
+        DMGE_LOG_WARN("Vulkan: failed to replace '{0}'; pipeline cache not saved.", path);
+        return;
+    }
+    DMGE_LOG_INFO("Vulkan: pipeline cache saved ({0} bytes -> {1}).", data.size(), path);
+}
+
 } // anonymous namespace
 
 // ── Lifetime ──────────────────────────────────────────────────────
@@ -172,7 +320,12 @@ VulkanRendererAPI::~VulkanRendererAPI()
     m_Pipelines.clear();
 
     if (m_PipelineCache != VK_NULL_HANDLE)
+    {
+        // Persist the accumulated pipeline binaries before the cache object
+        // dies (P1). The device is already idle (vkDeviceWaitIdle above).
+        SavePipelineCacheData(dev, m_PipelineCache);
         vkDestroyPipelineCache(dev.Device, m_PipelineCache, nullptr);
+    }
 
     DestroyDummyResources();
     DestroyFrameResources();
@@ -191,9 +344,30 @@ void VulkanRendererAPI::Init(const RendererAPIInitConfig& config)
 
     auto& dev = VulkanDevice::Get();
 
+    // P1: seed the cache from disk (previous runs' pipeline binaries). If the
+    // driver rejects the blob (corrupt / identity mismatch our header check
+    // could not catch), fall back to an empty cache and continue.
+    std::vector<uint8_t> initialCacheData = LoadPipelineCacheData(dev);
+
     VkPipelineCacheCreateInfo cacheInfo{};
     cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-    VK_CHECK(vkCreatePipelineCache(dev.Device, &cacheInfo, nullptr, &m_PipelineCache));
+    if (!initialCacheData.empty())
+    {
+        cacheInfo.initialDataSize = initialCacheData.size();
+        cacheInfo.pInitialData    = initialCacheData.data();
+    }
+
+    VkResult cacheResult = vkCreatePipelineCache(dev.Device, &cacheInfo, nullptr, &m_PipelineCache);
+    if (cacheResult != VK_SUCCESS && !initialCacheData.empty())
+    {
+        DMGE_LOG_WARN("Vulkan: driver rejected the on-disk pipeline cache data "
+                      "(VkResult {0}); starting with an empty cache.",
+                      static_cast<int>(cacheResult));
+        cacheInfo.initialDataSize = 0;
+        cacheInfo.pInitialData    = nullptr;
+        cacheResult = vkCreatePipelineCache(dev.Device, &cacheInfo, nullptr, &m_PipelineCache);
+    }
+    VK_CHECK(cacheResult);
 
     CreateFrameResources();
     CreateDummyResources();

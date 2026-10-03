@@ -169,6 +169,10 @@ private:
     bool            m_InOffscreenPass   = false;
     VulkanFrameBuffer* m_ActiveFrameBuffer = nullptr;
 
+    // VkPipelineCache: seeded from disk at Init and serialized back to disk
+    // ("vulkan_pipeline_cache.bin", CWD) at shutdown, so pipeline binaries
+    // survive process restarts. Any identity/corruption mismatch on load
+    // falls back to an empty cache. Serialized in VulkanRendererAPI.cpp.
     VkPipelineCache m_PipelineCache = VK_NULL_HANDLE;
     std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash> m_Pipelines;
 
