@@ -246,6 +246,10 @@
 - 阴影贴图：depth-only FrameBuffer（当前离屏路径断言 `GetColorAttachmentCount()>0`，需放开）。
 - PBR 材质 + IBL + 延迟渲染（G-buffer MRT，当前 FrameBuffer 支持 MRT 但 pipeline blend 假设单颜色附件）。
 
+### 3f. 骨骼动画（2026-10-03 立项，TASKS.md 第四波）
+
+- **阶段 1（导入 + Skeleton/Clip 资产 + Animator/AnimationSystem + OpenGL 蒙皮）✅ 已落地**（分支 `agent/anim-agent/skeleton-stage1`，编译开关 `DMGE_ANIMATION` 默认 OFF；Vulkan 蒙皮、动画混合/状态机、编辑器时间轴 UI 留后续波次）。
+
 ---
 
 ## 6. 推进顺序与依赖矩阵
