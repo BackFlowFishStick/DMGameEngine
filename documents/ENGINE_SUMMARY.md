@@ -2294,3 +2294,13 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 **涉及文件：** `Platform/Vulkan/VulkanRendererAPI.h/.cpp`、`VulkanShader.cpp`、`VulkanDevice.h/.cpp`、`VulkanGraphicsContext.cpp`（无新文件，无 CMake 改动）
 
 **验证：** Vulkan ON 全量零 error + ctest 37/37 绿 + /W4 零新增；`DMGE_VULKAN_BACKEND=OFF` 复测 37/37 绿无回归。game/editor 运行时验证待人工（K-014）。
+### 2026-10-03（更新）- 编辑器多 Scene 标签页（阶段 3）+ 导出可运行工程（阶段 4）
+
+分支 `agent/editor-agent/multi-scene-export`（worktree `.worktrees/editor-agent`）。
+
+- **多 Scene 标签页（阶段 3）**：`EditorScene` 从单场景改为多标签管理（`SceneTab`：独立的 Edit/Play/Active Scene + 相机 + 选中 + Playing/Paused/Dirty + Path）。顶部新增 "Scenes" TabBar（独立 dock 区，默认布局 dock 在 Viewport 上方；旧 `imgui.ini` 需删除才能看到新默认布局），每个 tab 一个打开场景（文件名或 Untitled-N，未保存标 `*`）。File 菜单语义适配：New/Open 开新标签（Open 对已打开文件只聚焦不重复开）、Save/Save As 作用当前激活标签（未保存路径的 Save 转入 Save As）、Close Tab（Dirty 时确认弹窗）；选中实体按 tab 隔离。Play 跨标签策略：**同一时刻仅允许一个场景 Play**（EnterPlayMode 拒绝第二个；Play 菜单/Systems 面板会提示是哪个场景在占用）；后台 Play 的场景模拟**继续 tick 但不渲染**——切标签不触碰任何 Play 状态，理由是"不可见即静默暂停"会让依赖时间的模拟在切回时行为突变，且无渲染的 ECS tick 成本可忽略。Dirty 跟踪覆盖 CRUD/gizmo/Inspector 编辑/资产拖拽/Prefab 实例化。
+- **导出可运行工程（阶段 4）**：File > Export Runnable Project...（ImGui 自绘路径对话框，无新依赖）→ `editor/src/ProjectExporter.{h,cpp}` 生成脱离编辑器的最小 game 工程：`CMakeLists.txt` + `src/main.cpp` + `README.md` + `assets/scene/main.scene`（SceneSerializer 落盘编辑态）+ `assets/registry.json`（AssetManager UUID 注册表快照）+ 场景引用的模型文件拷入 `assets/models/`（经 `GetMetadata(UUID)->Path`）+ 引擎 `engine/shaders` 整目录拷到 `shaders/`（模板 main.cpp 用相对路径加载 shader，规避 game demo 的硬编码绝对路径问题）。模板 main.cpp 启动时按 UUID 元数据把 mesh 重绑到 `assets/models/` 拷贝，并对无材质实体重建编辑器同款默认 Blinn-Phong；程序化网格无法序列化（K-012），导出时按数量 WARN。**find_package 结论**：引擎 `install(EXPORT)` 目前根本无法生成（standalone configure 实测报 `requires target "glm" that is not in any export set`，PUBLIC 链接的 add_subdirectory glm/EnTT 不可导出），且没有 `DMGameEngineConfig.cmake`，故导出模板走 `add_subdirectory(DMGE_ENGINE_DIR)` 由用户填引擎源码路径，模板 CMakeLists 内注释了 find_package 不可用的原因；导出不自动执行构建。新坑 K-015（install/export 坏）、K-016（EntryPoint main 丢 argv，模板读 `__argc/__argv`）。
+
+**涉及文件：** `editor/src/EditorScene.h/.cpp`（重写）、`editor/src/EditorLayer.h/.cpp`（重写）、`editor/src/ProjectExporter.h/.cpp`（新增）、`editor/CMakeLists.txt`、kb/KB-07、`editor/EDITOR_ROADMAP.md`。引擎侧零改动（只读核查 install 规则）。
+
+**验证：** 全量构建（engine+editor+game+tests，build-agent）零 error、/W4 零新增；ctest --test-dir build-agent/engine 全绿。GUI 多标签操作流与导出工程的实际构建验证待人工执行（步骤见 agent 报告）。
