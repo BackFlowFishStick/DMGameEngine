@@ -306,6 +306,102 @@ void SavePipelineCacheData(const VulkanDevice& dev, VkPipelineCache cache)
     DMGE_LOG_INFO("Vulkan: pipeline cache saved ({0} bytes -> {1}).", data.size(), path);
 }
 
+// ── Per-frame descriptor pools (P2: exhaustion warning + auto-grow) ──
+//
+// Storage is file-static (R1: no STL members on the exported class; same
+// pattern as the descriptor cache above). Each frame slot owns a LIST of
+// pools: when every pool is exhausted (vkAllocateDescriptorSets returns
+// OUT_OF_POOL_MEMORY / FRAGMENTED), a new pool with doubled capacity is
+// appended after a warning log, so a frame that genuinely needs more
+// descriptor sets keeps working instead of silently dropping draws.
+//
+// Interaction with the P0-1 descriptor cache: growing KEEPS the old pools
+// alive, so previously allocated sets (cached or not) stay valid - growth
+// needs NO cache invalidation. Invalidation happens exactly once per frame
+// in ResetFrame, where every pool is reset (invalidating all sets) and the
+// cache is cleared - the unchanged P0-1 rule.
+//
+// Retained capacity is bounded: ResetFrame also destroys all but the largest
+// pool (their sets were just freed and nothing references them), so
+// steady-state memory tracks the peak frame instead of creeping upward.
+constexpr uint32_t kPoolFrameSlots   = 2; // must match VulkanRendererAPI::kMaxFramesInFlight
+constexpr uint32_t kBasePoolMaxSets  = 8192;
+constexpr uint32_t kBasePoolSamplers = 32768;
+
+struct DescriptorPoolSlot
+{
+    std::vector<VkDescriptorPool> Pools;
+    std::vector<uint32_t>         PoolMaxSets;   // parallel to Pools
+    std::vector<uint32_t>         PoolSamplers;  // parallel to Pools
+    uint32_t NextMaxSets  = kBasePoolMaxSets;    // capacity of the next pool created
+    uint32_t NextSamplers = kBasePoolSamplers;
+    uint32_t SetsAllocatedThisFrame = 0;         // observability for the warning
+};
+
+DescriptorPoolSlot& PoolSlot(uint32_t frameIndex)
+{
+    static DescriptorPoolSlot s_Slots[kPoolFrameSlots];
+    return s_Slots[frameIndex % kPoolFrameSlots];
+}
+
+void ResetPoolSlotBookkeeping(DescriptorPoolSlot& slot)
+{
+    slot.Pools.clear();
+    slot.PoolMaxSets.clear();
+    slot.PoolSamplers.clear();
+    slot.NextMaxSets  = kBasePoolMaxSets;
+    slot.NextSamplers = kBasePoolSamplers;
+    slot.SetsAllocatedThisFrame = 0;
+}
+
+void DestroyDescriptorPools(VkDevice device, uint32_t frameIndex)
+{
+    auto& slot = PoolSlot(frameIndex);
+    for (VkDescriptorPool pool : slot.Pools)
+        vkDestroyDescriptorPool(device, pool, nullptr);
+    ResetPoolSlotBookkeeping(slot);
+}
+
+void CreateDescriptorPoolInto(DescriptorPoolSlot& slot, VkDevice device)
+{
+    VkDescriptorPoolSize poolSizes[2] = {};
+    poolSizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    poolSizes[0].descriptorCount = slot.NextMaxSets; // one dynamic UBO per set
+    poolSizes[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[1].descriptorCount = slot.NextSamplers;
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.maxSets       = slot.NextMaxSets;
+    poolInfo.poolSizeCount = 2;
+    poolInfo.pPoolSizes    = poolSizes;
+
+    VkDescriptorPool pool = VK_NULL_HANDLE;
+    VK_CHECK(vkCreateDescriptorPool(device, &poolInfo, nullptr, &pool));
+    slot.Pools.push_back(pool);
+    slot.PoolMaxSets.push_back(slot.NextMaxSets);
+    slot.PoolSamplers.push_back(slot.NextSamplers);
+
+    // The next pool (if this one ever fills mid-frame) is twice as large.
+    slot.NextMaxSets  *= 2;
+    slot.NextSamplers *= 2;
+}
+
+VkDescriptorSet TryAllocateDescriptorSet(VkDevice device, VkDescriptorPool pool,
+                                         VkDescriptorSetLayout layout)
+{
+    VkDescriptorSetAllocateInfo info{};
+    info.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    info.descriptorPool     = pool;
+    info.descriptorSetCount = 1;
+    info.pSetLayouts        = &layout;
+
+    VkDescriptorSet set = VK_NULL_HANDLE;
+    if (vkAllocateDescriptorSets(device, &info, &set) != VK_SUCCESS)
+        return VK_NULL_HANDLE;
+    return set;
+}
+
 } // anonymous namespace
 
 // ── Lifetime ──────────────────────────────────────────────────────
@@ -368,6 +464,12 @@ void VulkanRendererAPI::Init(const RendererAPIInitConfig& config)
         cacheResult = vkCreatePipelineCache(dev.Device, &cacheInfo, nullptr, &m_PipelineCache);
     }
     VK_CHECK(cacheResult);
+
+    // Defensive pool-slot reset BEFORE creating frame resources (a previous
+    // renderer-API instance's dtor already destroyed its pools; this only
+    // restores base sizes/counters in case anything was left behind).
+    for (uint32_t i = 0; i < kPoolFrameSlots; ++i)
+        ResetPoolSlotBookkeeping(PoolSlot(i));
 
     CreateFrameResources();
     CreateDummyResources();
@@ -907,19 +1009,9 @@ void VulkanRendererAPI::CreateFrameResources()
 
     for (uint32_t i = 0; i < kMaxFramesInFlight; ++i)
     {
-        // Descriptor pool: one set per draw (UBO + samplers).
-        VkDescriptorPoolSize poolSizes[2] = {};
-        poolSizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-        poolSizes[0].descriptorCount = 8192;
-        poolSizes[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSizes[1].descriptorCount = 32768;
-
-        VkDescriptorPoolCreateInfo poolInfo{};
-        poolInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.maxSets       = 8192;
-        poolInfo.poolSizeCount = 2;
-        poolInfo.pPoolSizes    = poolSizes;
-        VK_CHECK(vkCreateDescriptorPool(dev.Device, &poolInfo, nullptr, &m_DescriptorPools[i]));
+        // Descriptor pool(s): one set per draw (UBO + samplers). Created at
+        // base capacity; grows on exhaustion (see AllocateDescriptorSet).
+        CreateDescriptorPoolInto(PoolSlot(i), dev.Device);
 
         // Host-visible uniform scratch buffer.
         VkBufferCreateInfo bufInfo{};
@@ -950,10 +1042,8 @@ void VulkanRendererAPI::DestroyFrameResources()
     {
         if (m_UniformBuffers[i] != VK_NULL_HANDLE)
             vmaDestroyBuffer(dev.Allocator, m_UniformBuffers[i], m_UniformAllocs[i]);
-        if (m_DescriptorPools[i] != VK_NULL_HANDLE)
-            vkDestroyDescriptorPool(dev.Device, m_DescriptorPools[i], nullptr);
+        DestroyDescriptorPools(dev.Device, i);
         m_UniformBuffers[i] = VK_NULL_HANDLE;
-        m_DescriptorPools[i] = VK_NULL_HANDLE;
         m_UniformMapped[i] = nullptr;
         m_UniformOffset[i] = 0;
     }
@@ -1053,10 +1143,47 @@ void VulkanRendererAPI::DestroyDummyResources()
 void VulkanRendererAPI::ResetFrame(uint32_t frameIndex)
 {
     auto& dev = VulkanDevice::Get();
-    vkResetDescriptorPool(dev.Device, m_DescriptorPools[frameIndex], 0);
-    // The pool reset invalidates every descriptor set allocated from it, so
-    // the frame's cache must drop all entries (P0-1).
+    auto& slot = PoolSlot(frameIndex);
+
+    // Reset every pool in the slot (a frame may have grown to several).
+    for (VkDescriptorPool pool : slot.Pools)
+        vkResetDescriptorPool(dev.Device, pool, 0);
+
+    // Shrink retained capacity back to the peak pool: all sets were just
+    // freed by the reset and the P0-1 cache below is cleared, so nothing
+    // references the smaller pools any more. Steady-state memory tracks the
+    // peak frame instead of creeping upward across a long session.
+    if (slot.Pools.size() > 1)
+    {
+        size_t keep = 0;
+        for (size_t i = 1; i < slot.Pools.size(); ++i)
+            if (slot.PoolMaxSets[i] > slot.PoolMaxSets[keep])
+                keep = i;
+        const uint32_t keptMaxSets  = slot.PoolMaxSets[keep];
+        const uint32_t keptSamplers = slot.PoolSamplers[keep];
+        const size_t poolCount = slot.Pools.size();
+        for (size_t i = 0; i < poolCount; ++i)
+        {
+            if (i == keep) continue;
+            vkDestroyDescriptorPool(dev.Device, slot.Pools[i], nullptr);
+        }
+        VkDescriptorPool keptPool = slot.Pools[keep];
+        ResetPoolSlotBookkeeping(slot);
+        slot.Pools.push_back(keptPool);
+        slot.PoolMaxSets.push_back(keptMaxSets);
+        slot.PoolSamplers.push_back(keptSamplers);
+        // Next growth doubles from the retained peak, not from base.
+        slot.NextMaxSets  = keptMaxSets * 2;
+        slot.NextSamplers = keptSamplers * 2;
+        DMGE_LOG_INFO("Vulkan: descriptor pools shrank from {0} to 1 (retained "
+                      "peak capacity {1} sets / {2} sampler descriptors).",
+                      poolCount, keptMaxSets, keptSamplers);
+    }
+
+    // The pool reset invalidates every descriptor set allocated from the
+    // pools, so the frame's cache must drop all entries (P0-1).
     DescriptorCache(frameIndex).clear();
+    slot.SetsAllocatedThisFrame = 0;
     m_UniformOffset[frameIndex] = 0;
 }
 
@@ -1118,20 +1245,43 @@ VkDeviceSize VulkanRendererAPI::CommitUniforms(VulkanShader& shader, uint32_t fr
 VkDescriptorSet VulkanRendererAPI::AllocateDescriptorSet(VkDescriptorSetLayout layout, uint32_t frameIndex)
 {
     auto& dev = VulkanDevice::Get();
-    VkDescriptorSetAllocateInfo info{};
-    info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    info.descriptorPool = m_DescriptorPools[frameIndex];
-    info.descriptorSetCount = 1;
-    info.pSetLayouts = &layout;
+    auto& slot = PoolSlot(frameIndex);
+    if (slot.Pools.empty())
+        CreateDescriptorPoolInto(slot, dev.Device); // defensive re-init
 
-    VkDescriptorSet set = VK_NULL_HANDLE;
-    VkResult result = vkAllocateDescriptorSets(dev.Device, &info, &set);
-    if (result != VK_SUCCESS)
+    // Newest pool first: earlier pools only still have space before they
+    // filled up mid-frame (they refill at the next ResetFrame).
+    for (size_t i = slot.Pools.size(); i > 0; --i)
     {
-        DMGE_LOG_ERROR("Vulkan: failed to allocate descriptor set ({0})", static_cast<int>(result));
-        return VK_NULL_HANDLE;
+        VkDescriptorSet set = TryAllocateDescriptorSet(dev.Device, slot.Pools[i - 1], layout);
+        if (set != VK_NULL_HANDLE)
+        {
+            ++slot.SetsAllocatedThisFrame;
+            return set;
+        }
     }
-    return set;
+
+    // P2: exhaustion is now observable - warn with the full picture, grow
+    // (old pools stay alive, so cached sets from the P0-1 cache remain
+    // valid) and retry once.
+    DMGE_LOG_WARN("Vulkan: descriptor pools exhausted on frame slot {0} "
+                  "({1} sets allocated this frame across {2} pool(s), largest "
+                  "capacity {3} sets); growing - new pool capacity {4} sets / "
+                  "{5} sampler descriptors.",
+                  frameIndex, slot.SetsAllocatedThisFrame, slot.Pools.size(),
+                  slot.PoolMaxSets.back(), slot.NextMaxSets, slot.NextSamplers);
+    CreateDescriptorPoolInto(slot, dev.Device);
+
+    VkDescriptorSet set = TryAllocateDescriptorSet(dev.Device, slot.Pools.back(), layout);
+    if (set != VK_NULL_HANDLE)
+    {
+        ++slot.SetsAllocatedThisFrame;
+        return set;
+    }
+
+    DMGE_LOG_ERROR("Vulkan: descriptor set allocation failed even after pool "
+                   "growth - this draw will be skipped.");
+    return VK_NULL_HANDLE;
 }
 
 void VulkanRendererAPI::WriteDescriptorSet(VkDescriptorSet set, VulkanShader& shader,

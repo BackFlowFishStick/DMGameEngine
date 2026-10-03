@@ -9,11 +9,13 @@
  *   - a VkPipeline cache keyed by (shader, vertex layout, blend, depth,
  *     cull mode); pipelines are created lazily on the first draw that
  *     needs them and reused thereafter.
- *   - a per-frame scratch uniform buffer (host-visible) + per-frame
- *     descriptor pool. VulkanShader commits its named uniforms into a
- *     fresh slot of the scratch buffer per draw and binds it through a
- *     dynamic UBO descriptor, so the OpenGL per-draw Set*()/Material
- *     semantics are reproduced exactly.
+ *   - a per-frame scratch uniform buffer (host-visible) + a per-frame
+ *     descriptor pool list that auto-grows with a warning when a frame
+ *     exhausts every pool (previously draws were silently dropped) and
+ *     shrinks back to peak capacity at frame start. VulkanShader commits
+ *     its named uniforms into a fresh slot of the scratch buffer per draw
+ *     and binds it through a dynamic UBO descriptor, so the OpenGL
+ *     per-draw Set*()/Material semantics are reproduced exactly.
  *   - a per-frame descriptor-set cache keyed by (shaderID, hash of the
  *     bound texture handles): draws whose bindings match a previous draw
  *     in the same frame reuse the cached set and only change the dynamic
@@ -176,8 +178,10 @@ private:
     VkPipelineCache m_PipelineCache = VK_NULL_HANDLE;
     std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash> m_Pipelines;
 
-    // Per frame-in-flight.
-    VkDescriptorPool m_DescriptorPools[kMaxFramesInFlight] = { VK_NULL_HANDLE, VK_NULL_HANDLE };
+    // Per frame-in-flight. The descriptor pools are NOT members: each slot
+    // owns a growable LIST of pools (P2: exhaustion warning + auto-grow),
+    // stored file-static in VulkanRendererAPI.cpp because R1 forbids STL
+    // members on this exported class.
     VkBuffer         m_UniformBuffers[kMaxFramesInFlight]   = { VK_NULL_HANDLE, VK_NULL_HANDLE };
     VmaAllocation    m_UniformAllocs[kMaxFramesInFlight]    = { VK_NULL_HANDLE, VK_NULL_HANDLE };
     void*            m_UniformMapped[kMaxFramesInFlight]    = { nullptr, nullptr };
