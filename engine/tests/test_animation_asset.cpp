@@ -31,8 +31,13 @@ using namespace DMGameEngine;
 
 namespace {
 
+// Small self-contained glTF (embedded buffers) copied into tests/assets so
+// the suite runs on any checkout (CI has no assimp test tree, see .gitignore).
+#ifndef DMGE_TEST_ASSETS_DIR
+#define DMGE_TEST_ASSETS_DIR "."
+#endif
 constexpr const char* kSkinModelPath =
-    "D:/CPPPractices/DMGameEngine/engine/dependencies/assimp/test/models/glTF2/simple_skin/simple_skin.gltf";
+    DMGE_TEST_ASSETS_DIR "/simple_skin.gltf";
 
 void WriteFile(const std::filesystem::path& p, const std::string& content)
 {

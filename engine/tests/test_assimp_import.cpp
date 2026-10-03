@@ -33,9 +33,13 @@ using namespace DMGameEngine;
 
 namespace {
 
-// assimp test model already vendored in the dependency tree (read-only).
+// Small OBJ copied into tests/assets so the suite runs on any checkout
+// (CI has no assimp test tree, see .gitignore).
+#ifndef DMGE_TEST_ASSETS_DIR
+#define DMGE_TEST_ASSETS_DIR "."
+#endif
 constexpr const char* kObjModelPath =
-    "D:/CPPPractices/DMGameEngine/engine/dependencies/assimp/test/models/OBJ/box.obj";
+    DMGE_TEST_ASSETS_DIR "/box.obj";
 
 Entity FindByUUID(Scene& scene, uint64_t uuid)
 {

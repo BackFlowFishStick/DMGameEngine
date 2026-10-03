@@ -46,7 +46,8 @@ if(DMGE_ANIMATION)
         gtest
         gtest_main
     )
-    target_compile_definitions(dmge_animation_tests PRIVATE DMGE_TEST_HEADLESS)
+    target_compile_definitions(dmge_animation_tests PRIVATE DMGE_TEST_HEADLESS
+    DMGE_TEST_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
     if(MSVC)
         target_compile_options(dmge_animation_tests PRIVATE /utf-8 /W4)
     endif()
@@ -74,7 +75,8 @@ target_link_libraries(dmge_tests PRIVATE
 # The engine PCH itself is unaffected. See PRECOMPILED_HEADER.md.
 
 # Tests are pure logic; never instantiate a window / graphics context.
-target_compile_definitions(dmge_tests PRIVATE DMGE_TEST_HEADLESS)
+target_compile_definitions(dmge_tests PRIVATE DMGE_TEST_HEADLESS
+    DMGE_TEST_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
 
 # spdlog (transitively pulled in via DMGameEngine/Core/Log.h -> Shader.h)
 # bundles fmt, which static_asserts under MSVC unless /utf-8 is set. The
