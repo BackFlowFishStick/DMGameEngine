@@ -43,6 +43,12 @@ public:
     uint32_t GetIndexCount() const;
 
 private:
+    // Maximum vertex buffers bindable in one vkCmdBindVertexBuffers call.
+    // Real meshes use 1-2 (vertex + instance) streams; anything beyond the
+    // capacity is rejected with an error log at AddVertexBuffer time (never
+    // per draw).
+    static constexpr uint32_t kMaxVertexBindings = 8;
+
     void RebuildLayout();
 
     std::vector<DM::Ref<VertexBuffer>> m_VertexBuffers;
@@ -51,6 +57,17 @@ private:
     std::vector<VkVertexInputBindingDescription>   m_BindingDescs;
     std::vector<VkVertexInputAttributeDescription> m_AttributeDescs;
     uint64_t m_LayoutHash = 0;
+
+    // ── Bind() fast path (P1: no per-draw heap allocation / RTTI) ──
+    // The VkBuffer handles are resolved ONCE, in AddVertexBuffer /
+    // SetIndexBuffer, and cached here. VulkanVertexBuffer/VulkanIndexBuffer
+    // never reallocate their VkBuffer (SetData only updates contents and the
+    // Refs in m_VertexBuffers keep the objects alive), so the handles stay
+    // valid for the array's lifetime. Fixed C arrays, not STL: R1 forbids
+    // new STL members on an exported class.
+    VkBuffer m_VkBuffers[kMaxVertexBindings] = {};
+    uint32_t m_BufferCount                   = 0;
+    VkBuffer m_VkIndexBuffer                 = VK_NULL_HANDLE;
 };
 
 } // namespace DMGameEngine

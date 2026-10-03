@@ -93,6 +93,21 @@ void VulkanVertexArray::RebuildLayout()
 void VulkanVertexArray::AddVertexBuffer(const DM::Ref<VertexBuffer>& vertexBuffer)
 {
     DMGE_CORE_ASSERT(vertexBuffer, "VulkanVertexArray: vertex buffer is null!");
+
+    // One-time (setup path, not per draw) downcast + handle cache. The
+    // dynamic cast here is the only RTTI use: it pins the concrete type once
+    // so the per-draw Bind() can go straight to the cached VkBuffer.
+    auto vkBuffer = std::dynamic_pointer_cast<VulkanVertexBuffer>(vertexBuffer);
+    DMGE_CORE_ASSERT(vkBuffer, "VulkanVertexArray: expected a VulkanVertexBuffer!");
+
+    if (m_BufferCount >= kMaxVertexBindings)
+    {
+        DMGE_LOG_ERROR("VulkanVertexArray: more than {0} vertex buffers not supported "
+                       "(buffer ignored).", kMaxVertexBindings);
+        return;
+    }
+    m_VkBuffers[m_BufferCount++] = vkBuffer->GetVkBuffer();
+
     m_VertexBuffers.push_back(vertexBuffer);
     RebuildLayout();
 }
@@ -100,6 +115,12 @@ void VulkanVertexArray::AddVertexBuffer(const DM::Ref<VertexBuffer>& vertexBuffe
 void VulkanVertexArray::SetIndexBuffer(const DM::Ref<IndexBuffer>& indexBuffer)
 {
     DMGE_CORE_ASSERT(indexBuffer, "VulkanVertexArray: index buffer is null!");
+
+    // One-time downcast + handle cache (see AddVertexBuffer).
+    auto vkIndexBuffer = std::dynamic_pointer_cast<VulkanIndexBuffer>(indexBuffer);
+    DMGE_CORE_ASSERT(vkIndexBuffer, "VulkanVertexArray: expected a VulkanIndexBuffer!");
+    m_VkIndexBuffer = vkIndexBuffer->GetVkBuffer();
+
     m_IndexBuffer = indexBuffer;
 }
 
@@ -110,7 +131,7 @@ uint32_t VulkanVertexArray::GetIndexCount() const
 
 void VulkanVertexArray::Bind() const
 {
-    if (m_VertexBuffers.empty())
+    if (m_BufferCount == 0)
         return;
 
     auto& ctx = VulkanGraphicsContext::Get();
@@ -119,27 +140,15 @@ void VulkanVertexArray::Bind() const
 
     VkCommandBuffer cmd = ctx.GetCurrentCommandBuffer();
 
-    // Bind all vertex buffers in one call (one binding each).
-    std::vector<VkBuffer> buffers;
-    std::vector<VkDeviceSize> offsets;
-    buffers.reserve(m_VertexBuffers.size());
-    offsets.reserve(m_VertexBuffers.size());
-    for (uint32_t i = 0; i < m_VertexBuffers.size(); ++i)
-    {
-        const auto& vb = std::dynamic_pointer_cast<VulkanVertexBuffer>(m_VertexBuffers[i]);
-        DMGE_CORE_ASSERT(vb, "VulkanVertexArray: expected a VulkanVertexBuffer!");
-        buffers.push_back(vb->GetVkBuffer());
-        offsets.push_back(0);
-    }
-    vkCmdBindVertexBuffers(cmd, 0, static_cast<uint32_t>(buffers.size()),
-                            buffers.data(), offsets.data());
+    // P1 hot path: the VkBuffer handles were resolved and cached at
+    // AddVertexBuffer/SetIndexBuffer time, so binding is two driver calls
+    // with zero heap allocations and zero RTTI (was: two std::vector
+    // allocations + one dynamic_pointer_cast per draw).
+    static constexpr VkDeviceSize kZeroOffsets[kMaxVertexBindings] = {};
+    vkCmdBindVertexBuffers(cmd, 0, m_BufferCount, m_VkBuffers, kZeroOffsets);
 
-    if (m_IndexBuffer)
-    {
-        const auto& ib = std::dynamic_pointer_cast<VulkanIndexBuffer>(m_IndexBuffer);
-        DMGE_CORE_ASSERT(ib, "VulkanVertexArray: expected a VulkanIndexBuffer!");
-        vkCmdBindIndexBuffer(cmd, ib->GetVkBuffer(), 0, VK_INDEX_TYPE_UINT32);
-    }
+    if (m_VkIndexBuffer != VK_NULL_HANDLE)
+        vkCmdBindIndexBuffer(cmd, m_VkIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 }
 
 } // namespace DMGameEngine

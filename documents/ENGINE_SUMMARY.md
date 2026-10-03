@@ -2315,3 +2315,16 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 - `engine/src/DMGameEngine/ImGui/ImGuiLayer.cpp`：OnEvent 加 context 空守卫。
 
 **验证：** 全量构建零 error、/W4 零新增警告、ctest 37/37 全绿；编辑器连续 10 次启动全部稳定（修复前约 50% 概率 1~2 秒内崩溃）。GUI 交互（多标签/Play/导出）仍建议人工过一遍。
+### 2026-10-03 - Vulkan 性能 P1-P2 四项（VertexArray Bind / PipelineCache 落盘 / TRANSIENT pool / descriptor pool 扩容）
+
+分支 `agent/render-agent/vulkan-p1p2`（worktree `.worktrees/render-agent`）。四个独立 commit：
+
+- **P1 VertexArray::Bind（394edd2）**：VkBuffer/索引句柄在 AddVertexBuffer/SetIndexBuffer 一次性解析进定长 C 数组成员（R1 无新增 STL），热路径零堆分配零 RTTI（原每 draw 2 个 vector + 3 次 RTTI）。微基准 /O2：105~113 → 0.4~0.6 ns/draw（~200×，仅 CPU prep 侧）。
+- **P1 PipelineCache 落盘（3a8c44e）**：CWD `vulkan_pipeline_cache.bin`（44 字节头钉死设备身份 + 驱动 blob），Init 经 pInitialData 种入（驱动拒绝则回退空缓存重建，K-019），析构原子回写；身份不匹配/损坏/截断 → 告警丢弃空缓存启动。微基准：32 pipeline 冷建 120 µs/pipe → 热建 6 µs/pipe（~21×）。
+- **P2 TRANSIENT_BIT（9b338f8）**：per-frame 槽 pool 与 ImmediateSubmit pool 补 `VK_COMMAND_POOL_CREATE_TRANSIENT_BIT`（保留 RESET_COMMAND_BUFFER_BIT，两处均逐 CB reset）。
+- **P2 descriptor pool 告警+扩容（754d8fa）**：每帧槽 pool 列表，全部耗尽 → WARN（含本帧 set 计数/容量）→ 追加双倍 pool → 重试；扩容保留旧 pool 故 P0-1 缓存无需失效，失效仍只在 ResetFrame（reset 全部 pool + 清缓存 + 回收缩至峰值池）。pool 存储移 .cpp 文件静态（R1），头删 m_DescriptorPools。
+- deletion queue（K-009）flush 语义未变，test_deletion_queue.cpp 性质测试原样通过。
+
+**涉及文件：** `Platform/Vulkan/VulkanVertexArray.h/.cpp`、`VulkanRendererAPI.h/.cpp`、`VulkanGraphicsContext.cpp`、`VulkanDevice.cpp`（无新文件，无 CMake 改动）
+
+**验证：** Vulkan ON 全量零 error + ctest 37/37 绿 + 改动文件零新增 /W4 警告；`DMGE_VULKAN_BACKEND=OFF` 复测 37/37 绿无回归。量化数据（RTX 4070 Ti，无 surface 微基准，K-014 方法）与失效/扩容设计见 `VULKAN_FIXES.md` §12.5；运行时 Profiler 复核待人工。新坑：kb/KB-07 K-019。
