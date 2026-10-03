@@ -27,7 +27,9 @@ enum class AssetType : uint8_t
     Texture2DArray,
     Material,
     Mesh,
-    Audio
+    Audio,
+    Skeleton,       // animation: joint hierarchy + inverse binds (DMGE_ANIMATION)
+    AnimationClip   // animation: keyframe channels (DMGE_ANIMATION)
 };
 
 struct AssetMetadata
@@ -47,10 +49,14 @@ class Shader;
 class Texture2D;
 class Material;
 class Mesh;
+class Skeleton;
+class AnimationClip;
 
 template<> inline AssetType AssetTypeOf<Shader>()    { return AssetType::Shader; }
 template<> inline AssetType AssetTypeOf<Texture2D>()  { return AssetType::Texture2D; }
 template<> inline AssetType AssetTypeOf<Material>()   { return AssetType::Material; }
 template<> inline AssetType AssetTypeOf<Mesh>()       { return AssetType::Mesh; }
+template<> inline AssetType AssetTypeOf<Skeleton>()   { return AssetType::Skeleton; }
+template<> inline AssetType AssetTypeOf<AnimationClip>() { return AssetType::AnimationClip; }
 
 } // namespace DMGameEngine

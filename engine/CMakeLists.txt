@@ -217,6 +217,7 @@ if(DMGE_ANIMATION)
     list(APPEND DMGE_SOURCES
         "src/DMGameEngine/Animation/Skeleton.cpp"
         "src/DMGameEngine/Animation/AnimationMath.cpp"
+        "src/DMGameEngine/Animation/AnimationAssetLoaders.cpp"
     )
     list(APPEND DMGE_HEADERS
         "src/DMGameEngine/Animation/Skeleton.h"

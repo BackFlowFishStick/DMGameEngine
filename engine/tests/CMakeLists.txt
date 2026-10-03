@@ -37,6 +37,7 @@ add_executable(dmge_tests
 if(DMGE_ANIMATION)
     add_executable(dmge_animation_tests
         test_animation_math.cpp
+        test_animation_asset.cpp
     )
     target_link_libraries(dmge_animation_tests PRIVATE
         DMGameEngine
