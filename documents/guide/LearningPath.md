@@ -120,6 +120,7 @@ flowchart LR
 - **常见误区**：
   - 以为编辑器有独立的渲染路径——它复用的就是站 ③ 的 `Renderer`，只是把 target 换成了离屏 FB。
   - 忽略 `ImGui/ImGuiLayer.h` 是**引擎侧编译并导出**的——编辑器不得再链一份 ImGui。
+- **详细讲解**：本站不展开，见 [EditorTour.md](EditorTour.md)（独立 exe 消费 DLL、多标签与全局单 Play、Play 快照隔离、Prefab、导出可运行工程、viewport 坑）。
 - **后续**：编辑器自身的路线图与面板划分见 `editor/EDITOR_ROADMAP.md`。
 
 ---
