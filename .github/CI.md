@@ -6,15 +6,15 @@
 
 | Job | Runner | 做什么 |
 |---|---|---|
-| `build-test` | `windows-latest` | configure → build → ctest（MSVC / VS2022 生成器 / x64 / Debug / `DMGE_BUILD_TESTS=ON`） |
-| `clang-tidy` | `windows-latest` | Ninja configure 导出 `compile_commands.json` → 对 `engine/src` 跑 clang-tidy 报告（`continue-on-error: true`，不拦截） |
+| `build-test` | `windows-latest` | msvc-dev-cmd → Ninja configure → build → ctest（MSVC / Debug / `DMGE_BUILD_TESTS=ON`） |
+| `clang-tidy` | `windows-latest` | Ninja configure 导出 `compile_commands.json` → 对 `engine/src` 跑 clang-tidy 报告（步骤恒绿，不拦截） |
 
 - **触发**：push 到 `main` / `develop`、所有 pull_request、手动 `workflow_dispatch`。
 - **并发取消**：同分支新提交自动取消旧运行（`concurrency.cancel-in-progress`）。
 - **fail-fast**：矩阵内任一配置失败立即取消其余 job（当前仅 Debug 单配置，为后续扩展预留）。
-- **生成器选择**：用 `"Visual Studio 17 2022"` 而非 Ninja + vcvars —— runner 镜像自带完整 VS2022，
-  VS 生成器无需环境引导步骤；若镜像升级导致生成器名不匹配，改 `-G` 参数即可（ci.yml 注释里有
-  Ninja + `ilammy/msvc-dev-cmd` 替代方案）。
+- **生成器选择**：Ninja + `ilammy/msvc-dev-cmd`。windows-latest 镜像已迁移到不含 VS2022 实例的
+  VS2026 镜像，`-G "Visual Studio 17 2022"` 报 "could not find any instance of Visual Studio"
+  （2026-10-03 首跑失败原因）；Ninja 路径与本地开发路径一致，且 clang-tidy job 已验证可行。
 - **Vulkan 后端 job**：`DMGE_VULKAN_BACKEND=ON` 需 runner 装 Vulkan SDK（VMA + shaderc）。
   SDK 安装方案（社区 action 或 LunarG 安装器）可靠性未验证，暂以注释骨架形式保留在 ci.yml 末尾，
   固定 SDK 版本后再启用。

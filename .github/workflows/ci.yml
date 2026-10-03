@@ -2,20 +2,16 @@
 # DMGameEngine CI（ROADMAP 阶段 0b）
 #
 # 设计决策：
-# - 生成器选 "Visual Studio 17 2022" 而不是 Ninja + vcvars：
-#   GitHub 的 windows-latest 镜像自带完整 VS2022 与对应 CMake/Ninja/MSBuild，
-#   VS 生成器无需任何环境引导步骤（Ninja 方案需要 ilammy/msvc-dev-cmd 之类
-#   的 vcvars action，多一层第三方依赖与失败面）。项目本身用 MSVC 工具链
-#   （C++23, /W4 /utf-8），VS 生成器默认即可命中正确工具集。
-#   ⚠️ 若 runner 镜像升级导致 VS 版本/生成器名不匹配（例如 windows-latest
-#   切到只带 VS2026 的镜像），把 -G 参数改成镜像实际自带的版本即可；
-#   也可改用 Ninja：先 `ilammy/msvc-dev-cmd@v1` 引导环境，再
-#   `cmake -S . -B build -G Ninja ...`。
+# - 生成器选 Ninja + ilammy/msvc-dev-cmd：GitHub 的 windows-latest 镜像已迁移
+#   到不含 VS2022 实例的 VS2026 镜像，`-G "Visual Studio 17 2022"` 会直接报
+#   "could not find any instance of Visual Studio"（首次 CI 实跑失败原因，
+#   2026-10-03）。Ninja 路径与本地开发路径（CLion Ninja + vcvars）完全一致，
+#   且 clang-tidy job 已在 runner 上验证 Ninja configure 可行。
 # - CMake ≥ 3.20：runner 预装 CMake 远高于此，无需额外安装。
 # - GoogleTest / entt / nlohmann_json 走 FetchContent，configure 需要网络，
 #   GitHub runner 默认可出网，无需配置。
-# - clang-tidy：见仓库根 .clang-tidy。已设独立 job（continue-on-error 的报告型，
-#   不拦截）；存量噪声清理完后可升级为强制门禁。
+# - clang-tidy：见仓库根 .clang-tidy。报告型 job（continue-on-error + 步骤
+#   恒绿，报告只在日志里），存量噪声清理完后可升级为强制门禁。
 #   （本地可跑：cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 后 clang-tidy -p build）
 # ============================================================================
 
@@ -47,24 +43,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Configure
         run: >
-          cmake -S . -B build
-          -G "Visual Studio 17 2022" -A x64
+          cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=${{ matrix.config }}
           -DDMGE_BUILD_TESTS=ON
 
       - name: Build
-        run: cmake --build build --config ${{ matrix.config }} --parallel
+        run: cmake --build build --parallel
 
-      # 历史坑：enable_testing() 曾写在 engine/ 子目录，根 ctest 假绿（详见 kb/KB-07 K-011），已挪至根 CMakeLists.txt。
+      # Ninja 是单配置生成器，无需 -C。历史坑：enable_testing() 曾写在
+      # engine/ 子目录，根 ctest 假绿（详见 kb/KB-07 K-011），已挪至根 CMakeLists.txt。
       - name: Test
-        run: ctest --test-dir build -C ${{ matrix.config }} --output-on-failure
+        run: ctest --test-dir build --output-on-failure
 
   # ------------------------------------------------------------------
   # clang-tidy 报告 job（非门禁）：仓库根 .clang-tidy 为保守检查集。
-  # continue-on-error: true —— 只输出报告不拦截合并，存量噪声清理完后再升级为强制门禁。
-  # Ninja 生成器才能导出 compile_commands.json（VS 生成器不支持），故需 vcvars 引导。
+  # continue-on-error + 步骤恒绿——报告只进日志，不拦截合并。
   # ------------------------------------------------------------------
   clang-tidy:
     name: clang-tidy (report only)
@@ -89,7 +87,9 @@ jobs:
         run: >
           $files = Get-ChildItem -Recurse -Filter *.cpp -Path engine/src |
           ForEach-Object { $_.FullName } ;
-          clang-tidy -p build-tidy @files
+          clang-tidy -p build-tidy @files ;
+          Write-Host "clang-tidy exit code: $LASTEXITCODE (report-only, non-gating)" ;
+          exit 0
 
   # ------------------------------------------------------------------
   # Vulkan 后端构建（可选加分项，暂为骨架，整体注释掉并注明原因）：
