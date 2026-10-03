@@ -36,6 +36,11 @@ private:
     void BeginPlay();
     void EndPlay();
 
+    // ── Asset drag/drop (stage 3) ───────────────────────────────
+    // Creates a new entity with a MeshComponent (default material) from a
+    // model file. No-op during play mode (edits blocked).
+    bool CreateEntityFromModel(const std::string& path);
+
     EditorScene m_Scene;
     DMGameEngine::Entity m_Selected = DMGameEngine::NullEntity;
     glm::vec2 m_ViewportSize{0.0f, 0.0f};

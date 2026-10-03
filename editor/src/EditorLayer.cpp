@@ -7,6 +7,7 @@
 #include <ImGuizmo.h>
 #include <filesystem>
 #include <cstdio>
+#include <cctype>
 #include <cfloat>
 #include <cmath>
 #include <algorithm>
@@ -56,6 +57,37 @@ static bool RayAABB(const glm::vec3& o, const glm::vec3& d,
     }
     tHit = tmin;
     return true;
+}
+
+static bool IsModelExtension(std::string ext) {
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".mesh";
+}
+
+// ── Default material helper ─────────────────────────────────────
+// assimp imports carry no material; assign a default Blinn-Phong so the mesh
+// actually renders. (AssetLoader<Material> is not exported - K-002 - so the
+// editor builds the material itself instead of loading a .mat file.)
+static DM::Ref<Material> CreateDefaultMaterial() {
+    auto shader = AssetManager::Get().Load<Shader>(
+        "D:/CPPPractices/DMGameEngine/engine/shaders/BlinnPhong.glsl");
+    if (!shader) return nullptr;
+    auto mat = DM::CreateRef<Material>(shader);
+    mat->SetFloat3("u_AlbedoColor", {0.8f, 0.8f, 0.85f});
+    mat->SetFloat("u_SpecularStrength", 0.5f);
+    mat->SetFloat("u_Shininess", 64.0f);
+    mat->SetInt("u_UseTexture", 0);
+    return mat;
+}
+
+static void AssignDefaultMaterial(MeshComponent& mc) {
+    auto baseMat = CreateDefaultMaterial();
+    if (!baseMat) return;
+    mc.MaterialOverrides.clear();
+    mc.MaterialOverrides.resize(mc.Mesh ? mc.Mesh->SubMeshes.size() : 0);
+    for (auto& ov : mc.MaterialOverrides)
+        ov = DM::CreateRef<MaterialInstance>(baseMat);
 }
 
 EditorLayer::EditorLayer()
@@ -299,6 +331,16 @@ void EditorLayer::DrawViewport() {
             m_Scene.GetTarget()->GetColorAttachment(0)->GetRendererID();
         ImGui::Image(texID, avail, ImVec2(0, 1), ImVec2(1, 0));
 
+        // Drag-drop target: drop a model asset on the viewport to create a
+        // new entity with a MeshComponent.
+        if (ImGui::BeginDragDropTarget()) {
+            if (auto* pl = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
+                std::string path((const char*)pl->Data);  // to null terminator
+                CreateEntityFromModel(path);
+            }
+            ImGui::EndDragDropTarget();
+        }
+
         // Mouse pick: click the viewport to select the nearest mesh entity.
         if (m_ViewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGuizmo::IsUsing() && !ImGuizmo::IsOver()) {
             ImVec2 imMin = ImGui::GetItemRectMin();
@@ -403,6 +445,22 @@ void EditorLayer::DrawHierarchy() {
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsWindowHovered()
             && !ImGui::IsAnyItemHovered())
             m_Selected = NullEntity;
+    }
+    // Window-wide drop target: dropping a model asset into the hierarchy
+    // creates a new root entity with a MeshComponent.
+    {
+        ImVec2 wpos = ImGui::GetWindowPos();
+        ImVec2 rmin = ImGui::GetWindowContentRegionMin();
+        ImVec2 rmax = ImGui::GetWindowContentRegionMax();
+        ImRect bb(ImVec2(wpos.x + rmin.x, wpos.y + rmin.y),
+                  ImVec2(wpos.x + rmax.x, wpos.y + rmax.y));
+        if (ImGui::BeginDragDropTargetCustom(bb, ImGui::GetID("HierarchyDropTarget"))) {
+            if (auto* pl = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
+                std::string path((const char*)pl->Data);
+                CreateEntityFromModel(path);
+            }
+            ImGui::EndDragDropTarget();
+        }
     }
     ImGui::End();
 }
@@ -534,11 +592,11 @@ void EditorLayer::DrawComponents(Entity e) {
             if (ImGui::BeginDragDropTarget()) {
                 if (auto* pl = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
                     std::string path((const char*)pl->Data);  // to null terminator
-                    auto ext = std::filesystem::path(path).extension().string();
-                    if (ext == ".mesh" || ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb") {
+                    if (IsModelExtension(std::filesystem::path(path).extension().string())) {
                         auto mesh = AssetManager::Get().Load<Mesh>(path);
                         if (mesh) {
                             mc.Mesh = mesh;
+                            mc.MeshAsset = AssetHandle(AssetManager::Get().GetUUID(path));
                             AABBd lb;
                             if (MeshLocalBounds(*mesh, lb)) {
                                 // fbx models vary wildly in scale (e.g. this one is 200 units).
@@ -552,21 +610,7 @@ void EditorLayer::DrawComponents(Entity e) {
                                     s->MarkSubtreeDirty(e);
                                 }
                             }
-                            mc.MaterialOverrides.clear();
-                            // assimp imports carry no material -> assign a default
-                            // Blinn-Phong material so the mesh actually renders.
-                            auto shader = AssetManager::Get().Load<Shader>(
-                                "D:/CPPPractices/DMGameEngine/engine/shaders/BlinnPhong.glsl");
-                            if (shader) {
-                                auto baseMat = DM::CreateRef<Material>(shader);
-                                baseMat->SetFloat3("u_AlbedoColor", {0.8f, 0.8f, 0.85f});
-                                baseMat->SetFloat("u_SpecularStrength", 0.5f);
-                                baseMat->SetFloat("u_Shininess", 64.0f);
-                                baseMat->SetInt("u_UseTexture", 0);
-                                mc.MaterialOverrides.resize(mesh->SubMeshes.size());
-                                for (auto& ov : mc.MaterialOverrides)
-                                    ov = DM::CreateRef<MaterialInstance>(baseMat);
-                            }
+                            AssignDefaultMaterial(mc);
                             DMGE_CLIENT_INFO("Loaded mesh into entity: {0}", path);
                         }
                     }
@@ -677,6 +721,49 @@ void EditorLayer::DrawAssetBrowser() {
     if (!m_SelectedAsset.empty())
         ImGui::TextWrapped("Selected: %s", m_SelectedAsset.c_str());
     else
-        ImGui::TextDisabled("Drag a [mesh] onto a MeshComponent to load it.");
+        ImGui::TextDisabled("Drag a [mesh] onto the Viewport or Hierarchy to create an entity.");
     ImGui::End();
+}
+
+// ── Model drop -> new entity ────────────────────────────────────
+
+bool EditorLayer::CreateEntityFromModel(const std::string& path) {
+    // Play-mode isolation: entity creation is an edit; block it.
+    if (m_Scene.IsPlaying()) {
+        DMGE_CLIENT_WARN("Cannot create entities during play mode (changes would be discarded on Stop).");
+        return false;
+    }
+    Scene* s = m_Scene.GetScene();
+    if (!s) return false;
+    if (!IsModelExtension(std::filesystem::path(path).extension().string())) {
+        DMGE_CLIENT_WARN("Not a model file: {0}", path);
+        return false;
+    }
+    auto mesh = AssetManager::Get().Load<Mesh>(path);
+    if (!mesh) {
+        DMGE_CLIENT_WARN("Failed to load model: {0}", path);
+        return false;
+    }
+    std::string name = std::filesystem::path(path).stem().string();
+    Entity e = s->CreateEntity(name);
+    auto& mc = s->AddComponent<MeshComponent>(e);
+    mc.Mesh = mesh;
+    // Record the registry UUID (Load<Mesh> by path registers the file) so the
+    // entity round-trips through scene save / prefab save.
+    mc.MeshAsset = AssetHandle(AssetManager::Get().GetUUID(path));
+    AssignDefaultMaterial(mc);
+    AABBd lb;
+    if (MeshLocalBounds(*mesh, lb)) {
+        float maxExt = std::max({lb.max.x - lb.min.x, lb.max.y - lb.min.y, lb.max.z - lb.min.z});
+        if (maxExt > 0.0001f && s->HasComponent<TransformComponent>(e)) {
+            float sc = 2.0f / maxExt;
+            auto& tc = s->GetComponent<TransformComponent>(e);
+            tc.Scale = {sc, sc, sc};
+            tc.Dirty = true;
+            s->MarkSubtreeDirty(e);
+        }
+    }
+    m_Selected = e;
+    DMGE_CLIENT_INFO("Created entity '{0}' from model {1}", name, path);
+    return true;
 }
