@@ -267,6 +267,14 @@ void VulkanGraphicsContext::RecreateSwapchain()
     if (width == 0 || height == 0)
         return; // minimized window: defer until non-zero
 
+    // The old swapchain images and the cached pipelines (whose keys bake the
+    // old formats) may still be referenced by an in-flight submission.
+    // Recreate is a rare, resize-driven event: idle the device first so the
+    // destroys below are not use-while-in-flight (review item A).
+    auto& dev = VulkanDevice::Get();
+    if (dev.Device != VK_NULL_HANDLE)
+        vkDeviceWaitIdle(dev.Device);
+
     m_Swapchain.Recreate(static_cast<uint32_t>(width),
                          static_cast<uint32_t>(height));
 
@@ -291,6 +299,15 @@ void VulkanGraphicsContext::TransitionImageLayout(VkCommandBuffer cmd, VkImage i
                               srcStage, srcAccess, dstStage, dstAccess);
 }
 
+uint32_t VulkanGraphicsContext::CurrentDeletionBucket()
+{
+    if (s_Instance == nullptr)
+        return 0; // no live context: nothing in flight; Shutdown flushes
+
+    return Detail::DeletionBucketFor(s_Instance->m_FrameStarted,
+                                     s_Instance->m_CurrentFrame);
+}
+
 void VulkanGraphicsContext::BeginFrame(const glm::vec4& clearColor)
 {
     auto& dev = VulkanDevice::Get();
@@ -304,6 +321,11 @@ void VulkanGraphicsContext::BeginFrame(const glm::vec4& clearColor)
     // Wait for the previous frame using this slot to finish.
     VK_CHECK(vkWaitForFences(dev.Device, 1, &m_InFlightFences[m_CurrentFrame],
                              VK_TRUE, UINT64_MAX));
+
+    // The fence confirmed the slot's last submission: every frame that could
+    // reference an object deferred into this bucket has completed, so the
+    // destroys are now safe (review item B; scheduling in VulkanDeletionQueue.h).
+    dev.FlushDeletions(m_CurrentFrame);
 
     VkResult result = m_Swapchain.AcquireNextImage(m_ImageAvailableSemaphores[m_CurrentFrame],
                                                     &m_ImageIndex);

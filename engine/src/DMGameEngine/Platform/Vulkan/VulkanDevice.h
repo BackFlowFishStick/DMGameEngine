@@ -15,6 +15,7 @@
 #include "DMGameEngine/Core/Export.h"
 #include "DMGameEngine/Core/Log.h"
 #include "DMGameEngine/Platform/Vulkan/VulkanDebug.h"
+#include "DMGameEngine/Platform/Vulkan/VulkanDeletionQueue.h"
 
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
@@ -44,6 +45,24 @@ public:
     // waiting on a fence until it completes. Used for staging uploads
     // (buffer/image data, layout transitions).
     void ImmediateSubmit(const std::function<void(VkCommandBuffer)>& fn);
+
+    // ── Deferred destruction (review item B) ────────────────────
+    // GPU objects must not be destroyed directly from a resource destructor:
+    // an in-flight frame submission may still reference them. Destructors
+    // capture the handles into a closure and defer it into a per-frame
+    // bucket; VulkanGraphicsContext::BeginFrame flushes a bucket right
+    // after its fence confirmed the slot's last submission. Scheduling
+    // rule: VulkanDeletionQueue.h.
+    static void DeferDestroyTexture(VkSampler sampler, VkImageView view,
+                                    VkImage image, VmaAllocation alloc);
+    static void DeferDestroyBuffer(VkBuffer buffer, VmaAllocation alloc);
+    void PushDeferDestroy(uint32_t bucket, std::function<void()>&& fn);
+    void FlushDeletions(uint32_t bucket);
+    // Shutdown path only: the device must already be idle (no frames in
+    // flight), e.g. after VulkanGraphicsContext::DestroyFrameResources.
+    void FlushAllDeletions();
+
+    static bool IsInitialized() { return s_Instance != nullptr; }
 
     // ── Handles ─────────────────────────────────────────────────
     VkPhysicalDevice       PhysicalDevice  = VK_NULL_HANDLE;

@@ -70,10 +70,13 @@ VulkanTexture2D::VulkanTexture2D(std::string_view filepath)
 
 VulkanTexture2D::~VulkanTexture2D()
 {
-    auto& dev = VulkanDevice::Get();
-    if (m_Sampler   != VK_NULL_HANDLE) vkDestroySampler(dev.Device, m_Sampler, nullptr);
-    if (m_ImageView != VK_NULL_HANDLE) vkDestroyImageView(dev.Device, m_ImageView, nullptr);
-    if (m_Image     != VK_NULL_HANDLE) vmaDestroyImage(dev.Allocator, m_Image, m_Alloc);
+    // Deferred (review item B): an in-flight frame may still sample this
+    // texture; destroying here would be use-while-in-flight.
+    VulkanDevice::DeferDestroyTexture(m_Sampler, m_ImageView, m_Image, m_Alloc);
+    m_Sampler = VK_NULL_HANDLE;
+    m_ImageView = VK_NULL_HANDLE;
+    m_Image = VK_NULL_HANDLE;
+    m_Alloc = nullptr;
 }
 
 // ── Bind ───────────────────────────────────────────────────────────
@@ -109,11 +112,13 @@ void VulkanTexture2D::GenerateMipmaps()
 
 void VulkanTexture2D::Invalidate()
 {
-    auto& dev = VulkanDevice::Get();
-
-    if (m_Sampler   != VK_NULL_HANDLE) vkDestroySampler(dev.Device, m_Sampler, nullptr);
-    if (m_ImageView != VK_NULL_HANDLE) vkDestroyImageView(dev.Device, m_ImageView, nullptr);
-    if (m_Image     != VK_NULL_HANDLE) vmaDestroyImage(dev.Allocator, m_Image, m_Alloc);
+    // Old resources may be referenced by an in-flight frame (e.g. a
+    // FrameBuffer texture resized mid-frame): defer, don't destroy (0a-B).
+    VulkanDevice::DeferDestroyTexture(m_Sampler, m_ImageView, m_Image, m_Alloc);
+    m_Sampler = VK_NULL_HANDLE;
+    m_ImageView = VK_NULL_HANDLE;
+    m_Image = VK_NULL_HANDLE;
+    m_Alloc = nullptr;
 
     VkFormat format = TextureFormatToVk(m_Spec.Format);
     VkImageAspectFlags aspect = FormatAspect(m_Spec.Format);

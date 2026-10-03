@@ -63,6 +63,14 @@ public:
                                       VkImageAspectFlags aspect,
                                       VkPipelineStageFlags srcStage, VkAccessFlags srcAccess,
                                       VkPipelineStageFlags dstStage, VkAccessFlags dstAccess);
+
+    // Bucket index a deferred-destroy issued *now* must land in so that the
+    // next flush of that bucket (in BeginFrame, after the fence wait) is
+    // guaranteed to observe completion of every frame that may still
+    // reference the object. Scheduling rationale: VulkanDeletionQueue.h.
+    // Returns 0 when no context exists (nothing in flight; the
+    // VulkanDevice::Shutdown flush picks such entries up).
+    static uint32_t CurrentDeletionBucket();
     VkInstance       GetInstance() const { return m_Instance; }
 
     static VulkanGraphicsContext& Get() { return *s_Instance; }
@@ -102,6 +110,8 @@ private:
     VulkanSwapchain m_Swapchain;
 
     static constexpr uint32_t kMaxFramesInFlight = 2;
+    static_assert(kMaxFramesInFlight == ::DMGameEngine::Detail::kDeletionBucketCount,
+                  "per-frame deletion buckets must match frames in flight");
     VkCommandPool m_CommandPools[kMaxFramesInFlight]   = { VK_NULL_HANDLE, VK_NULL_HANDLE };
     VkCommandBuffer m_CommandBuffers[kMaxFramesInFlight] = { VK_NULL_HANDLE, VK_NULL_HANDLE };
     VkSemaphore m_ImageAvailableSemaphores[kMaxFramesInFlight] = { VK_NULL_HANDLE, VK_NULL_HANDLE };

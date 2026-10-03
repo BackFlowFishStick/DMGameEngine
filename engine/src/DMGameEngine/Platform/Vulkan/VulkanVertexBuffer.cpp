@@ -80,8 +80,11 @@ VulkanVertexBuffer::VulkanVertexBuffer(const void* vertices, uint32_t size)
 
 VulkanVertexBuffer::~VulkanVertexBuffer()
 {
-    if (m_Buffer != VK_NULL_HANDLE)
-        vmaDestroyBuffer(VulkanDevice::Get().Allocator, m_Buffer, m_Alloc);
+    // Deferred (review item B): an in-flight frame may still bind this
+    // buffer; destroying here would be use-while-in-flight.
+    VulkanDevice::DeferDestroyBuffer(m_Buffer, m_Alloc);
+    m_Buffer = VK_NULL_HANDLE;
+    m_Alloc = nullptr;
 }
 
 // ── Data upload ───────────────────────────────────────────────────

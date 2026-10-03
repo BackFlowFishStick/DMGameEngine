@@ -5,11 +5,13 @@
 #define VMA_IMPLEMENTATION
 
 #include "DMGameEngine/Platform/Vulkan/VulkanDevice.h"
+#include "DMGameEngine/Platform/Vulkan/VulkanGraphicsContext.h"
 
 #include <vector>
 #include <set>
 #include <cstring>
 #include <algorithm>
+#include <utility>
 
 namespace DMGameEngine {
 
@@ -19,6 +21,28 @@ VulkanDevice* VulkanDevice::s_Instance = nullptr;
 static const std::vector<const char*> kDeviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 };
+
+namespace {
+
+// Per-frame deferred-destroy storage (review item B). File-local instead of
+// VulkanDevice members: the class is DMGE_API-exported and R1 forbids STL
+// containers / mutex in an exported class layout (C4251 + cross-DLL CRT
+// layout hazard). The singleton is only instantiated inside this DLL, so
+// function-local statics are safe. Mutex because resource destructors may
+// run on non-render threads; the flush runs on the frame thread.
+std::mutex& DeletionMutex()
+{
+    static std::mutex s_Mutex;
+    return s_Mutex;
+}
+
+std::vector<std::function<void()>>& DeletionBucket(uint32_t bucket)
+{
+    static std::vector<std::function<void()>> s_Queues[Detail::kDeletionBucketCount];
+    return s_Queues[bucket % Detail::kDeletionBucketCount];
+}
+
+} // anonymous namespace
 
 // ── Lifetime ──────────────────────────────────────────────────────
 
@@ -35,6 +59,11 @@ void VulkanDevice::Shutdown()
         return;
 
     auto& d = *s_Instance;
+
+    // Execute any pending deferred destroys first (review item B): their
+    // closures reference Device/Allocator below. Shutdown is reached from
+    // the graphics-context destructor, which has already idled the device.
+    d.FlushAllDeletions();
 
     if (d.Allocator != VK_NULL_HANDLE)
         vmaDestroyAllocator(d.Allocator);
@@ -319,6 +348,67 @@ void VulkanDevice::ImmediateSubmit(const std::function<void(VkCommandBuffer)>& f
     vkResetFences(Device, 1, &m_ImmediateFence);
     VK_CHECK(vkQueueSubmit(GraphicsQueue, 1, &submitInfo, m_ImmediateFence));
     VK_CHECK(vkQueueWaitIdle(GraphicsQueue));
+}
+
+// ── Deferred destruction (review item B) ──────────────────────────
+
+void VulkanDevice::PushDeferDestroy(uint32_t bucket, std::function<void()>&& fn)
+{
+    std::lock_guard<std::mutex> lock(DeletionMutex());
+    DeletionBucket(bucket).push_back(std::move(fn));
+}
+
+void VulkanDevice::FlushDeletions(uint32_t bucket)
+{
+    std::vector<std::function<void()>> batch;
+    {
+        std::lock_guard<std::mutex> lock(DeletionMutex());
+        batch.swap(DeletionBucket(bucket));
+    }
+
+    // Execute outside the lock: closures may log or (indirectly) defer
+    // further destroys.
+    for (auto& fn : batch)
+        fn();
+}
+
+void VulkanDevice::FlushAllDeletions()
+{
+    for (uint32_t i = 0; i < Detail::kDeletionBucketCount; ++i)
+        FlushDeletions(i);
+}
+
+void VulkanDevice::DeferDestroyTexture(VkSampler sampler, VkImageView view,
+                                       VkImage image, VmaAllocation alloc)
+{
+    if (sampler == VK_NULL_HANDLE && view == VK_NULL_HANDLE && image == VK_NULL_HANDLE)
+        return;
+    if (!IsInitialized())
+        return; // device already shut down: handles are invalid either way
+
+    Get().PushDeferDestroy(VulkanGraphicsContext::CurrentDeletionBucket(),
+                     [sampler, view, image, alloc]
+    {
+        auto& dev = Get();
+        if (sampler != VK_NULL_HANDLE) vkDestroySampler(dev.Device, sampler, nullptr);
+        if (view != VK_NULL_HANDLE)    vkDestroyImageView(dev.Device, view, nullptr);
+        if (image != VK_NULL_HANDLE)   vmaDestroyImage(dev.Allocator, image, alloc);
+    });
+}
+
+void VulkanDevice::DeferDestroyBuffer(VkBuffer buffer, VmaAllocation alloc)
+{
+    if (buffer == VK_NULL_HANDLE)
+        return;
+    if (!IsInitialized())
+        return; // device already shut down: handles are invalid either way
+
+    Get().PushDeferDestroy(VulkanGraphicsContext::CurrentDeletionBucket(),
+                     [buffer, alloc]
+    {
+        auto& dev = Get();
+        vmaDestroyBuffer(dev.Allocator, buffer, alloc);
+    });
 }
 
 } // namespace DMGameEngine
