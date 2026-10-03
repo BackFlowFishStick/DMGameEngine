@@ -6,7 +6,11 @@
 
 ## 进行中 / 待 review
 
-（暂无——等待下一波认领）
+| 任务 | 状态 | 备注 |
+|---|---|---|
+| 骨骼动画系统阶段 1：导入 + Skeleton 资产 + AnimationComponent/System + 蒙皮渲染 | 🚧 @anim-agent agent/anim-agent/skeleton-stage1 2026-10-03 | worktree `.worktrees/anim-agent`；IDEA 新立项（用户要求），依赖 1b/1a 已满足 |
+| 2c Vulkan 性能 P1-P2：VertexArray 每帧分配 / PipelineCache 落盘 / CB pool TRANSIENT / descriptor pool 告警扩容 | 🚧 @render-agent agent/render-agent/vulkan-p1p2 2026-10-03 | worktree `.worktrees/render-agent`；本波禁改 CMakeLists/DMGameEngine.h/shaders（动画 Agent 在动） |
+| docs：修复 3 处登记不一致 + 场景/ECS Tour + 编辑器 Tour | 🚧 @docs-agent docs/tours 2026-10-03 | worktree `.worktrees/docs-agent`；编辑器 Tour 现在可写（多场景已合入） |
 
 ## 已合并 ✅
 
@@ -23,9 +27,8 @@
 
 ### 阶段 0：技术债与基线加固
 
-- [ ] ⬜ **0a Vulkan 正确性修复（A/B/C/D/F）**（ROADMAP 0a；KB-03 表格即工作分解）— 🔴 必做
-  - 提示：动手前核对 `documents/VULKAN_FIXES.md` 确认各项现状；A/B 是高危项。
-- [ ] ⬜ **0c Vulkan 性能 P0：descriptor 复用 + ImmediateSubmit 批量化**（ROADMAP 0c）— 🟠 推荐，依赖 0a
+- [x] ✅ **0a Vulkan 正确性修复（A/B/C/D/F）**— 已完成（见上方已合并）
+- [x] ✅ **0c Vulkan 性能 P0** — 已完成；P1-P2 由第四波 render-agent 认领中
 - [ ] ⬜ **CI：GitHub Actions 矩阵 + ctest + clang-tidy/cppcheck**（ROADMAP 0b 剩余；GoogleTest 已就位）— 🔴 必做
   - 提示：MSVC 环境依赖 VS 工具链，CI 上用 microsoft/setup-msvc 或 vsdevcmd。
 
