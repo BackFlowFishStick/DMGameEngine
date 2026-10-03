@@ -9,6 +9,7 @@ set(EDITOR_SOURCES
     src/EditorLayer.cpp
     src/EditorScene.cpp
     src/SceneDuplicator.cpp
+    src/ProjectExporter.cpp
     src/LogPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/ImGuizmo/src/ImGuizmo.cpp
 )
