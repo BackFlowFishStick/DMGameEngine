@@ -134,7 +134,7 @@ flowchart TB
 ```
 
 - **Renderer**（`Renderer/Renderer.h`）：高层门面。`BeginScene(camera, target)` 缓存 view-projection 并重置 per-pass 队列；`Submit(material, vertexArray, transform)` 只是把绘制请求**入队**；`EndScene()` 触发 `Flush()`。
-- **RenderQueue**（`Renderer/RenderQueue.h`）：延迟提交核心。Flush 时按 Material/Shader 排序分组——同一组只绑定一次 shader + uniform，view-projection 每个 shader 只上传一次；大组还支持 `DrawIndexedInstanced` 实例化路径（见 `MeshRenderSystem` 的 `kInstancingThreshold` 双路逻辑）。
+- **RenderQueue**（`Renderer/RenderQueue.h`）：延迟提交核心。Flush 时按 Material/Shader 排序分组——**每个 Material 组**（分组键是 Material 对象指针，含各 `MaterialInstance`）只在组内首个 draw 绑定一次材质，并随该次绑定上传一次 view-projection 与整套光照 uniforms；两个共享同一 Shader 的不同 `MaterialInstance` 会**各自**绑定与上传。大组还支持 `DrawIndexedInstanced` 实例化路径（见 `MeshRenderSystem` 的 `kInstancingThreshold` 双路逻辑）。
 - **RenderCommand / RendererAPI**：低层 GPU 命令（clear、viewport、blend/depth/cull、DrawIndexed）由 `RenderCommand` 持有的 `RendererAPI` 后端实例执行；Renderer 自己不直接持有后端。
 
 ### Material（材质）

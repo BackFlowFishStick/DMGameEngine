@@ -107,13 +107,15 @@ flowchart LR
 
 ## 站 ⑦ 编辑器消费视角
 
-- **入口文件**：`editor/src/EditorLayer.h/.cpp`（面板、快捷键、gizmo、点选）、`editor/src/EditorScene.h/.cpp`（离屏 FB + EditorCameraController + 场景装配）、`editor/src/EditorApplication.h/.cpp`。
+- **入口文件**：`editor/src/EditorLayer.h/.cpp`（面板、快捷键、gizmo、点选、Play 控制）、`editor/src/EditorScene.h/.cpp`（离屏 FB + EditorCameraController + 场景装配 + Play 快照隔离）、`editor/src/SceneDuplicator.h/.cpp`（Play 快照与 Prefab 共用的实体子树深拷贝）、`editor/src/EditorApplication.h/.cpp`。
 - **先读哪个类**：`EditorLayer::OnImGuiRender()` 的调用序（dockspace → 菜单 → 各面板）——它是全引擎 API 的**消费清单**；再回头读 `EditorScene::Render()` 看离屏 RTT 括号。
+- **Play mode（快照隔离，现行语义）**：进入 Play 时 `EditorScene::EnterPlayMode()` 用 `SceneDuplicator` 把编辑场景**深拷贝**成运行副本（`m_PlayScene`，Mesh/Material 资源按 `DM::Ref` 共享、Play 期间视为只读），此后系统 tick 与 viewport 渲染都作用于副本；Stop 时 `ExitPlayMode()` 丢弃副本、恢复原封不动的编辑场景（`m_EditScene`）——主流引擎语义"Play 里的改动不保留"，选中集按 UUID 快照、Stop 后恢复。不用 `SceneSerializer` JSON 往返做快照的原因：未注册进 AssetManager 的程序化网格会被序列化静默丢掉（KB-07 **K-012**）。
 - **自检问题**：
   1. Viewport 里显示的图像从哪来？（`EditorScene` 的 FB 颜色附件 → `GetColorAttachment(0)->GetRendererID()` → `ImGui::Image`。）
   2. 点击 viewport 选中实体的射线是怎么构造的？用到了渲染层的哪份缓存？（逆 view-projection + AABB 相交，`EditorLayer.cpp` 的 DrawViewport 内。）
   3. `Ctrl+N/S/O` 与 gizmo 的 1/2/3/4 分别触发什么？场景保存在什么格式？
   4. 编辑器为什么能直接 `ImGui::Image` 一个 GPU 纹理 ID？这依赖哪条红线（引擎导出 ImGui 符号、编辑器复用同一 context，红线 R7）？
+  5. Play 模式里把一个立方体挪走再 Stop，它回得来吗？Play 快照为什么不用 `SceneSerializer` 的 JSON 往返、而用 `SceneDuplicator` 的按值复制 + 资源引用共享？（提示：K-012 与 `SceneDuplicator.h` 文件头注释。）
 - **常见误区**：
   - 以为编辑器有独立的渲染路径——它复用的就是站 ③ 的 `Renderer`，只是把 target 换成了离屏 FB。
   - 忽略 `ImGui/ImGuiLayer.h` 是**引擎侧编译并导出**的——编辑器不得再链一份 ImGui。
