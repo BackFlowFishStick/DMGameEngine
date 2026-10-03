@@ -2282,3 +2282,15 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 **涉及文件：** `CMakeLists.txt`、`engine/CMakeLists.txt`、`.github/workflows/ci.yml`、`.github/CI.md`、`AGENTS.md`、`kb/KB-07-已知问题与陷阱清单.md`
 
 **验证：** 全新构建目录 `build-agent`（Ninja + vcvars，FetchContent 离线复用主 checkout `_deps`）全流程 configure → build → `ctest --test-dir build-agent`：37/37 全绿（此前根目录 ctest 为 "No tests were found" 假绿）；根 `CTestTestfile.cmake` 含 `subdirs("engine")`，`engine/tests` 生成 37 条测试命令。全量构建零 error；本改动为纯构建编排，无新增 /W4 警告（日志中 engine 侧 C4251/C4100 与 ImGuizmo C4273/C4245 均为存量基线）。无新坑入 KB-07（首过时 dmge_tests.exe 链接遇一次瞬时 LNK1104，重跑即过，判断为文件锁，未立条）。
+### 2026-10-03 - Vulkan 性能 P0 两项：descriptor set 复用 + ImmediateSubmit 批量化
+
+分支 `agent/render-agent/vulkan-perf-p0`（worktree `.worktrees/render-agent`）。两个独立 commit：
+
+- **P0-1 descriptor set 复用（commit d6e26e8）**：`DrawIndexedCommon` 每 draw 先查 `(shaderID, 绑定纹理句柄 hash)` 缓存，命中复用 set（dynamic UBO 只在 bind 时改 offset），未命中才 allocate+write。键用 (sampler, view) 精确句柄防同帧地址复用错绑；shaderID 单调不复用天然隔离 layout。失效三路径：每帧 `ResetFrame` 随 pool reset 清空（主路径）、`~VulkanShader → OnShaderDestroyed` 即时清（防御）、`Init` 清空（SetAPI 切换）。缓存存储走 .cpp 文件静态（R1）。顺带移除 `WriteDescriptorSet` 未使用的 `dynamicOffset` 参数（消既有 C4100）。
+- **P0-2 ImmediateSubmit 批量化（commit 20d3117）**：`VulkanDevice::BeginImmediateBatch/EndImmediateBatch`，批内 `ImmediateSubmit` 只录制、End 一次 submit + drain（N 次全 stall → 1 次）。旧单次入口语义不变。deletion queue（K-009）flush 语义未变；新增风险"批跨帧打开时 BeginFrame 的 bucket flush 可能销毁已录制未提交命令引用的资源"用 `BeginFrame` assert + API 注释约定封死。
+- 性能量化（独立 Vulkan 微基准，Debug，RTX 4070 Ti）：descriptor 路径 1.646 → 0.216 µs/draw（4096 draws/帧 6.74 → 0.88 ms）；immediate submit 80.6 µs/次 → 512 次 0.092 ms 总计（~450×）。方法与限制见 `VULKAN_FIXES.md` §11.3。
+- 新坑沉淀：kb/KB-07 K-014（非交互会话无 Vulkan surface，运行时验证换路径 + 非 dispatchable handle 指针类型转换）。
+
+**涉及文件：** `Platform/Vulkan/VulkanRendererAPI.h/.cpp`、`VulkanShader.cpp`、`VulkanDevice.h/.cpp`、`VulkanGraphicsContext.cpp`（无新文件，无 CMake 改动）
+
+**验证：** Vulkan ON 全量零 error + ctest 37/37 绿 + /W4 零新增；`DMGE_VULKAN_BACKEND=OFF` 复测 37/37 绿无回归。game/editor 运行时验证待人工（K-014）。

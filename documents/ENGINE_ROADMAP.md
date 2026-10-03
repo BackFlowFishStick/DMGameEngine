@@ -121,6 +121,8 @@
 
 ### 0c. Vulkan 性能 P0（可选，与 0a 并行）
 
+> 状态（2026-10-03）：两项均已落地——descriptor set `(shaderID, 纹理句柄 hash)` 缓存复用 + `Begin/EndImmediateBatch` 批量化（旧单次入口保持可用）。量化证据与设计见 `VULKAN_FIXES.md` §11，分支 `agent/render-agent/vulkan-perf-p0`。中期 bindless 仍留 2c。
+
 - descriptor set 复用：对 `(shaderID, 已绑定纹理集合 hash)` 缓存，绑定不变时复用（UBO 是 dynamic，仅改 offset）。
 - `ImmediateSubmit` 批量化：一条 CB 录多份 copy + 一次 submit + fence。
 - 中期：sampler 改 bindless（`VK_EXT_descriptor_indexing`）。
