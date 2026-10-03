@@ -97,6 +97,67 @@ VkDeviceSize AlignUp(VkDeviceSize v, VkDeviceSize a)
     return (v + a - 1) & ~(a - 1);
 }
 
+// ── Descriptor-set cache (P0-1) ──────────────────────────────────────
+//
+// Key = (shaderID, hash of the bound texture handles). All descriptor
+// content is covered by this key:
+//   - binding 0 (dynamic UBO): buffer handle + range are constant within
+//     a frame (the per-frame scratch buffer); the per-draw variation is
+//     the dynamic offset, applied at vkCmdBindDescriptorSets, not stored
+//     in the set.
+//   - bindings 1..N (combined image samplers): the exact sampler + view
+//     handles that WriteDescriptorSet writes, with the global 1x1 dummy
+//     substituted for unbound slots (deterministic).
+//   - the descriptor set layout itself is owned by the VulkanShader
+//     instance; shaderID identifies that instance uniquely (monotonic,
+//     never reused), so a key can never alias another shader's layout.
+//
+// Lifetime: one map per frame-in-flight slot, cleared together with the
+// descriptor pool in ResetFrame (pool reset invalidates every set allocated
+// from it). Storage is file-static (R1: no STL members on an exported
+// class; same pattern as VulkanDevice's deletion buckets).
+struct DescKey
+{
+    uint64_t shaderID = 0;
+    uint64_t texHash  = 0;
+    bool operator==(const DescKey& o) const { return shaderID == o.shaderID && texHash == o.texHash; }
+};
+struct DescKeyHash
+{
+    size_t operator()(const DescKey& k) const noexcept
+    {
+        size_t h = std::hash<uint64_t>{}(k.shaderID);
+        h ^= std::hash<uint64_t>{}(k.texHash) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        return h;
+    }
+};
+
+// Must match VulkanRendererAPI::kMaxFramesInFlight.
+constexpr uint32_t kDescCacheFrameSlots = 2;
+
+std::unordered_map<DescKey, VkDescriptorSet, DescKeyHash>&
+DescriptorCache(uint32_t frameIndex)
+{
+    static std::unordered_map<DescKey, VkDescriptorSet, DescKeyHash>
+        s_Cache[kDescCacheFrameSlots];
+    return s_Cache[frameIndex % kDescCacheFrameSlots];
+}
+
+void PurgeShaderFromDescriptorCache(uint64_t shaderID)
+{
+    for (uint32_t i = 0; i < kDescCacheFrameSlots; ++i)
+    {
+        auto& cache = DescriptorCache(i);
+        for (auto it = cache.begin(); it != cache.end();)
+        {
+            if (it->first.shaderID == shaderID)
+                it = cache.erase(it);
+            else
+                ++it;
+        }
+    }
+}
+
 } // anonymous namespace
 
 // ── Lifetime ──────────────────────────────────────────────────────
@@ -136,6 +197,11 @@ void VulkanRendererAPI::Init(const RendererAPIInitConfig& config)
 
     CreateFrameResources();
     CreateDummyResources();
+
+    // A previous renderer-API instance (runtime SetAPI switch) may have left
+    // entries whose descriptor pools no longer exist; start clean.
+    for (uint32_t i = 0; i < kMaxFramesInFlight; ++i)
+        DescriptorCache(i).clear();
 
     DMGE_LOG_INFO("Vulkan renderer API initialized.");
 }
@@ -428,9 +494,26 @@ void VulkanRendererAPI::DrawIndexedCommon(const VertexArray& vertexArray,
     VkDescriptorSet set = VK_NULL_HANDLE;
     if (shader.GetDescriptorSetLayout() != VK_NULL_HANDLE)
     {
-        set = AllocateDescriptorSet(shader.GetDescriptorSetLayout(), frame);
-        if (set != VK_NULL_HANDLE)
-            WriteDescriptorSet(set, shader, frame, dynamicOffset);
+        // P0-1: reuse the set from a previous draw with identical bindings
+        // (same shader + same texture handles) instead of allocating and
+        // rewriting one per draw. The UBO is dynamic: only the offset
+        // passed to vkCmdBindDescriptorSets changes per draw.
+        DescKey key{ shader.GetID(), HashBoundTextures(shader) };
+        auto& cache = DescriptorCache(frame);
+        auto it = cache.find(key);
+        if (it != cache.end())
+        {
+            set = it->second;
+        }
+        else
+        {
+            set = AllocateDescriptorSet(shader.GetDescriptorSetLayout(), frame);
+            if (set != VK_NULL_HANDLE)
+            {
+                WriteDescriptorSet(set, shader, frame);
+                cache.emplace(key, set);
+            }
+        }
     }
 
     va.Bind();
@@ -797,7 +880,37 @@ void VulkanRendererAPI::ResetFrame(uint32_t frameIndex)
 {
     auto& dev = VulkanDevice::Get();
     vkResetDescriptorPool(dev.Device, m_DescriptorPools[frameIndex], 0);
+    // The pool reset invalidates every descriptor set allocated from it, so
+    // the frame's cache must drop all entries (P0-1).
+    DescriptorCache(frameIndex).clear();
     m_UniformOffset[frameIndex] = 0;
+}
+
+void VulkanRendererAPI::OnShaderDestroyed(uint64_t shaderID)
+{
+    // Defensive invalidation (see declaration comment): shader IDs are never
+    // reused and the per-frame ResetFrame clear already bounds entry
+    // lifetime, but purge eagerly so the maps never hold dead-shader keys.
+    // The sets themselves are pool-owned and die at the pool reset.
+    PurgeShaderFromDescriptorCache(shaderID);
+}
+
+uint64_t VulkanRendererAPI::HashBoundTextures(const VulkanShader& shader) const
+{
+    uint64_t h = 1469598103934665603ull; // FNV-1a offset basis
+    for (uint32_t i = 0; i < shader.GetSamplerCount(); ++i)
+    {
+        VulkanTexture* tex = (i < kMaxBoundTextures) ? m_BoundTextures[i] : nullptr;
+        // Unbound slots write the global dummy - hash the exact handles the
+        // descriptor will contain so equivalent bindings collide on purpose.
+        // (uintptr_t via reinterpret_cast: non-dispatchable handles are
+        // pointer-typed with this SDK's headers, integer-typed otherwise.)
+        VkSampler   sampler = tex ? tex->GetVkSampler()   : m_DummySampler;
+        VkImageView view    = tex ? tex->GetVkImageView() : m_DummyView;
+        h ^= static_cast<uint64_t>(reinterpret_cast<uintptr_t>(sampler)) + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
+        h ^= static_cast<uint64_t>(reinterpret_cast<uintptr_t>(view))    + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
+    }
+    return h;
 }
 
 uint32_t VulkanRendererAPI::CurrentFrameIndex() const
@@ -848,7 +961,7 @@ VkDescriptorSet VulkanRendererAPI::AllocateDescriptorSet(VkDescriptorSetLayout l
 }
 
 void VulkanRendererAPI::WriteDescriptorSet(VkDescriptorSet set, VulkanShader& shader,
-                                            uint32_t frameIndex, VkDeviceSize dynamicOffset)
+                                            uint32_t frameIndex)
 {
     auto& dev = VulkanDevice::Get();
     VkDeviceSize blockSize = shader.GetUniformBlockSize();

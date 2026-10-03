@@ -162,6 +162,11 @@ VulkanShader::VulkanShader(std::string_view filepath)
 
 VulkanShader::~VulkanShader()
 {
+    // Drop this shader's entries from the renderer's per-frame descriptor-set
+    // cache before the layout/pipeline layout die (belt-and-suspenders: the
+    // cache is per-frame cleared anyway, see VulkanRendererAPI P0-1).
+    if (auto* r = VulkanRendererAPI::Get())
+        r->OnShaderDestroyed(m_ID);
     DestroyModules();
 }
 
