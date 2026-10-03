@@ -82,8 +82,9 @@ cmake -S . -B cmake-build-debug -G Ninja -DDMGE_BUILD_TESTS=ON
 # 构建
 cmake --build cmake-build-debug
 
-# 跑测试（GoogleTest，当前 30 个用例应全绿）
-ctest --test-dir cmake-build-debug --output-on-failure
+# 跑测试（GoogleTest；用例数随任务增长，勿写死。⚠️ 必须 --test-dir 指到 engine 子目录，
+# 原因见 kb/KB-07 K-011：enable_testing 在 engine/CMakeLists.txt，根目录 ctest 会假绿）
+ctest --test-dir cmake-build-debug/engine --output-on-failure
 ```
 
 - 测试相关构建细节（DLL 拷贝、双 glm 冲突）见 `documents/PRECOMPILED_HEADER.md` 与 kb/KB-01。
@@ -108,6 +109,7 @@ docs/<主题>           ← 文档 Agent 的工作分支（或直接小幅提交
    - 分支**必须从最新的 `develop` 拉出**：`git fetch && git checkout develop && git pull && git checkout -b agent/<名字>/<主题>`
    - 分支名示例：`agent/physics-agent/box3d-integration`、`agent/render-agent/vulkan-deletion-queue`
 2. **开发**：小步提交，遵守 §3 红线与 commit 规范（5.3）。
+   - **所有改动——包括 `documents/`（KB-07、SUMMARY、台账）的增量记账——都提交在自己的工作分支里**（documents/ 已纳入 git 追踪，worktree 中可见）。严禁为了记账写到别的 worktree 或主 checkout 的路径下。
 3. **合并前自检**（对应 playbook 的收尾清单）：
    - [ ] 全量构建 + ctest 全绿
    - [ ] 未触碰他人认领区域的文件（见 5.5）

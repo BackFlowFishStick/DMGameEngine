@@ -91,7 +91,8 @@ vc140.pdb
 # Engine design/notes docs - kept local, not version-controlled
 engine/**/*.md
 
-# Documents
-documents/
-# Local documents directory (managed via SVN, not version-controlled by git)
-documents/
+# Documents — now version-controlled in git (multi-agent collaboration requires
+# worktrees to see shared docs; 2026-10-03 admin decision, was SVN-managed before)
+
+# Agent worktrees (each agent works in .worktrees/<name> on its own branch)
+.worktrees/
