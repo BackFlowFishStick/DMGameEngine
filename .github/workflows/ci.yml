@@ -1,0 +1,97 @@
+# ============================================================================
+# DMGameEngine CI（ROADMAP 阶段 0b）
+#
+# 设计决策：
+# - 生成器选 "Visual Studio 17 2022" 而不是 Ninja + vcvars：
+#   GitHub 的 windows-latest 镜像自带完整 VS2022 与对应 CMake/Ninja/MSBuild，
+#   VS 生成器无需任何环境引导步骤（Ninja 方案需要 ilammy/msvc-dev-cmd 之类
+#   的 vcvars action，多一层第三方依赖与失败面）。项目本身用 MSVC 工具链
+#   （C++23, /W4 /utf-8），VS 生成器默认即可命中正确工具集。
+#   ⚠️ 若 runner 镜像升级导致 VS 版本/生成器名不匹配（例如 windows-latest
+#   切到只带 VS2026 的镜像），把 -G 参数改成镜像实际自带的版本即可；
+#   也可改用 Ninja：先 `ilammy/msvc-dev-cmd@v1` 引导环境，再
+#   `cmake -S . -B build -G Ninja ...`。
+# - CMake ≥ 3.20：runner 预装 CMake 远高于此，无需额外安装。
+# - GoogleTest / entt / nlohmann_json 走 FetchContent，configure 需要网络，
+#   GitHub runner 默认可出网，无需配置。
+# - clang-tidy：见仓库根 .clang-tidy。保守检查集暂不设独立 job 强制，
+#   避免首轮 CI 被存量噪声卡死；后续噪声清理完再升级为强制门禁。
+#   （本地可跑：cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 后 clang-tidy -p build）
+# ============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+
+# 同一分支的新提交只保留最新一次运行，节省 Windows runner 配额
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build + Test (MSVC, Debug)
+    runs-on: windows-latest
+    # fail-fast：矩阵内任一 job 失败即取消其余，快速反馈
+    strategy:
+      fail-fast: true
+      matrix:
+        # 目前单配置；后续如加 GCC/Clang 或 Vulkan job，往这里加即可
+        config: [Debug]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -G "Visual Studio 17 2022" -A x64
+          -DCMAKE_BUILD_TYPE=${{ matrix.config }}
+          -DDMGE_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.config }} --parallel
+
+      # ⚠️ ctest 指向 build/engine 而不是 build：enable_testing() 目前写在
+      # engine/CMakeLists.txt（子目录）里而非根 CMakeLists，导致根 build 目录
+      # 不生成 CTestTestfile.cmake，对 build 跑 ctest 会报 "No tests were found"。
+      # 本地已实测复现（ctest --test-dir build → 0 tests；--test-dir build/engine → 全绿）。
+      # 正确修法是把 enable_testing() 挪到根 CMakeLists.txt（CMakeLists 是热点文件，
+      # 本任务约定不改，修 CMake 时顺手处理；届时此处可改回 --test-dir build）。
+      - name: Test
+        run: ctest --test-dir build/engine -C ${{ matrix.config }} --output-on-failure
+
+  # ------------------------------------------------------------------
+  # Vulkan 后端构建（可选加分项，暂为骨架，整体注释掉并注明原因）：
+  # DMGE_VULKAN_BACKEND=ON 需要本机 Vulkan SDK（VMA + shaderc，见 kb/KB-01）。
+  # 在 GitHub runner 上装 SDK 有两种路径：
+  #   1) actlikeapple/install-vulkan-sdk 或类似社区 action（版本维护不确定）；
+  #   2) 直接下载 LunarG 官方安装器静默安装：
+  #      https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe
+  # 由于社区 action 可靠性未验证、安装器 URL/校验和会随 SDK 版本漂移，
+  # 先留骨架，待渲染 Agent 确认 SDK 固定版本号后再启用。
+  #
+  # vulkan-build:
+  #   name: Build Vulkan backend (Debug)
+  #   runs-on: windows-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Install Vulkan SDK
+  #       # 固定 SDK 版本号后再启用本 job（latest 下载链可能变动）
+  #       run: |
+  #         Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/<固定版本>/windows/VulkanSDK-<固定版本>-Installer.exe" -OutFile vulkan-sdk.exe
+  #         Start-Process -FilePath .\vulkan-sdk.exe -ArgumentList "--accept-licenses --default-answer --confirm-command install" -Wait
+  #     - name: Configure
+  #       run: >
+  #         cmake -S . -B build-vulkan
+  #         -G "Visual Studio 17 2022" -A x64
+  #         -DCMAKE_BUILD_TYPE=Debug
+  #         -DDMGE_BUILD_TESTS=ON
+  #         -DDMGE_VULKAN_BACKEND=ON
+  #     - name: Build
+  #       run: cmake --build build-vulkan --config Debug --parallel

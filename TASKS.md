@@ -8,9 +8,12 @@
 
 | 任务 | 状态 | 备注 |
 |---|---|---|
-| 0a Vulkan 正确性修复 A/B/C/D/F | 👀 待 review @render-agent agent/render-agent/vulkan-correctness 2026-10-03 | worktree `.worktrees/render-agent-0a`。核对结论：A/C/D/F 已于 07-26 落地（代码核验与台账一致，见 VULKAN_FIXES.md §10），本次加固 A（RecreateSwapchain 前 device idle，9219cc7）+ 落地 B（per-frame deletion queue，1ae2aa6，含 headless 性质单测）。PB-08 自检通过：全量构建零 error（Vulkan ON/OFF 双路径）、/W4 零新增警告、ctest 37/37（注意用 `--test-dir build-agent/engine`，见 KB-07/K-011）。遗留：运行时 Validation 场景待人工跑 editor/game；E 项本波不做 |
-| 0b CI 骨架：GitHub Actions + ctest | 🚧 @test-agent agent/test-agent/ci-skeleton 2026-10-03 | worktree `.worktrees/test-agent-ci` |
-| guide/ 建库：GettingStarted + ArchitectureOverview | 🚧 @docs-agent docs/guide-foundation 2026-10-03 | worktree `.worktrees/docs-agent-guide`（新目录属结构性调整，走分支） |
+| guide/ 建库：GettingStarted + ArchitectureOverview | 🚧 @docs-agent docs/guide-foundation 2026-10-03 | worktree `.worktrees/docs-agent-guide`；交付以本地文件落库（documents/ 纳入 git 追踪，见收口 commit） |
+
+## 已合并 ✅
+
+- ✅ 0a Vulkan 正确性修复 A/B/C/D/F @render-agent（分支 tip `1ae2aa6`；A/C/D/F 核验为 07-26 已修，本次加固 A `9219cc7` + 落地 B per-frame deletion queue `1ae2aa6` 含 headless 性质单测；PB-08 通过：Vulkan ON/OFF 双路径构建零 error、/W4 零新增、ctest 37/37；遗留：Validation 运行时场景待人工跑 editor/game；E 项留 2b）
+- ✅ 0b CI 骨架 @test-agent（分支 tip `35fedb2`；交付 `.github/workflows/ci.yml` + `.github/CI.md` + 保守版 `.clang-tidy` 暂不强制门禁；本地 Ninja+vcvars 全量构建 0 error、ctest 32/32 绿；Vulkan job 留注释骨架待固定 SDK 版本；ctest 目录坑见 KB-07/K-011）
 
 ## 待认领（按优先级）
 

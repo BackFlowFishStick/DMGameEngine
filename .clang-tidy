@@ -1,0 +1,67 @@
+# ============================================================================
+# DMGameEngine clang-tidy 配置（保守版，ROADMAP 阶段 0b）
+#
+# 原则：只开「明确有益、低噪声」的检查，先不作为 CI 强制门禁。
+#   - CI 暂不设 clang-tidy job（见 .github/workflows/ci.yml 顶部注释），
+#     避免首轮被存量告警卡死；本地排查时可手动跑，噪声清完再升级为强制。
+#   - 第三方依赖（engine/dependencies、FetchContent 的 _deps）不在检查范围，
+#     用 HeaderFilterRegex 排除。
+#
+# 本地用法（与 CI 等价的编译数据库）：
+#   cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+#   clang-tidy -p build engine/src/DMGameEngine/Core/Timestep.cpp   # 按文件逐个跑
+# ============================================================================
+Checks: >
+  bugprone-assert-side-effect,
+  bugprone-dangling-handle,
+  bugprone-exception-escape,
+  bugprone-fold-init-type,
+  bugprone-implicit-widening-of-multiplication-result,
+  bugprone-inaccurate-erase,
+  bugprone-misplaced-widening-cast,
+  bugprone-move-forwarding-reference,
+  bugprone-sizeof-expression,
+  bugprone-suspicious-enum-usage,
+  bugprone-suspicious-missing-comma,
+  bugprone-suspicious-semicolon,
+  bugprone-undefined-memory-manipulation,
+  bugprone-use-after-move,
+  bugprone-virtual-near-miss,
+  modernize-use-nullptr,
+  performance-for-range-copy,
+  performance-inefficient-string-concatenation,
+  performance-inefficient-vector-operation,
+  performance-move-const-arg,
+  performance-no-automatic-move,
+  performance-unnecessary-copy-initialization,
+  performance-unnecessary-value-param,
+  readability-identifier-naming
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '(^|[\\/])(engine[\\/]src|engine[\\/]tests|editor[\\/]src|game)[\\/]'
+
+# ── 命名规则（依据 kb/KB-06）────────────────────────────────────────────────
+# 只约束 KB-06 明文规定的四类；命名空间（DMGameEngine）不约束，避免误报子命名空间。
+CheckOptions:
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypeAliasCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: CamelCase
+  - key: readability-identifier-naming.MethodCase
+    value: CamelCase
+  # 类成员 m_PascalCase：前缀 m + CamelCase
+  - key: readability-identifier-naming.MemberCase
+    value: CamelCase
+  - key: readability-identifier-naming.MemberPrefix
+    value: m
+  # KB-06 未明文规定，但现有代码局部变量/参数为 camelCase，一并约束
+  - key: readability-identifier-naming.LocalVariableCase
+    value: camelBack
+  - key: readability-identifier-naming.ParameterCase
+    value: camelBack
