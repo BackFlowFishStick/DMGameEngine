@@ -38,6 +38,7 @@ if(DMGE_ANIMATION)
     add_executable(dmge_animation_tests
         test_animation_math.cpp
         test_animation_asset.cpp
+        test_animation_serialize.cpp
     )
     target_link_libraries(dmge_animation_tests PRIVATE
         DMGameEngine

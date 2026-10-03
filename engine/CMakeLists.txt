@@ -223,6 +223,8 @@ if(DMGE_ANIMATION)
         "src/DMGameEngine/Animation/Skeleton.h"
         "src/DMGameEngine/Animation/AnimationClip.h"
         "src/DMGameEngine/Animation/AnimationMath.h"
+        "src/DMGameEngine/Scene/Components/AnimatorComponent.h"
+        "src/DMGameEngine/Scene/Systems/AnimationSystem.h"
     )
 endif()
 

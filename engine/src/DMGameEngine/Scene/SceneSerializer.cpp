@@ -10,6 +10,9 @@
 #include "DMGameEngine/Scene/Components/MeshComponent.h"
 #include "DMGameEngine/Scene/Components/CameraComponent.h"
 #include "DMGameEngine/Scene/Components/LightComponent.h"
+#ifdef DMGE_ANIMATION
+#include "DMGameEngine/Scene/Components/AnimatorComponent.h"
+#endif
 #include "DMGameEngine/Asset/AssetHandle.h"
 #include "DMGameEngine/Asset/AssetManager.h"  // Load<Material>/Load<Mesh> in DeserializeMesh
 #include "DMGameEngine/Asset/Mesh.h"          // SubMesh (base material source)
@@ -228,12 +231,57 @@ void DeserializeLight(Scene& scene, Entity e, const json& ej)
     lc.AmbientIntensity = lj.value("ambientIntensity", 0.15f);
 }
 
+#ifdef DMGE_ANIMATION
+// ── AnimatorComponent (animation stage 1) ─────────────────────
+// Asset references persist as UUIDs only (KB-05). Playback state persists so
+// an author can save an entity paused on a clip; CurrentTime and the Palette
+// are runtime-only (CurrentTime restarts on load by design).
+void SerializeAnimator(const Scene& scene, Entity e, json& j)
+{
+    auto& s = const_cast<Scene&>(scene);
+    if (!s.HasComponent<AnimatorComponent>(e)) return;
+    auto& ac = s.GetComponent<AnimatorComponent>(e);
+
+    json aj;
+    aj["skeletonAsset"] = ac.SkeletonAsset.GetUUID();
+    json clips = json::array();
+    for (const auto& clip : ac.Clips)
+        clips.push_back(clip.GetUUID());
+    aj["clips"]          = clips;
+    aj["activeClip"]     = ac.ActiveClip;
+    aj["playing"]        = ac.Playing;
+    aj["loop"]           = ac.Loop;
+    aj["playbackSpeed"]  = ac.PlaybackSpeed;
+
+    j["Animator"] = aj;
+}
+
+void DeserializeAnimator(Scene& scene, Entity e, const json& ej)
+{
+    if (!ej.contains("Animator")) return;
+    const auto& aj = ej["Animator"];
+    auto& ac = scene.AddComponent<AnimatorComponent>(e);
+
+    ac.SkeletonAsset = AssetHandle(aj.value("skeletonAsset", uint64_t(0)));
+    if (aj.contains("clips"))
+        for (const auto& c : aj["clips"])
+            ac.Clips.push_back(AssetHandle(c.get<uint64_t>()));
+    ac.ActiveClip    = aj.value("activeClip", 0);
+    ac.Playing       = aj.value("playing", true);
+    ac.Loop          = aj.value("loop", true);
+    ac.PlaybackSpeed = aj.value("playbackSpeed", 1.0f);
+}
+#endif // DMGE_ANIMATION
+
 // Static registration of built-in components (runs at program start).
 bool s_Registered = []() {
     Registry()["Transform"] = { SerializeTransform, DeserializeTransform };
     Registry()["Mesh"]      = { SerializeMesh,      DeserializeMesh };
     Registry()["Camera"]    = { SerializeCamera,    DeserializeCamera };
     Registry()["Light"]     = { SerializeLight,     DeserializeLight };
+#ifdef DMGE_ANIMATION
+    Registry()["Animator"]  = { SerializeAnimator,  DeserializeAnimator };
+#endif
     return true;
 }();
 
