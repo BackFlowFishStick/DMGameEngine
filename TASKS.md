@@ -9,7 +9,7 @@
 | 任务 | 状态 | 备注 |
 |---|---|---|
 | 0a Vulkan 正确性修复 A/B/C/D/F | 🚧 @render-agent agent/render-agent/vulkan-correctness 2026-10-03 | worktree `.worktrees/render-agent-0a` |
-| 0b CI 骨架：GitHub Actions + ctest | 🚧 @test-agent agent/test-agent/ci-skeleton 2026-10-03 | worktree `.worktrees/test-agent-ci` |
+| 0b CI 骨架：GitHub Actions + ctest | 👀 待 review @test-agent agent/test-agent/ci-skeleton 2026-10-03 | worktree `.worktrees/test-agent-ci`；交付 `.github/workflows/ci.yml` + `.github/CI.md` + 保守版 `.clang-tidy`（暂不强制门禁）；本地验证 Ninja+vcvars 全量构建 0 error、ctest 32/32 绿；坑见 kb/KB-07 K-009（enable_testing 在子目录，ctest 须指 `build/engine`；建议根 CMakeLists 挪 enable_testing，未动热点文件）；Vulkan job 留注释骨架 |
 | guide/ 建库：GettingStarted + ArchitectureOverview | 🚧 @docs-agent docs/guide-foundation 2026-10-03 | worktree `.worktrees/docs-agent-guide`（新目录属结构性调整，走分支） |
 
 ## 待认领（按优先级）
