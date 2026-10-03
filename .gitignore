@@ -99,3 +99,6 @@ engine/**/*.md
 
 # Agent worktrees (each agent works in .worktrees/<name> on its own branch)
 .worktrees/
+
+# Test fixture assets (tracked on purpose; *.obj above is for compiled objects)
+!engine/tests/assets/*.obj
