@@ -8,7 +8,10 @@
 
 | 任务 | 状态 | 备注 |
 |---|---|---|
-| （暂无——等待下一波认领） | | |
+| 编辑器阶段3/4 收尾：多 Scene 标签页 + 导出可运行工程 | 🚧 @editor-agent agent/editor-agent/multi-scene-export 2026-10-03 | worktree `.worktrees/editor-agent`；同属 editor/ 热点区故单 Agent 串行 |
+| 0c Vulkan 性能 P0：descriptor 复用 + ImmediateSubmit 批量化 | 🚧 @render-agent agent/render-agent/vulkan-perf-p0 2026-10-03 | worktree `.worktrees/render-agent`；0a 依赖已满足 |
+| K-011 正解：enable_testing() 挪根 CMakeLists + CI 修正 | 🚧 @test-agent agent/test-agent/enable-testing-root 2026-10-03 | worktree `.worktrees/test-agent`；只动根 CMakeLists/.github/KB-07 |
+| guide P2：术语表 + 回访 guide 过时段落 | 🚧 @docs-agent docs/glossary 2026-10-03 | worktree `.worktrees/docs-agent` |
 
 ## 已合并 ✅
 
