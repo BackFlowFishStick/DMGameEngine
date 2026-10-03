@@ -1,4 +1,5 @@
 #include "EditorLayer.h"
+#include "SceneDuplicator.h"
 #include <DMGameEngine/Core/Log.h>
 #include <DMGameEngine/Scene/SceneSerializer.h>
 #include <DMGameEngine/Scene/Components/Components.h>
@@ -6,8 +7,11 @@
 #include <imgui_internal.h>
 #include <ImGuizmo.h>
 #include <filesystem>
+#include <fstream>
+#include <cstdio>
 #include <cstring>
 #include <cfloat>
+#include <cctype>
 #include <cmath>
 #include <algorithm>
 #include <glm/gtc/type_ptr.hpp>
@@ -58,6 +62,49 @@ static bool RayAABB(const glm::vec3& o, const glm::vec3& d,
     return true;
 }
 
+// ── Default material helper ─────────────────────────────────────
+// assimp imports carry no material; assign a default Blinn-Phong so the mesh
+// actually renders. (AssetLoader<Material> is not exported - K-002 - so the
+// editor builds the material itself instead of loading a .mat file.)
+static DM::Ref<Material> CreateDefaultMaterial() {
+    auto shader = AssetManager::Get().Load<Shader>(
+        "D:/CPPPractices/DMGameEngine/engine/shaders/BlinnPhong.glsl");
+    if (!shader) return nullptr;
+    auto mat = DM::CreateRef<Material>(shader);
+    mat->SetFloat3("u_AlbedoColor", {0.8f, 0.8f, 0.85f});
+    mat->SetFloat("u_SpecularStrength", 0.5f);
+    mat->SetFloat("u_Shininess", 64.0f);
+    mat->SetInt("u_UseTexture", 0);
+    return mat;
+}
+
+static void AssignDefaultMaterial(MeshComponent& mc) {
+    auto baseMat = CreateDefaultMaterial();
+    if (!baseMat) return;
+    mc.MaterialOverrides.clear();
+    mc.MaterialOverrides.resize(mc.Mesh ? mc.Mesh->SubMeshes.size() : 0);
+    for (auto& ov : mc.MaterialOverrides)
+        ov = DM::CreateRef<MaterialInstance>(baseMat);
+}
+
+static bool IsModelExtension(std::string ext) {
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".mesh";
+}
+
+static std::string SanitizeFilename(const std::string& name) {
+    std::string out;
+    for (char c : name) {
+        bool ok = std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-' || c == '.';
+        out.push_back(ok ? c : '_');
+    }
+    return out.empty() ? std::string("Entity") : out;
+}
+
+static constexpr const char* kConfigPath = "editor_config.ini";
+static constexpr size_t kMaxRecentScenes = 8;
+
 EditorLayer::EditorLayer()
     : Layer("EditorLayer", LayerType::Tool) {}
 
@@ -74,9 +121,13 @@ void EditorLayer::OnAttach() {
     io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
     DMGE_CLIENT_INFO("EditorLayer attached");
     m_Log.OnAttach();
+    LoadConfig();
 }
 
-void EditorLayer::OnDetach() { m_Log.OnDetach(); }
+void EditorLayer::OnDetach() {
+    SaveConfig();
+    m_Log.OnDetach();
+}
 
 void EditorLayer::OnUpdate(Timestep ts) {
     if (auto* cam = m_Scene.GetCamera())
@@ -95,6 +146,7 @@ void EditorLayer::OnRender() {
 
 void EditorLayer::OnImGuiRender() {
     ImGuizmo::BeginFrame();
+    DrawModalDialogs();
     DrawDockspace();
     DrawMenuBar();
     DrawViewport();
@@ -104,6 +156,203 @@ void EditorLayer::OnImGuiRender() {
     DrawAssetBrowser();
     m_Log.OnImGuiRender();
 }
+
+// ── Play mode isolation (stage 4) ───────────────────────────────
+
+void EditorLayer::BeginPlay() {
+    if (m_Scene.IsPlaying()) return;
+    // Remember the selection by UUID so it can be restored on the edit scene
+    // after Stop (runtime entity ids differ between the two scenes).
+    Scene* s = m_Scene.GetEditScene();
+    m_SelectedUUID = 0;
+    if (s && m_Selected != NullEntity && s->HasComponent<IDComponent>(m_Selected))
+        m_SelectedUUID = s->GetComponent<IDComponent>(m_Selected).UUID;
+    m_Scene.EnterPlayMode();
+    DMGE_CLIENT_INFO("Play mode entered - edit state snapshotted, changes during play will be discarded on Stop");
+}
+
+void EditorLayer::EndPlay() {
+    if (!m_Scene.IsPlaying()) return;
+    m_Scene.ExitPlayMode();   // discards the play copy, restores the edit scene
+    m_Selected = NullEntity;
+    Scene* s = m_Scene.GetEditScene();
+    if (s && m_SelectedUUID != 0) {
+        s->GetRegistry().view<IDComponent>().each([&](auto eh, IDComponent& idc) {
+            if (idc.UUID == m_SelectedUUID)
+                m_Selected = static_cast<Entity>(eh);
+        });
+    }
+    m_SelectedUUID = 0;
+    DMGE_CLIENT_INFO("Play mode stopped - edit state restored");
+}
+
+// ── Scene management (stage 3) ──────────────────────────────────
+
+void EditorLayer::OpenSceneFromPath(const std::string& path) {
+    if (path.empty()) return;
+    if (m_Scene.IsPlaying())
+        EndPlay();   // opening a scene always leaves play mode
+    if (m_Scene.LoadSceneFromFile(path)) {
+        m_ScenePath = path;
+        PushRecentScene(path);
+        m_Selected = NullEntity;
+        DMGE_CLIENT_INFO("Scene loaded: {0}", path);
+    } else {
+        DMGE_CLIENT_WARN("Failed to load scene: {0}", path);
+    }
+}
+
+void EditorLayer::SaveSceneToPath(const std::string& path) {
+    Scene* s = m_Scene.GetEditScene();
+    if (!s || path.empty()) return;
+    // Always serialize the EDIT scene - never the play copy - so a save during
+    // play cannot capture transient play-mode state.
+    SceneSerializer::Save(*s, path);
+    m_ScenePath = path;
+    PushRecentScene(path);
+    DMGE_CLIENT_INFO("Scene saved: {0}", path);
+}
+
+void EditorLayer::PushRecentScene(const std::string& path) {
+    std::erase(m_RecentScenes, path);
+    m_RecentScenes.insert(m_RecentScenes.begin(), path);
+    if (m_RecentScenes.size() > kMaxRecentScenes)
+        m_RecentScenes.resize(kMaxRecentScenes);
+    SaveConfig();
+}
+
+void EditorLayer::LoadConfig() {
+    m_RecentScenes.clear();
+    std::ifstream in(kConfigPath);
+    if (!in.is_open()) return;
+    std::string line;
+    while (std::getline(in, line)) {
+        constexpr const char* kPrefix = "recent=";
+        if (line.rfind(kPrefix, 0) == 0 && line.size() > std::strlen(kPrefix))
+            m_RecentScenes.push_back(line.substr(std::strlen(kPrefix)));
+    }
+}
+
+void EditorLayer::SaveConfig() {
+    std::ofstream out(kConfigPath);
+    if (!out.is_open()) return;
+    for (const auto& p : m_RecentScenes)
+        out << "recent=" << p << "\n";
+}
+
+// ── Modal dialogs ───────────────────────────────────────────────
+
+void EditorLayer::DrawModalDialogs() {
+    if (m_DialogOpenPending) {
+        ImGui::OpenPopup("EditorDialog");
+        m_DialogOpenPending = false;
+    }
+    if (!ImGui::BeginPopupModal("EditorDialog", nullptr,
+                                ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+
+    switch (m_Dialog) {
+    case Dialog::ConfirmNewScene: {
+        ImGui::Text("Create a new scene?");
+        if (m_Scene.IsPlaying())
+            ImGui::TextWrapped("Play mode will be stopped; all changes made during play are discarded.");
+        ImGui::TextDisabled("Unsaved changes to the current scene will be lost.");
+        if (ImGui::Button("OK", ImVec2(120, 0))) {
+            if (m_Scene.IsPlaying()) EndPlay();
+            m_Scene.NewScene();
+            m_Selected = NullEntity;
+            m_ScenePath = "scene.scene";
+            m_Dialog = Dialog::None;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            m_Dialog = Dialog::None;
+            ImGui::CloseCurrentPopup();
+        }
+        break;
+    }
+    case Dialog::OpenScene: {
+        ImGui::Text("Open scene file (.scene):");
+        ImGui::InputText("Path", m_PathBuf, sizeof(m_PathBuf));
+        bool exists = m_PathBuf[0] && std::filesystem::exists(m_PathBuf);
+        if (m_PathBuf[0] && !exists)
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "File not found.");
+        if (ImGui::Button("Open", ImVec2(120, 0))) {
+            if (exists) {
+                OpenSceneFromPath(m_PathBuf);
+                m_Dialog = Dialog::None;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            m_Dialog = Dialog::None;
+            ImGui::CloseCurrentPopup();
+        }
+        break;
+    }
+    case Dialog::SaveSceneAs: {
+        ImGui::Text("Save scene as (.scene):");
+        ImGui::InputText("Path", m_PathBuf, sizeof(m_PathBuf));
+        if (ImGui::Button("Save", ImVec2(120, 0))) {
+            if (m_PathBuf[0]) {
+                SaveSceneToPath(m_PathBuf);
+                m_Dialog = Dialog::None;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            m_Dialog = Dialog::None;
+            ImGui::CloseCurrentPopup();
+        }
+        break;
+    }
+    case Dialog::SavePrefab: {
+        ImGui::Text("Save prefab as (.prefab):");
+        ImGui::InputText("Path", m_PathBuf, sizeof(m_PathBuf));
+        if (ImGui::Button("Save", ImVec2(120, 0))) {
+            if (m_PathBuf[0] && m_ContextEntity != NullEntity) {
+                SavePrefab(m_ContextEntity, m_PathBuf);
+                m_Dialog = Dialog::None;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            m_Dialog = Dialog::None;
+            ImGui::CloseCurrentPopup();
+        }
+        break;
+    }
+    case Dialog::InstantiatePrefab: {
+        ImGui::Text("Instantiate prefab (.prefab):");
+        ImGui::InputText("Path", m_PathBuf, sizeof(m_PathBuf));
+        bool exists = m_PathBuf[0] && std::filesystem::exists(m_PathBuf);
+        if (m_PathBuf[0] && !exists)
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "File not found.");
+        if (ImGui::Button("Instantiate", ImVec2(120, 0))) {
+            if (exists && InstantiatePrefab(m_PathBuf) != NullEntity) {
+                m_Dialog = Dialog::None;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            m_Dialog = Dialog::None;
+            ImGui::CloseCurrentPopup();
+        }
+        break;
+    }
+    case Dialog::None:
+        ImGui::CloseCurrentPopup();
+        break;
+    }
+    ImGui::EndPopup();
+}
+
+// ── Dockspace ───────────────────────────────────────────────────
 
 void EditorLayer::DrawDockspace() {
 #ifdef IMGUI_HAS_DOCK
@@ -146,41 +395,45 @@ void EditorLayer::DrawDockspace() {
 #endif
 }
 
+// ── Menu bar ────────────────────────────────────────────────────
+
 void EditorLayer::DrawMenuBar() {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("New Scene", "Ctrl+N")) {
-                m_Scene.NewScene();
-                m_Selected = NullEntity;
+                m_Dialog = Dialog::ConfirmNewScene;
+                m_DialogOpenPending = true;
             }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
-                if (auto* s = m_Scene.GetScene())
-                    SceneSerializer::Save(*s, m_ScenePath);
+            if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) {
+                std::snprintf(m_PathBuf, sizeof(m_PathBuf), "%s", m_ScenePath.c_str());
+                m_Dialog = Dialog::OpenScene;
+                m_DialogOpenPending = true;
             }
-            if (ImGui::MenuItem("Load Scene", "Ctrl+O")) {
-                if (auto* s = m_Scene.GetScene()) {
-                    SceneSerializer::Load(*s, m_ScenePath);
-                    m_Selected = NullEntity;
-                }
+            if (ImGui::MenuItem("Save Scene", "Ctrl+S"))
+                SaveSceneToPath(m_ScenePath);
+            if (ImGui::MenuItem("Save Scene As...", nullptr, false, !m_Scene.IsPlaying())) {
+                std::snprintf(m_PathBuf, sizeof(m_PathBuf), "%s", m_ScenePath.c_str());
+                m_Dialog = Dialog::SaveSceneAs;
+                m_DialogOpenPending = true;
             }
-            ImGui::Separator();
-            char pathBuf[512];
-            std::strncpy(pathBuf, m_ScenePath.c_str(), 511);
-            pathBuf[511] = '\0';
-            if (ImGui::InputText("Scene path", pathBuf, 512))
-                m_ScenePath = pathBuf;
+            if (!m_RecentScenes.empty() && ImGui::BeginMenu("Recent Scenes")) {
+                for (const auto& p : m_RecentScenes)
+                    if (ImGui::MenuItem(p.c_str()))
+                        OpenSceneFromPath(p);
+                ImGui::EndMenu();
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Quit", "Alt+F4"))
                 Application::Get().Quit();
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Entity")) {
-            if (ImGui::MenuItem("Create Empty", "Ctrl+Shift+A")) {
+            // Play-mode isolation: entity CRUD only in edit mode.
+            if (ImGui::MenuItem("Create Empty", "Ctrl+Shift+A", false, !m_Scene.IsPlaying())) {
                 if (auto* s = m_Scene.GetScene())
                     m_Selected = s->CreateEntity("Entity");
             }
-            if (m_Selected != NullEntity && ImGui::MenuItem("Delete", "Del")) {
+            if (m_Selected != NullEntity && ImGui::MenuItem("Delete", "Del", false, !m_Scene.IsPlaying())) {
                 if (auto* s = m_Scene.GetScene()) {
                     s->DestroyEntity(m_Selected);
                     m_Selected = NullEntity;
@@ -189,15 +442,21 @@ void EditorLayer::DrawMenuBar() {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Play")) {
-            if (ImGui::MenuItem(m_Scene.IsPlaying() ? "Pause" : "Play", "F5"))
-                m_Scene.SetPlaying(!m_Scene.IsPlaying());
-            if (ImGui::MenuItem("Stop", "F6"))
-                m_Scene.SetPlaying(false);
+            if (m_Scene.IsPlaying()) {
+                if (ImGui::MenuItem(m_Scene.IsPaused() ? "Resume" : "Pause", "F5"))
+                    m_Scene.SetPaused(!m_Scene.IsPaused());
+                if (ImGui::MenuItem("Stop", "F6"))
+                    EndPlay();
+            } else if (ImGui::MenuItem("Play", "F5")) {
+                BeginPlay();
+            }
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
     }
 }
+
+// ── Viewport ────────────────────────────────────────────────────
 
 void EditorLayer::DrawViewport() {
     ImGui::Begin("Viewport");
@@ -265,6 +524,16 @@ void EditorLayer::DrawViewport() {
             m_Scene.GetTarget()->GetColorAttachment(0)->GetRendererID();
         ImGui::Image(texID, avail, ImVec2(0, 1), ImVec2(1, 0));
 
+        // Drag-drop target: drop a model asset on the viewport to create a
+        // new entity with a MeshComponent.
+        if (ImGui::BeginDragDropTarget()) {
+            if (auto* pl = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
+                std::string path((const char*)pl->Data);  // to null terminator
+                CreateEntityFromModel(path);
+            }
+            ImGui::EndDragDropTarget();
+        }
+
         // Mouse pick: click the viewport to select the nearest mesh entity.
         if (m_ViewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGuizmo::IsUsing() && !ImGuizmo::IsOver()) {
             ImVec2 imMin = ImGui::GetItemRectMin();
@@ -312,7 +581,10 @@ void EditorLayer::DrawViewport() {
             }
         }
 
-        if (m_Selected != NullEntity && m_GizmoType >= 0) {
+        // Gizmo editing only in edit mode: writing transforms during play
+        // would desync the play copy from what gets discarded on Stop anyway,
+        // and the inspector is read-only then - keep them consistent.
+        if (!m_Scene.IsPlaying() && m_Selected != NullEntity && m_GizmoType >= 0) {
 
             Scene* sc = m_Scene.GetScene();
             if (sc && sc->HasComponent<TransformComponent>(m_Selected)) {
@@ -350,6 +622,8 @@ void EditorLayer::DrawViewport() {
     ImGui::End();
 }
 
+// ── Hierarchy ───────────────────────────────────────────────────
+
 void EditorLayer::DrawHierarchy() {
     ImGui::Begin("Scene Hierarchy");
     Scene* s = m_Scene.GetScene();
@@ -366,6 +640,22 @@ void EditorLayer::DrawHierarchy() {
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsWindowHovered()
             && !ImGui::IsAnyItemHovered())
             m_Selected = NullEntity;
+    }
+    // Window-wide drop target: dropping a model asset into the hierarchy
+    // creates a new root entity with a MeshComponent.
+    {
+        ImVec2 wpos = ImGui::GetWindowPos();
+        ImVec2 rmin = ImGui::GetWindowContentRegionMin();
+        ImVec2 rmax = ImGui::GetWindowContentRegionMax();
+        ImRect bb(ImVec2(wpos.x + rmin.x, wpos.y + rmin.y),
+                  ImVec2(wpos.x + rmax.x, wpos.y + rmax.y));
+        if (ImGui::BeginDragDropTargetCustom(bb, ImGui::GetID("HierarchyDropTarget"))) {
+            if (auto* pl = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
+                std::string path((const char*)pl->Data);
+                CreateEntityFromModel(path);
+            }
+            ImGui::EndDragDropTarget();
+        }
     }
     ImGui::End();
 }
@@ -390,6 +680,23 @@ void EditorLayer::DrawEntityNode(Entity e) {
         flags, "%s", tag.c_str());
     if (ImGui::IsItemClicked())
         m_Selected = e;
+    // Right-click context menu: prefab save / instantiate (stage 3).
+    if (ImGui::BeginPopupContextItem("EntityContextMenu")) {
+        m_ContextEntity = e;
+        const bool editOk = !m_Scene.IsPlaying();  // edits blocked during play
+        if (ImGui::MenuItem("Save As Prefab...", nullptr, false, editOk)) {
+            std::string def = std::string("prefabs/") + SanitizeFilename(tag) + ".prefab";
+            std::snprintf(m_PathBuf, sizeof(m_PathBuf), "%s", def.c_str());
+            m_Dialog = Dialog::SavePrefab;
+            m_DialogOpenPending = true;
+        }
+        if (ImGui::MenuItem("Instantiate Prefab...", nullptr, false, editOk)) {
+            m_PathBuf[0] = '\0';
+            m_Dialog = Dialog::InstantiatePrefab;
+            m_DialogOpenPending = true;
+        }
+        ImGui::EndPopup();
+    }
     if (open) {
         if (s->HasComponent<TransformComponent>(e)) {
             Entity child = s->GetComponent<TransformComponent>(e).FirstChild;
@@ -404,6 +711,8 @@ void EditorLayer::DrawEntityNode(Entity e) {
         ImGui::TreePop();
     }
 }
+
+// ── Inspector ───────────────────────────────────────────────────
 
 void EditorLayer::DrawInspector() {
     ImGui::Begin("Inspector");
@@ -420,11 +729,20 @@ void EditorLayer::DrawInspector() {
 void EditorLayer::DrawComponents(Entity e) {
     Scene* s = m_Scene.GetScene();
 
+    // Play-mode isolation: the entity under inspection belongs to the play
+    // copy, which is discarded on Stop - make everything read-only.
+    const bool readOnly = m_Scene.IsPlaying();
+    if (readOnly) {
+        ImGui::TextColored(ImVec4(1.0f, 0.78f, 0.3f, 1.0f),
+            "Play mode - read-only (changes are discarded on Stop)");
+        ImGui::Separator();
+        ImGui::BeginDisabled(true);
+    }
+
     if (s->HasComponent<TagComponent>(e)) {
         auto& tag = s->GetComponent<TagComponent>(e).Tag;
         char buf[256];
-        std::strncpy(buf, tag.c_str(), 255);
-        buf[255] = '\0';
+        std::snprintf(buf, sizeof(buf), "%s", tag.c_str());
         if (ImGui::InputText("Tag", buf, 256))
             tag = buf;
     }
@@ -488,11 +806,11 @@ void EditorLayer::DrawComponents(Entity e) {
             if (ImGui::BeginDragDropTarget()) {
                 if (auto* pl = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
                     std::string path((const char*)pl->Data);  // to null terminator
-                    auto ext = std::filesystem::path(path).extension().string();
-                    if (ext == ".mesh" || ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb") {
+                    if (IsModelExtension(std::filesystem::path(path).extension().string())) {
                         auto mesh = AssetManager::Get().Load<Mesh>(path);
                         if (mesh) {
                             mc.Mesh = mesh;
+                            mc.MeshAsset = AssetHandle(AssetManager::Get().GetUUID(path));
                             AABBd lb;
                             if (MeshLocalBounds(*mesh, lb)) {
                                 // fbx models vary wildly in scale (e.g. this one is 200 units).
@@ -506,21 +824,7 @@ void EditorLayer::DrawComponents(Entity e) {
                                     s->MarkSubtreeDirty(e);
                                 }
                             }
-                            mc.MaterialOverrides.clear();
-                            // assimp imports carry no material -> assign a default
-                            // Blinn-Phong material so the mesh actually renders.
-                            auto shader = AssetManager::Get().Load<Shader>(
-                                "D:/CPPPractices/DMGameEngine/engine/shaders/BlinnPhong.glsl");
-                            if (shader) {
-                                auto baseMat = DM::CreateRef<Material>(shader);
-                                baseMat->SetFloat3("u_AlbedoColor", {0.8f, 0.8f, 0.85f});
-                                baseMat->SetFloat("u_SpecularStrength", 0.5f);
-                                baseMat->SetFloat("u_Shininess", 64.0f);
-                                baseMat->SetInt("u_UseTexture", 0);
-                                mc.MaterialOverrides.resize(mesh->SubMeshes.size());
-                                for (auto& ov : mc.MaterialOverrides)
-                                    ov = DM::CreateRef<MaterialInstance>(baseMat);
-                            }
+                            AssignDefaultMaterial(mc);
                             DMGE_CLIENT_INFO("Loaded mesh into entity: {0}", path);
                         }
                     }
@@ -555,7 +859,12 @@ void EditorLayer::DrawComponents(Entity e) {
             s->RemoveComponent<MeshComponent>(e);
         ImGui::EndPopup();
     }
+
+    if (readOnly)
+        ImGui::EndDisabled();
 }
+
+// ── Systems panel ───────────────────────────────────────────────
 
 void EditorLayer::DrawSystems() {
     ImGui::Begin("Systems");
@@ -570,15 +879,22 @@ void EditorLayer::DrawSystems() {
             ImGui::Text("%d. %s", i++, sys ? sys->GetName() : "(null)");
         }
         ImGui::Separator();
-        ImGui::Text("Play mode: %s", m_Scene.IsPlaying() ? "PLAYING" : "Editing");
-        if (ImGui::Button(m_Scene.IsPlaying() ? "Pause##sys" : "Play##sys"))
-            m_Scene.SetPlaying(!m_Scene.IsPlaying());
-        ImGui::SameLine();
-        if (ImGui::Button("Stop##sys"))
-            m_Scene.SetPlaying(false);
+        ImGui::Text("Play mode: %s",
+            m_Scene.IsPlaying() ? (m_Scene.IsPaused() ? "PAUSED" : "PLAYING") : "Editing");
+        if (m_Scene.IsPlaying()) {
+            if (ImGui::Button(m_Scene.IsPaused() ? "Resume##sys" : "Pause##sys"))
+                m_Scene.SetPaused(!m_Scene.IsPaused());
+            ImGui::SameLine();
+            if (ImGui::Button("Stop##sys"))
+                EndPlay();
+        } else if (ImGui::Button("Play##sys")) {
+            BeginPlay();
+        }
     }
     ImGui::End();
 }
+
+// ── Asset Browser ───────────────────────────────────────────────
 
 void EditorLayer::DrawAssetBrowser() {
     ImGui::Begin("Asset Browser");
@@ -601,12 +917,15 @@ void EditorLayer::DrawAssetBrowser() {
             else if (ext == ".glsl") icon = "[shader]";
             else if (ext == ".png" || ext == ".jpg" || ext == ".tga" || ext == ".dds") icon = "[tex]";
             else if (ext == ".mat") icon = "[mat]";
+            else if (ext == ".prefab") icon = "[prefab]";
+            else if (ext == ".scene") icon = "[scene]";
             std::string label = std::string(icon) + "  " + rel;
             ImGui::PushID(path.c_str());
             // full-width row; clear, not cramped.
             if (ImGui::Selectable(label.c_str(), m_SelectedAsset == path))
                 m_SelectedAsset = path;
-            // Drag source: carries the asset path to MeshComponent drop target.
+            // Drag source: carries the asset path to drop targets (MeshComponent
+            // slot, Viewport, Hierarchy). Model files create mesh entities.
             if (ImGui::BeginDragDropSource()) {
                 ImGui::SetDragDropPayload("ASSET_PATH", path.c_str(), path.size() + 1);
                 ImGui::Text("%s %s", icon, rel.c_str());
@@ -618,11 +937,99 @@ void EditorLayer::DrawAssetBrowser() {
 
     drawDir("D:/CPPPractices/DMGameEngine/editor/assets", "Assets (editor/assets)");
     drawDir("D:/CPPPractices/DMGameEngine/engine/shaders", "Shaders (engine/shaders)");
+    drawDir("prefabs", "Prefabs (prefabs/)");
 
     ImGui::Separator();
     if (!m_SelectedAsset.empty())
         ImGui::TextWrapped("Selected: %s", m_SelectedAsset.c_str());
     else
-        ImGui::TextDisabled("Drag a [mesh] onto a MeshComponent to load it.");
+        ImGui::TextDisabled("Drag a [mesh] onto the Viewport or Hierarchy to create an entity.");
     ImGui::End();
+}
+
+// ── Model drop -> new entity ────────────────────────────────────
+
+bool EditorLayer::CreateEntityFromModel(const std::string& path) {
+    // Play-mode isolation: entity creation is an edit; block it.
+    if (m_Scene.IsPlaying()) {
+        DMGE_CLIENT_WARN("Cannot create entities during play mode (changes would be discarded on Stop).");
+        return false;
+    }
+    Scene* s = m_Scene.GetScene();
+    if (!s) return false;
+    if (!IsModelExtension(std::filesystem::path(path).extension().string())) {
+        DMGE_CLIENT_WARN("Not a model file: {0}", path);
+        return false;
+    }
+    auto mesh = AssetManager::Get().Load<Mesh>(path);
+    if (!mesh) {
+        DMGE_CLIENT_WARN("Failed to load model: {0}", path);
+        return false;
+    }
+    std::string name = std::filesystem::path(path).stem().string();
+    Entity e = s->CreateEntity(name);
+    auto& mc = s->AddComponent<MeshComponent>(e);
+    mc.Mesh = mesh;
+    // Record the registry UUID (Load<Mesh> by path registers the file) so the
+    // entity round-trips through scene save / prefab save.
+    mc.MeshAsset = AssetHandle(AssetManager::Get().GetUUID(path));
+    AssignDefaultMaterial(mc);
+    AABBd lb;
+    if (MeshLocalBounds(*mesh, lb)) {
+        float maxExt = std::max({lb.max.x - lb.min.x, lb.max.y - lb.min.y, lb.max.z - lb.min.z});
+        if (maxExt > 0.0001f && s->HasComponent<TransformComponent>(e)) {
+            float sc = 2.0f / maxExt;
+            auto& tc = s->GetComponent<TransformComponent>(e);
+            tc.Scale = {sc, sc, sc};
+            tc.Dirty = true;
+            s->MarkSubtreeDirty(e);
+        }
+    }
+    m_Selected = e;
+    DMGE_CLIENT_INFO("Created entity '{0}' from model {1}", name, path);
+    return true;
+}
+
+// ── Prefab (stage 3) ────────────────────────────────────────────
+
+void EditorLayer::SavePrefab(Entity e, const std::string& path) {
+    Scene* s = m_Scene.GetEditScene();   // prefabs always capture the edit state
+    if (!s || e == NullEntity || path.empty()) return;
+    // Temp Scene carrying the single entity tree through SceneSerializer:
+    // no engine changes needed (editor-side single-entity serialization).
+    Scene tmp;
+    EditorSceneCopy::CopyEntityTree(*s, e, tmp);
+    std::filesystem::path p(path);
+    if (p.has_parent_path())
+        std::filesystem::create_directories(p.parent_path());
+    SceneSerializer::Save(tmp, path);
+    DMGE_CLIENT_INFO("Prefab saved: {0}", path);
+}
+
+Entity EditorLayer::InstantiatePrefab(const std::string& path) {
+    if (m_Scene.IsPlaying()) {
+        DMGE_CLIENT_WARN("Cannot instantiate prefabs during play mode.");
+        return NullEntity;
+    }
+    Scene* s = m_Scene.GetScene();
+    if (!s) return NullEntity;
+    Scene tmp;
+    if (!SceneSerializer::Load(tmp, path)) {
+        DMGE_CLIENT_WARN("Failed to load prefab: {0}", path);
+        return NullEntity;
+    }
+    // Copy every root of the prefab scene into the current edit scene.
+    Entity firstNew = NullEntity;
+    tmp.GetRegistry().view<TransformComponent>().each([&](auto eh, TransformComponent& tc) {
+        if (tc.Parent != NullEntity) return;   // children come with their root
+        Entity root = static_cast<Entity>(eh);
+        Entity ne = EditorSceneCopy::CopyEntityTree(tmp, root, *s);
+        if (firstNew == NullEntity)
+            firstNew = ne;
+    });
+    if (firstNew != NullEntity) {
+        m_Selected = firstNew;
+        DMGE_CLIENT_INFO("Prefab instantiated: {0}", path);
+    }
+    return firstNew;
 }
