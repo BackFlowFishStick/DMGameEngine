@@ -89,6 +89,7 @@ flowchart LR
   - 往 Component 里写逻辑——红线 R4：Component 纯数据，逻辑进 System（`AGENTS.md`）。
   - 以为 System 有自动发现机制——没有，`AddSystem` 注册顺序即执行顺序，`LightSystem` 必须在 `MeshRenderSystem` 之前。
   - 把 `Scene::DestroyEntity` 想成级联删除——孤儿子实体成为独立根，不重新挂到祖父。
+- **详细讲解**：本站不展开，见 [SceneAndECSTour.md](SceneAndECSTour.md)（registry 与组件、三叉链与脏传播、System 数据流、两趟加载与序列化取舍）。
 - **约定与陷阱的权威清单**：`kb/KB-04-ECS与场景序列化约定.md`；设计动机：`documents/ECS_DESIGN.md`、`documents/SCENE_DESIGN.md`、概念详解 `documents/ECS_CONCEPTS.md`。
 
 ## 站 ⑥ AssetManager
