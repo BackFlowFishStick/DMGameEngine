@@ -1,4 +1,5 @@
 #include "EditorLayer.h"
+#include "SceneDuplicator.h"
 #include <DMGameEngine/Core/Log.h>
 #include <DMGameEngine/Scene/SceneSerializer.h>
 #include <DMGameEngine/Scene/Components/Components.h>
@@ -9,8 +10,8 @@
 #include <fstream>
 #include <cstdio>
 #include <cstring>
-#include <cctype>
 #include <cfloat>
+#include <cctype>
 #include <cmath>
 #include <algorithm>
 #include <glm/gtc/type_ptr.hpp>
@@ -61,12 +62,6 @@ static bool RayAABB(const glm::vec3& o, const glm::vec3& d,
     return true;
 }
 
-static bool IsModelExtension(std::string ext) {
-    std::transform(ext.begin(), ext.end(), ext.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".mesh";
-}
-
 // ── Default material helper ─────────────────────────────────────
 // assimp imports carry no material; assign a default Blinn-Phong so the mesh
 // actually renders. (AssetLoader<Material> is not exported - K-002 - so the
@@ -90,6 +85,21 @@ static void AssignDefaultMaterial(MeshComponent& mc) {
     mc.MaterialOverrides.resize(mc.Mesh ? mc.Mesh->SubMeshes.size() : 0);
     for (auto& ov : mc.MaterialOverrides)
         ov = DM::CreateRef<MaterialInstance>(baseMat);
+}
+
+static bool IsModelExtension(std::string ext) {
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb" || ext == ".mesh";
+}
+
+static std::string SanitizeFilename(const std::string& name) {
+    std::string out;
+    for (char c : name) {
+        bool ok = std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-' || c == '.';
+        out.push_back(ok ? c : '_');
+    }
+    return out.empty() ? std::string("Entity") : out;
 }
 
 static constexpr const char* kConfigPath = "editor_config.ini";
@@ -299,12 +309,50 @@ void EditorLayer::DrawModalDialogs() {
         }
         break;
     }
+    case Dialog::SavePrefab: {
+        ImGui::Text("Save prefab as (.prefab):");
+        ImGui::InputText("Path", m_PathBuf, sizeof(m_PathBuf));
+        if (ImGui::Button("Save", ImVec2(120, 0))) {
+            if (m_PathBuf[0] && m_ContextEntity != NullEntity) {
+                SavePrefab(m_ContextEntity, m_PathBuf);
+                m_Dialog = Dialog::None;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            m_Dialog = Dialog::None;
+            ImGui::CloseCurrentPopup();
+        }
+        break;
+    }
+    case Dialog::InstantiatePrefab: {
+        ImGui::Text("Instantiate prefab (.prefab):");
+        ImGui::InputText("Path", m_PathBuf, sizeof(m_PathBuf));
+        bool exists = m_PathBuf[0] && std::filesystem::exists(m_PathBuf);
+        if (m_PathBuf[0] && !exists)
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "File not found.");
+        if (ImGui::Button("Instantiate", ImVec2(120, 0))) {
+            if (exists && InstantiatePrefab(m_PathBuf) != NullEntity) {
+                m_Dialog = Dialog::None;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            m_Dialog = Dialog::None;
+            ImGui::CloseCurrentPopup();
+        }
+        break;
+    }
     case Dialog::None:
         ImGui::CloseCurrentPopup();
         break;
     }
     ImGui::EndPopup();
 }
+
+// ── Dockspace ───────────────────────────────────────────────────
 
 void EditorLayer::DrawDockspace() {
 #ifdef IMGUI_HAS_DOCK
@@ -347,6 +395,8 @@ void EditorLayer::DrawDockspace() {
 #endif
 }
 
+// ── Menu bar ────────────────────────────────────────────────────
+
 void EditorLayer::DrawMenuBar() {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
@@ -378,8 +428,7 @@ void EditorLayer::DrawMenuBar() {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Entity")) {
-            // Play-mode isolation: entity CRUD only in edit mode (the play
-            // copy is discarded on Stop - editing it would mislead the user).
+            // Play-mode isolation: entity CRUD only in edit mode.
             if (ImGui::MenuItem("Create Empty", "Ctrl+Shift+A", false, !m_Scene.IsPlaying())) {
                 if (auto* s = m_Scene.GetScene())
                     m_Selected = s->CreateEntity("Entity");
@@ -406,6 +455,8 @@ void EditorLayer::DrawMenuBar() {
         ImGui::EndMainMenuBar();
     }
 }
+
+// ── Viewport ────────────────────────────────────────────────────
 
 void EditorLayer::DrawViewport() {
     ImGui::Begin("Viewport");
@@ -531,8 +582,8 @@ void EditorLayer::DrawViewport() {
         }
 
         // Gizmo editing only in edit mode: writing transforms during play
-        // would mutate the play copy that gets discarded on Stop, and the
-        // inspector is read-only then - keep them consistent.
+        // would desync the play copy from what gets discarded on Stop anyway,
+        // and the inspector is read-only then - keep them consistent.
         if (!m_Scene.IsPlaying() && m_Selected != NullEntity && m_GizmoType >= 0) {
 
             Scene* sc = m_Scene.GetScene();
@@ -570,6 +621,8 @@ void EditorLayer::DrawViewport() {
     }
     ImGui::End();
 }
+
+// ── Hierarchy ───────────────────────────────────────────────────
 
 void EditorLayer::DrawHierarchy() {
     ImGui::Begin("Scene Hierarchy");
@@ -627,6 +680,23 @@ void EditorLayer::DrawEntityNode(Entity e) {
         flags, "%s", tag.c_str());
     if (ImGui::IsItemClicked())
         m_Selected = e;
+    // Right-click context menu: prefab save / instantiate (stage 3).
+    if (ImGui::BeginPopupContextItem("EntityContextMenu")) {
+        m_ContextEntity = e;
+        const bool editOk = !m_Scene.IsPlaying();  // edits blocked during play
+        if (ImGui::MenuItem("Save As Prefab...", nullptr, false, editOk)) {
+            std::string def = std::string("prefabs/") + SanitizeFilename(tag) + ".prefab";
+            std::snprintf(m_PathBuf, sizeof(m_PathBuf), "%s", def.c_str());
+            m_Dialog = Dialog::SavePrefab;
+            m_DialogOpenPending = true;
+        }
+        if (ImGui::MenuItem("Instantiate Prefab...", nullptr, false, editOk)) {
+            m_PathBuf[0] = '\0';
+            m_Dialog = Dialog::InstantiatePrefab;
+            m_DialogOpenPending = true;
+        }
+        ImGui::EndPopup();
+    }
     if (open) {
         if (s->HasComponent<TransformComponent>(e)) {
             Entity child = s->GetComponent<TransformComponent>(e).FirstChild;
@@ -641,6 +711,8 @@ void EditorLayer::DrawEntityNode(Entity e) {
         ImGui::TreePop();
     }
 }
+
+// ── Inspector ───────────────────────────────────────────────────
 
 void EditorLayer::DrawInspector() {
     ImGui::Begin("Inspector");
@@ -792,6 +864,8 @@ void EditorLayer::DrawComponents(Entity e) {
         ImGui::EndDisabled();
 }
 
+// ── Systems panel ───────────────────────────────────────────────
+
 void EditorLayer::DrawSystems() {
     ImGui::Begin("Systems");
     Scene* s = m_Scene.GetScene();
@@ -820,6 +894,8 @@ void EditorLayer::DrawSystems() {
     ImGui::End();
 }
 
+// ── Asset Browser ───────────────────────────────────────────────
+
 void EditorLayer::DrawAssetBrowser() {
     ImGui::Begin("Asset Browser");
     namespace fs = std::filesystem;
@@ -841,13 +917,15 @@ void EditorLayer::DrawAssetBrowser() {
             else if (ext == ".glsl") icon = "[shader]";
             else if (ext == ".png" || ext == ".jpg" || ext == ".tga" || ext == ".dds") icon = "[tex]";
             else if (ext == ".mat") icon = "[mat]";
+            else if (ext == ".prefab") icon = "[prefab]";
             else if (ext == ".scene") icon = "[scene]";
             std::string label = std::string(icon) + "  " + rel;
             ImGui::PushID(path.c_str());
             // full-width row; clear, not cramped.
             if (ImGui::Selectable(label.c_str(), m_SelectedAsset == path))
                 m_SelectedAsset = path;
-            // Drag source: carries the asset path to MeshComponent drop target.
+            // Drag source: carries the asset path to drop targets (MeshComponent
+            // slot, Viewport, Hierarchy). Model files create mesh entities.
             if (ImGui::BeginDragDropSource()) {
                 ImGui::SetDragDropPayload("ASSET_PATH", path.c_str(), path.size() + 1);
                 ImGui::Text("%s %s", icon, rel.c_str());
@@ -859,6 +937,7 @@ void EditorLayer::DrawAssetBrowser() {
 
     drawDir("D:/CPPPractices/DMGameEngine/editor/assets", "Assets (editor/assets)");
     drawDir("D:/CPPPractices/DMGameEngine/engine/shaders", "Shaders (engine/shaders)");
+    drawDir("prefabs", "Prefabs (prefabs/)");
 
     ImGui::Separator();
     if (!m_SelectedAsset.empty())
@@ -909,4 +988,48 @@ bool EditorLayer::CreateEntityFromModel(const std::string& path) {
     m_Selected = e;
     DMGE_CLIENT_INFO("Created entity '{0}' from model {1}", name, path);
     return true;
+}
+
+// ── Prefab (stage 3) ────────────────────────────────────────────
+
+void EditorLayer::SavePrefab(Entity e, const std::string& path) {
+    Scene* s = m_Scene.GetEditScene();   // prefabs always capture the edit state
+    if (!s || e == NullEntity || path.empty()) return;
+    // Temp Scene carrying the single entity tree through SceneSerializer:
+    // no engine changes needed (editor-side single-entity serialization).
+    Scene tmp;
+    EditorSceneCopy::CopyEntityTree(*s, e, tmp);
+    std::filesystem::path p(path);
+    if (p.has_parent_path())
+        std::filesystem::create_directories(p.parent_path());
+    SceneSerializer::Save(tmp, path);
+    DMGE_CLIENT_INFO("Prefab saved: {0}", path);
+}
+
+Entity EditorLayer::InstantiatePrefab(const std::string& path) {
+    if (m_Scene.IsPlaying()) {
+        DMGE_CLIENT_WARN("Cannot instantiate prefabs during play mode.");
+        return NullEntity;
+    }
+    Scene* s = m_Scene.GetScene();
+    if (!s) return NullEntity;
+    Scene tmp;
+    if (!SceneSerializer::Load(tmp, path)) {
+        DMGE_CLIENT_WARN("Failed to load prefab: {0}", path);
+        return NullEntity;
+    }
+    // Copy every root of the prefab scene into the current edit scene.
+    Entity firstNew = NullEntity;
+    tmp.GetRegistry().view<TransformComponent>().each([&](auto eh, TransformComponent& tc) {
+        if (tc.Parent != NullEntity) return;   // children come with their root
+        Entity root = static_cast<Entity>(eh);
+        Entity ne = EditorSceneCopy::CopyEntityTree(tmp, root, *s);
+        if (firstNew == NullEntity)
+            firstNew = ne;
+    });
+    if (firstNew != NullEntity) {
+        m_Selected = firstNew;
+        DMGE_CLIENT_INFO("Prefab instantiated: {0}", path);
+    }
+    return firstNew;
 }
