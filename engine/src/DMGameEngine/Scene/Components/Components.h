@@ -12,3 +12,6 @@
 #include "DMGameEngine/Scene/Components/MeshComponent.h"
 #include "DMGameEngine/Scene/Components/CameraComponent.h"
 #include "DMGameEngine/Scene/Components/LightComponent.h"
+#ifdef DMGE_ANIMATION
+#include "DMGameEngine/Scene/Components/AnimatorComponent.h"
+#endif

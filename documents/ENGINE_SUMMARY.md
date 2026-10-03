@@ -2328,3 +2328,17 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 **涉及文件：** `Platform/Vulkan/VulkanVertexArray.h/.cpp`、`VulkanRendererAPI.h/.cpp`、`VulkanGraphicsContext.cpp`、`VulkanDevice.cpp`（无新文件，无 CMake 改动）
 
 **验证：** Vulkan ON 全量零 error + ctest 37/37 绿 + 改动文件零新增 /W4 警告；`DMGE_VULKAN_BACKEND=OFF` 复测 37/37 绿无回归。量化数据（RTX 4070 Ti，无 surface 微基准，K-014 方法）与失效/扩容设计见 `VULKAN_FIXES.md` §12.5；运行时 Profiler 复核待人工。新坑：kb/KB-07 K-019。
+### 2026-10-03 - 骨骼动画系统阶段 1：导入 + Skeleton/Clip 资产 + ECS + OpenGL 蒙皮（anim-agent）
+
+分支 `agent/anim-agent/skeleton-stage1`（worktree `.worktrees/anim-agent`），编译开关 `DMGE_ANIMATION`（默认 OFF，先例 `DMGE_VULKAN_BACKEND`；ON 时定义 PUBLIC 以保证门控公共头一致）。
+
+- **资产层**：`Animation/Skeleton.h/.cpp`（扁平数组关节层级 + 父先于子不变量 + 每骨 inverse bind）、`Animation/AnimationClip.h`（ticks 时长 + 每关节 Translation/Rotation/Scale 关键帧流）、`Animation/AnimationMath.h/.cpp`（关键帧采样 clamp 端点/短弧 slerp、SampleLocalMatrices、ComputeSkinningPalette——world 传播与 invBind 相乘分两个 pass，全纯逻辑可测）。
+- **导入**：assimp 路径扩展读 `aiBone`/`aiAnimation`；蒙皮顶点新增 a_BoneIndices/a_BoneWeights（top-4 归一化，Float4 索引保持交错浮点缓冲，shader 内 cast ivec4）；蒙皮路径**不烘焙节点变换**（顶点留 bind pose 模型空间，K-020）；Skeleton/Clip 以派生路径 `<model>#skeleton`、`<model>#anim/<i>` 注册进 AssetManager（KB-05 身份/路径分离，数据经 loader 懒加载）；另提供 `.skel.json`/`.anim.json` 最小内联格式 loader（测试/手工资产，规避 K-012）。`AssetType` 枚举新增 Skeleton/AnimationClip；`AssetLoader<Skeleton>/<AnimationClip>` 特化 DMGE_API 导出（K-002 规则）。assimp 类型仍封闭在 importer TU（R1）。
+- **ECS**：`AnimatorComponent`（UUID 句柄 + 播放状态 + 运行时 Palette，纯数据 R4）；`AnimationSystem`（header-only，推进/loop wrap/暂停/倍速 → 采样 → 调色板，须注册在 MeshRenderSystem 前）；`MeshRenderSystem` 门控排除动画实体（静态/实例化路径零改动）。SceneSerializer 新增 Animator 段（资产存 UUID，Palette/CurrentTime 不落盘）。
+- **渲染**：`BlinnPhongSkinned.glsl`（顶点蒙皮 + 零权重回退单位阵，fragment 与 BlinnPhong 一致）；`Shader::SetMat4Array` 新虚函数（默认 no-op + Vulkan TODO 注释，不破坏 `DMGE_VULKAN_BACKEND=ON` 编译；OpenGL 以 `glUniformMatrix4fv` 实现）；`Renderer::SubmitSkinned` → RenderQueue per-draw 调色板字段 → Flush 上传 `u_BoneMatrices`。**选型论证**：调色板走 per-draw uniform 而非 per-frame UBO/descriptor——引擎当前无 UBO 抽象（Shader 全部 name-based uniform），且 K-009 descriptor 缓存按 (shaderID,纹理hash) 复用，per-draw 调色板资源会污染/穿透缓存键；uniform 路径完全绕开 descriptor。`SkinnedMeshRenderSystem` per-draw 逐实体绘制（上限 128 关节 = shader 数组长度；无蒙皮实例化）。**仅 OpenGL**（Vulkan 蒙皮路径为后续，注明于代码注释）。
+- **测试**：`engine/tests/test_animation_math.cpp`（12）、`test_animation_asset.cpp`（4，含 vendored `simple_skin.gltf` 真实蒙皮导入：层级不变量/派生资产/采样集成）、`test_animation_serialize.cpp`（5，save→load 往返 + headless tick）、`test_animation_render.cpp`（3，CPU 侧契约；K-021：headless 不可构造后端对象）。
+- **新坑沉淀**：K-020（蒙皮顶点空间假设）、K-021（headless 禁构造后端对象）。
+
+**涉及文件：** `engine/src/DMGameEngine/Animation/*`（新增）、`Asset/AssetLoader.h`、`Asset/AssetTypes.h`、`Asset/MeshImporterAssimp.cpp`、`Scene/Components/AnimatorComponent.h`（新增）、`Scene/Components/Components.h`、`Scene/Systems/AnimationSystem.h`（新增）、`Scene/Systems/SkinnedMeshRenderSystem.h`（新增）、`Scene/Systems/MeshRenderSystem.h`、`Scene/SceneSerializer.cpp`、`Renderer/Shader.h`、`Renderer/RenderQueue.h/.cpp`、`Renderer/Renderer.h/.cpp`、`Platform/OpenGL/OpenGLShader.h/.cpp`、`DMGameEngine.h`、`engine/shaders/BlinnPhongSkinned.glsl`（新增）、`engine/CMakeLists.txt`、`engine/tests/CMakeLists.txt`、`engine/tests/test_animation_*.cpp`（新增）。
+
+**验证：** `DMGE_ANIMATION=ON`（build-agent，engine+editor+game+tests 全量）零 error、/W4 零新增（仅既有 C4251 基线）、ctest **61/61 绿**；`DMGE_ANIMATION=OFF`（build-agent-off 全量 327 targets 含 editor/game）零 error、ctest **37/37 绿**（与改动前基线一致）。运行时人工验证步骤（需要带骨骼动画的模型）见 agent 报告。

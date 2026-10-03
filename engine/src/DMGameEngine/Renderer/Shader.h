@@ -158,6 +158,16 @@ public:
     virtual void SetFloat4(std::string_view name, const glm::vec4& value)  = 0;
     virtual void SetMat4(std::string_view name, const glm::mat4& value)    = 0;
 
+    // Uploads a mat4 array (count elements) - used for the skeletal skinning
+    // bone palette (u_BoneMatrices). Default no-op: only the OpenGL backend
+    // implements skinning in stage 1 (animation) - the Vulkan backend resolves
+    // uniforms into a per-frame staging UBO and needs a dynamic-offset path
+    // for per-draw arrays (TODO, Vulkan skinning follow-up; kb/KB-03).
+    virtual void SetMat4Array(std::string_view name, const glm::mat4* values, uint32_t count)
+    {
+        (void)name; (void)values; (void)count;
+    }
+
     // ── Factory ─────────────────────────────────────────────────
     static DM::Ref<Shader> Create(std::string_view filepath);
     static DM::Ref<Shader> Create(std::string_view name,

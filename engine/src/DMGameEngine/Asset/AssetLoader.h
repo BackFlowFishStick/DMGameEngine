@@ -13,6 +13,10 @@
 #include "DMGameEngine/Renderer/Material.h"
 #include "DMGameEngine/Renderer/VertexArray.h"
 #include "DMGameEngine/Asset/Mesh.h"
+#ifdef DMGE_ANIMATION
+#include "DMGameEngine/Animation/Skeleton.h"
+#include "DMGameEngine/Animation/AnimationClip.h"
+#endif
 #include <string>
 
 namespace DMGameEngine {
@@ -58,5 +62,24 @@ struct DMGE_API AssetLoader<Mesh>
 {
     static DM::Ref<Mesh> Load(const std::string& path);
 };
+
+#ifdef DMGE_ANIMATION
+// Skeleton / AnimationClip (animation stage 1): dispatch between derived
+// assimp paths ("<model>#skeleton", "<model>#anim/<i>") and the minimal
+// inline JSON formats (.skel.json / .anim.json). Implementation in
+// Animation/AnimationAssetLoaders.cpp. DMGE_API per KB-05 rule 2 (header-only
+// consumers like AnimationSystem call Load<Skeleton> across the DLL boundary).
+template<>
+struct DMGE_API AssetLoader<Skeleton>
+{
+    static DM::Ref<Skeleton> Load(const std::string& path);
+};
+
+template<>
+struct DMGE_API AssetLoader<AnimationClip>
+{
+    static DM::Ref<AnimationClip> Load(const std::string& path);
+};
+#endif // DMGE_ANIMATION
 
 } // namespace DMGameEngine

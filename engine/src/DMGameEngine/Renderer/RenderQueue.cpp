@@ -110,7 +110,18 @@ void RenderQueue::Submit(const DM::Ref<Material>& material,
 {
     DMGE_CORE_ASSERT(material, "RenderQueue::Submit - material is null!");
     DMGE_CORE_ASSERT(vertexArray, "RenderQueue::Submit - vertexArray is null!");
-    m_Queue.push_back({ material, nullptr, vertexArray, transform });
+    m_Queue.push_back({ material, nullptr, vertexArray, transform, nullptr, 0 });
+}
+
+void RenderQueue::Submit(const DM::Ref<Material>& material,
+                         const DM::Ref<VertexArray>& vertexArray,
+                         const glm::mat4& transform,
+                         const glm::mat4* bonePalette, uint32_t bonePaletteCount)
+{
+    DMGE_CORE_ASSERT(material, "RenderQueue::Submit - material is null!");
+    DMGE_CORE_ASSERT(vertexArray, "RenderQueue::Submit - vertexArray is null!");
+    m_Queue.push_back({ material, nullptr, vertexArray, transform,
+                        bonePalette, bonePaletteCount });
 }
 
 void RenderQueue::Submit(const DM::Ref<Shader>& shader,
@@ -203,6 +214,14 @@ void RenderQueue::Flush(const glm::mat4& viewProjection,
             glm::vec4(normalMat3[2], 0.0f),
             glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
         shader->SetMat4("u_NormalMatrix", normalMat4);
+
+        // Skinning (animation stage 1): per-draw bone palette. Non-skinned
+        // shaders don't declare u_BoneMatrices -> location -1 -> no-op, and
+        // static draws carry a null palette anyway. Per-draw uniform (not a
+        // descriptor/UBO) so it never touches the Vulkan descriptor cache
+        // (kb/KB-07 K-009) on the future Vulkan path.
+        if (r.BonePalette && r.BonePaletteCount > 0)
+            shader->SetMat4Array("u_BoneMatrices", r.BonePalette, r.BonePaletteCount);
 
         RenderCommand::DrawIndexed(*r.VertexArray);
     }

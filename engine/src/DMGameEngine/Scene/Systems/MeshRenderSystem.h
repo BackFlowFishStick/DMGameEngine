@@ -31,6 +31,9 @@
 #include "DMGameEngine/Renderer/IndexBuffer.h"
 #include "DMGameEngine/Asset/AssetManager.h"
 #include "DMGameEngine/Asset/Mesh.h"
+#ifdef DMGE_ANIMATION
+#include "DMGameEngine/Scene/Components/AnimatorComponent.h"
+#endif
 
 #include <unordered_map>
 #include <vector>
@@ -47,7 +50,14 @@ public:
     void OnRender() override
     {
         auto& reg  = m_Scene.GetRegistry();
+#ifdef DMGE_ANIMATION
+        // Animated entities are drawn by SkinnedMeshRenderSystem with a bone
+        // palette - exclude them here so a mesh is never double-drawn.
+        auto  view = reg.view<TransformComponent, MeshComponent>(
+                         entt::exclude<AnimatorComponent>);
+#else
         auto  view = reg.view<TransformComponent, MeshComponent>();
+#endif
 
         // ── Phase 1: group entities by (Material, Mesh) ──────────
         struct GroupKey

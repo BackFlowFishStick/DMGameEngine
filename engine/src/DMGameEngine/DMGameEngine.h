@@ -64,6 +64,16 @@
 #include "DMGameEngine/Scene/Systems/TransformSystem.h"
 #include "DMGameEngine/Scene/Systems/MeshRenderSystem.h"
 #include "DMGameEngine/Scene/Systems/LightSystem.h"
+#ifdef DMGE_ANIMATION
+// Skeletal animation subsystem (stage 1). Built when DMGE_ANIMATION=ON; see
+// engine/CMakeLists.txt. AnimationSystem must be registered BEFORE
+// MeshRenderSystem so palettes are fresh for SkinnedMeshRenderSystem.
+#include "DMGameEngine/Animation/Skeleton.h"
+#include "DMGameEngine/Animation/AnimationClip.h"
+#include "DMGameEngine/Animation/AnimationMath.h"
+#include "DMGameEngine/Scene/Systems/AnimationSystem.h"
+#include "DMGameEngine/Scene/Systems/SkinnedMeshRenderSystem.h"
+#endif
 
 // ── Asset ───────────────────────────────────────────────────────
 #include "DMGameEngine/Asset/AssetTypes.h"

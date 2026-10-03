@@ -133,6 +133,12 @@ void OpenGLShader::SetMat4(std::string_view name, const glm::mat4& value)
     DMGE_GL_CALL(glUniformMatrix4fv(GetUniformLocation(name), 1, GL_FALSE, glm::value_ptr(value)));
 }
 
+void OpenGLShader::SetMat4Array(std::string_view name, const glm::mat4* values, uint32_t count)
+{
+    DMGE_GL_CALL(glUniformMatrix4fv(GetUniformLocation(name), static_cast<GLsizei>(count),
+                                    GL_FALSE, glm::value_ptr(*values)));
+}
+
 // ── File I/O ─────────────────────────────────────────────────────
 
 std::string OpenGLShader::ReadFile(std::string_view filepath) const
