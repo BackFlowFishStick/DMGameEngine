@@ -225,6 +225,7 @@ if(DMGE_ANIMATION)
         "src/DMGameEngine/Animation/AnimationMath.h"
         "src/DMGameEngine/Scene/Components/AnimatorComponent.h"
         "src/DMGameEngine/Scene/Systems/AnimationSystem.h"
+        "src/DMGameEngine/Scene/Systems/SkinnedMeshRenderSystem.h"
     )
 endif()
 

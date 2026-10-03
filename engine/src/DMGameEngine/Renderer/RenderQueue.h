@@ -38,6 +38,13 @@ struct Renderable
     DM::Ref<Shader>      Shader;                    // used when Material is null
     DM::Ref<VertexArray> VertexArray;
     glm::mat4            Transform = glm::mat4(1.0f);
+    // Skinning (animation stage 1): per-draw bone palette uploaded as the
+    // u_BoneMatrices uniform array. Pointer into the AnimatorComponent's
+    // Palette vector - valid for the frame between Submit and Flush because
+    // the flush happens before the next AnimationSystem tick mutates it.
+    // Null = static draw (no palette upload).
+    const glm::mat4*     BonePalette      = nullptr;
+    uint32_t             BonePaletteCount = 0;
 };
 
 // ── Instanced draw request ─────────────────────────────────────
@@ -62,6 +69,13 @@ public:
     void Submit(const DM::Ref<Material>& material,
                 const DM::Ref<VertexArray>& vertexArray,
                 const glm::mat4& transform = glm::mat4(1.0f));
+    // Enqueue a material-bound skinned draw: same as above plus a per-draw
+    // bone palette uploaded to u_BoneMatrices (animation stage 1, OpenGL).
+    // The palette pointer must stay valid until Flush (see Renderable).
+    void Submit(const DM::Ref<Material>& material,
+                const DM::Ref<VertexArray>& vertexArray,
+                const glm::mat4& transform,
+                const glm::mat4* bonePalette, uint32_t bonePaletteCount);
     // Enqueue a shader-only draw (legacy path, no material uniforms).
     void Submit(const DM::Ref<Shader>& shader,
                 const DM::Ref<VertexArray>& vertexArray,

@@ -72,6 +72,7 @@
 #include "DMGameEngine/Animation/AnimationClip.h"
 #include "DMGameEngine/Animation/AnimationMath.h"
 #include "DMGameEngine/Scene/Systems/AnimationSystem.h"
+#include "DMGameEngine/Scene/Systems/SkinnedMeshRenderSystem.h"
 #endif
 
 // ── Asset ───────────────────────────────────────────────────────

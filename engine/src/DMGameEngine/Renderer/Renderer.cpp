@@ -109,6 +109,18 @@ void Renderer::Submit(const DM::Ref<Material>& material,
     s_Queue.Submit(material, vertexArray, transform);
 }
 
+void Renderer::SubmitSkinned(const DM::Ref<Material>& material,
+                             const DM::Ref<VertexArray>& vertexArray,
+                             const glm::mat4& transform,
+                             const glm::mat4* bonePalette, uint32_t bonePaletteCount)
+{
+    DMGE_CORE_ASSERT(material, "Renderer::SubmitSkinned - material is null!");
+    DMGE_CORE_ASSERT(vertexArray, "Renderer::SubmitSkinned - vertexArray is null!");
+    DMGE_CORE_ASSERT(bonePalette && bonePaletteCount > 0,
+                     "Renderer::SubmitSkinned - palette is empty!");
+    s_Queue.Submit(material, vertexArray, transform, bonePalette, bonePaletteCount);
+}
+
 void Renderer::SubmitInstanced(const DM::Ref<Material>& material,
                                 const DM::Ref<VertexArray>& vertexArray,
                                 uint32_t instanceCount)

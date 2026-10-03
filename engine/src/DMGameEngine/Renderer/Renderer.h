@@ -87,6 +87,16 @@ public:
                       const DM::Ref<VertexArray>& vertexArray,
                       const glm::mat4& transform = glm::mat4(1.0f));
 
+    // Enqueues a material-bound skinned draw (animation stage 1): identical to
+    // Submit(material, ...) plus a per-draw bone palette uploaded as the
+    // u_BoneMatrices uniform array at flush time. bonePalette must stay valid
+    // until EndScene/Flush (it normally points into AnimatorComponent::Palette).
+    // OpenGL only in stage 1 - see Shader::SetMat4Array for the Vulkan note.
+    static void SubmitSkinned(const DM::Ref<Material>& material,
+                              const DM::Ref<VertexArray>& vertexArray,
+                              const glm::mat4& transform,
+                              const glm::mat4* bonePalette, uint32_t bonePaletteCount);
+
     // Enqueues an instanced batch: one DrawIndexedInstanced for
     // instanceCount instances sharing the same material + VA.
     static void SubmitInstanced(const DM::Ref<Material>& material,

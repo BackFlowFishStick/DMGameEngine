@@ -39,6 +39,7 @@ public:
     void SetFloat3(std::string_view name, const glm::vec3& value) override;
     void SetFloat4(std::string_view name, const glm::vec4& value) override;
     void SetMat4(std::string_view name, const glm::mat4& value) override;
+    void SetMat4Array(std::string_view name, const glm::mat4* values, uint32_t count) override;
 
 private:
     std::string ReadFile(std::string_view filepath) const;
