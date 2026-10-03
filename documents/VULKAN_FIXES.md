@@ -343,3 +343,49 @@ void EndUploadBatch();  // 一次 submit + fence + wait
 ### 10.4 涉及文件
 
 `VulkanDeletionQueue.h`（新）、`VulkanDevice.h/.cpp`、`VulkanGraphicsContext.h/.cpp`、`VulkanTexture2D.cpp`、`VulkanTexture2DArray.cpp`、`VulkanTextureCube.cpp`、`VulkanVertexBuffer.cpp`、`VulkanIndexBuffer.cpp`、`engine/tests/test_deletion_queue.cpp`（新）、`engine/tests/CMakeLists.txt`。
+---
+
+## 11. 阶段 0c — Vulkan 性能 P0 两项（2026-10-03，agent/render-agent/vulkan-perf-p0）
+
+> 背景：ROADMAP 阶段 0c 指派 render-agent 落地 P0-1（descriptor 逐 draw 分配）与 P0-2（ImmediateSubmit 全 stall），直接建立在 §10 的 per-frame deletion queue 之上。两项各独立 commit（`d6e26e8` / `20d3117`）。
+
+### 11.1 P0-1 — descriptor set 按 `(shaderID, 纹理句柄 hash)` 缓存复用
+
+- **缓存键设计**（键必须覆盖全部影响 descriptor 内容的槽位）：
+  - binding 0（dynamic UBO）：descriptor 内容 = 帧内 scratch buffer 句柄 + offset 0 + range，帧内恒定；per-draw 变化的只有 bind 时的 dynamic offset（`vkCmdBindDescriptorSets` 参数，不进 set）——这正是复用可行的根因。顺带移除了 `WriteDescriptorSet` 从未使用的 `dynamicOffset` 参数（消除既有 C4100）。
+  - bindings 1..N（combined image sampler）：hash 的是实际写入的 `(sampler, view)` 句柄（未绑槽 = 全局 1×1 dummy，确定性）。**hash 句柄而非 `VulkanTexture*` 指针**：防止同一帧内纹理析构+新纹理分配复用同地址导致的错绑；dangling 绑定槽解引用风险与改前一致（`WriteDescriptorSet` 本就解引用，非本次引入）。
+  - descriptor set layout 由 `VulkanShader` 实例持有，`shaderID` 来自单调 `s_NextID` 永不复用，故键不可能 alias 另一 shader 的 layout（UBO 布局版本随 shader 实例走）。
+- **失效策略**：
+  - `ResetFrame`（`Clear()` 帧起点调用）在 `vkResetDescriptorPool` 后同步清空该帧槽的缓存 map——pool reset 使全部 set 失效，必须清（这是主失效路径，缓存生命周期 ≤ 1 帧）。
+  - `~VulkanShader` → `VulkanRendererAPI::OnShaderDestroyed(id)` 即时清除该 shader 的条目（防御性：ID 不复用 + 每帧清已保证正确，纯卫生）。
+  - `Init` 清空两槽 map：防运行时 `SetAPI` 切换回 Vulkan 后残留旧句柄。
+- **存储（R1）**：缓存为 `VulkanRendererAPI.cpp` 文件静态 `std::unordered_map<DescKey, VkDescriptorSet>[2]`（先例：`VulkanDevice` deletion bucket），导出头文件零新增 STL 成员。
+- **与删除队列（K-009）的关系**：cache 命中的 set 是 pool 所有，不单独销毁；pool 本体走 `DestroyFrameResources`（析构内 `vkDeviceWaitIdle` 之后），不经 deletion queue。`Clear()` 的 `ResetFrame` 发生在 `BeginFrame` 的 `vkWaitForFences` 之后，被 reset 的 set 只可能被该槽上一轮已确认完成的提交引用——pre-existing 语义，本改动未触碰。
+
+### 11.2 P0-2 — ImmediateSubmit 批量化
+
+- **API 形态**：`VulkanDevice::BeginImmediateBatch()` / `EndImmediateBatch()`；批内 `ImmediateSubmit(fn)` 自动降级为"只录制"（fn 录进共享 transient CB），`EndImmediateBatch` 一次 `vkQueueSubmit` + `vkQueueWaitIdle`。旧单次入口在批外语义完全不变。
+- 边界处理：嵌套批 / 无批 End 均 assert 拒绝（并安全 no-op）；空批也提交（CB 为空但等待语义与单次路径一致）。
+- **与 deletion queue 的时序结论**：批量化**不改变** K-009 的入桶/flush 调度——deferred destroy 的安全性证明只依赖帧 fence 时序，ImmediateSubmit 本就是同步完成（EndBatch drain 后才返回）。新增的唯一风险：**批跨帧打开**时，`BeginFrame` 的 bucket flush 可能把一个 copy 命令还在批 CB 里"已录制未提交"的资源销毁。处理：`BeginFrame` 加 assert 禁止批跨帧 + `BeginImmediateBatch` 注释写明"批限定在帧间（资产加载期）"。**flush 语义未变，`test_deletion_queue.cpp` 无需修改，性质测试依然成立**（已跑确认）。
+
+### 11.3 性能证据（量化，同一构建/同一机器）
+
+- 方法：临时独立 Vulkan 微基准（未提交，用后即删），直接计时引擎实现所用的**精确 API 序列**。沙箱/非交互会话无法创建窗口 surface（见 KB-07 K-014），故微基准建无 surface 的独立 VkDevice 测驱动层调用。Debug（/Od）构建，NVIDIA GeForce RTX 4070 Ti，Vulkan SDK 1.4.350.0，取多轮最优值。
+- **P0-1**（4096 sets/帧）：
+  - 改前每 draw 路径（`vkAllocateDescriptorSets` + `vkUpdateDescriptorSets`，含 `WriteDescriptorSet` 的每 draw 2 次 `std::vector` 堆分配）：**1.646 µs/draw**（6.74 ms/4096）
+  - 改后每 draw 路径（句柄 hash + `unordered_map` 查找）：**0.216 µs/draw**（0.88 ms/4096），约 **7.6×**
+- **P0-2**（512 次 immediate submit）：
+  - 改前（每次 reset+begin+end+submit+fence+`vkQueueWaitIdle` 全 stall）：**41.3 ms 总计（80.6 µs/submit）**
+  - 改后（512 次录制 + 1 次提交 + 1 次 drain）：**0.092 ms 总计**，约 **450×**
+- 说明：Debug(/Od) 放大堆分配与哈希的绝对值，比例用于说明量级与方向；Release 下绝对值更小但排序不变。定性补充：NVIDIA 驱动裸 `vkAllocate+vkUpdate` 很快（0.127 µs/set），引擎改前路径的主要开销在每 draw 的堆分配；批内 submit 的收益与驱动无关（消的是 GPU stall 本身）。game/editor 运行时 Profiler 复核待人工（沙箱限制，见 K-014）。
+
+### 11.4 验证（2026-10-03）
+
+- 构建环境：VS 18 Community (vcvars64) + Ninja + `DMGE_BUILD_SHARED=ON` + `DMGE_BUILD_TESTS=ON`。
+- `DMGE_VULKAN_BACKEND=ON`：全量（engine+game+editor+tests）零 error；`ctest --test-dir build-agent/engine` **37/37 全绿**；/W4 零新增警告（改动文件仅剩既有 C4100：`RewriteStageBody` 的 isVertex）。
+- `DMGE_VULKAN_BACKEND=OFF`（OpenGL 默认路径）：全量零 error，ctest **37/37 全绿**，无回归。
+- 运行时（game/editor + Validation Layer）验证受 K-014 限制待人工跑；建议场景：加载多纹理场景中途释放纹理（验 P0-1 缓存失效）、批量导入资产（验 P0-2 批内 submit）。
+
+### 11.5 涉及文件
+
+`VulkanRendererAPI.h/.cpp`、`VulkanShader.cpp`（P0-1）；`VulkanDevice.h/.cpp`、`VulkanGraphicsContext.cpp`（P0-2）。无新文件，无 CMake 改动，无公共抽象变更（R5：新增的 `OnShaderDestroyed` / `BeginImmediateBatch` 均为后端内部或 VulkanDevice 层 API，不动 `RendererAPI`/`GraphicsContext` 公共语义）。
