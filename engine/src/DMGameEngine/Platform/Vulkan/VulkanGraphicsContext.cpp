@@ -267,6 +267,14 @@ void VulkanGraphicsContext::RecreateSwapchain()
     if (width == 0 || height == 0)
         return; // minimized window: defer until non-zero
 
+    // The old swapchain images and the cached pipelines (whose keys bake the
+    // old formats) may still be referenced by an in-flight submission.
+    // Recreate is a rare, resize-driven event: idle the device first so the
+    // destroys below are not use-while-in-flight (review item A).
+    auto& dev = VulkanDevice::Get();
+    if (dev.Device != VK_NULL_HANDLE)
+        vkDeviceWaitIdle(dev.Device);
+
     m_Swapchain.Recreate(static_cast<uint32_t>(width),
                          static_cast<uint32_t>(height));
 
