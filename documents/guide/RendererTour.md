@@ -108,7 +108,7 @@ sequenceDiagram
 当前**真正落地**的用途：
 
 1. **编辑器 Viewport**（`editor/src/EditorScene.cpp`）：构造时创建离屏 FB（RGBA8 + Depth，初始 1280×720）；`Render()` 里 `Renderer::BeginScene(m_Camera->GetCamera(), m_FB)` → `SetViewport(FB 尺寸)` → `Scene::OnRender()` → `EndScene()`。`editor/src/EditorLayer.cpp` 的 `DrawViewport()` 用 `GetColorAttachment(0)->GetRendererID()` 作为 `ImTextureID` 交给 `ImGui::Image` 显示（UV 上下翻转）。viewport 尺寸变化走 `EditorScene::Resize` → `m_FB->Resize`。顺带一提：编辑器的**鼠标点选实体**也建立在这条链上——用逆 view-projection 从点击处反投影出射线，对每个 Mesh 实体做世界空间 AABB 相交测试。
-2. **相机自带渲染目标（机制就位，尚无调用方）**：`SceneCamera` 支持挂 `RenderTarget`，挂上后 `BeginScene(*this)` 自动离屏。这是为阴影贴图/后处理/多视口预留的钩子——按写作时点的代码，引擎与两个消费者都还没有给它设值的地方。
+2. **相机自带渲染目标（机制就位，尚无调用方）**：`SceneCamera` 支持挂 `RenderTarget`，挂上后 `BeginScene(*this)` 自动离屏。这是为阴影贴图/后处理/多视口预留的钩子——按写作时点的代码，引擎与两个消费者都还没有给它设值的地方。（2026-10 复核：`SetRenderTarget` 在 engine/editor/game 源码内仍只有声明、无调用方，本条继续成立。）
 
 > ⚠️ 一个已知的注释漂移：`FrameBuffer.h` 文件头注释声称"离屏 FrameBuffer 接入渲染 pass 模型是 follow-up、渲染目前总是打到交换链"——这与现状不符（`BeginScene`/`BeginRenderPass` 的 target 路径已实现并被编辑器使用）。以代码为准，注释属于历史残留。
 
