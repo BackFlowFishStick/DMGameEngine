@@ -2274,3 +2274,11 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 **涉及文件：** `editor/src/SceneDuplicator.h/.cpp`（新增）、`editor/src/EditorScene.h/.cpp`、`editor/src/EditorLayer.h/.cpp`、`editor/CMakeLists.txt`、`.gitignore`、`editor/GIZMO_HITTEST_FIX.md`（补录）、kb/KB-07
 
 **验证：** 全量构建（engine+editor+game+tests，build-agent）零 error、editor 侧零新增警告（还消掉 2 个既有 strncpy C4996）；ctest --test-dir build-agent/engine 37/37 全绿。GUI 行为（Play 隔离/拖拽/对话框/Prefab 往返）待人工验证。
+
+### 2026-10-03 - K-011 正解：enable_testing() 挪至根 CMakeLists.txt，ctest 指回构建根目录
+
+分支 `agent/test-agent/enable-testing-root`（worktree `.worktrees/test-agent`）。把 `enable_testing()` 从 `engine/CMakeLists.txt`（L430）挪到根 `CMakeLists.txt`（`add_subdirectory(engine)` 之前），根 build 目录由此生成 `CTestTestfile.cmake`，`ctest --test-dir <build>` 可直接发现全部用例，K-011 的假绿根因消除。engine 侧保留独立构建兜底：仅当 engine 被当作顶层工程构建时（`CMAKE_SOURCE_DIR == CMAKE_CURRENT_SOURCE_DIR`）才自行 `enable_testing()`。`gtest_discover_tests` 无作用域问题——`include(GoogleTest)` 与发现调用都在 `engine/tests/CMakeLists.txt`，由根级 `enable_testing()` 的"目录及子目录"覆盖语义正常工作。CI（`.github/workflows/ci.yml`）ctest 步骤改回 `ctest --test-dir build`（保留一行 K-011 历史注释）；另按 CI 规划补 `clang-tidy` 报告型 job 骨架（Ninja + msvc-dev-cmd 导出 compile_commands.json，`continue-on-error: true` 只出报告不拦截）。`.github/CI.md`、`AGENTS.md` §4 本地等价命令同步改为指向构建根目录；KB-07 K-011 条目末尾追加修复状态行（原条目内容未改写）。
+
+**涉及文件：** `CMakeLists.txt`、`engine/CMakeLists.txt`、`.github/workflows/ci.yml`、`.github/CI.md`、`AGENTS.md`、`kb/KB-07-已知问题与陷阱清单.md`
+
+**验证：** 全新构建目录 `build-agent`（Ninja + vcvars，FetchContent 离线复用主 checkout `_deps`）全流程 configure → build → `ctest --test-dir build-agent`：37/37 全绿（此前根目录 ctest 为 "No tests were found" 假绿）；根 `CTestTestfile.cmake` 含 `subdirs("engine")`，`engine/tests` 生成 37 条测试命令。全量构建零 error；本改动为纯构建编排，无新增 /W4 警告（日志中 engine 侧 C4251/C4100 与 ImGuizmo C4273/C4245 均为存量基线）。无新坑入 KB-07（首过时 dmge_tests.exe 链接遇一次瞬时 LNK1104，重跑即过，判断为文件锁，未立条）。

@@ -82,9 +82,9 @@ cmake -S . -B cmake-build-debug -G Ninja -DDMGE_BUILD_TESTS=ON
 # 构建
 cmake --build cmake-build-debug
 
-# 跑测试（GoogleTest；用例数随任务增长，勿写死。⚠️ 必须 --test-dir 指到 engine 子目录，
-# 原因见 kb/KB-07 K-011：enable_testing 在 engine/CMakeLists.txt，根目录 ctest 会假绿）
-ctest --test-dir cmake-build-debug/engine --output-on-failure
+# 跑测试（GoogleTest；用例数随任务增长，勿写死。enable_testing() 已在根
+# CMakeLists.txt，直接对构建根目录跑 ctest 即可，历史坑见 kb/KB-07 K-011）
+ctest --test-dir cmake-build-debug --output-on-failure
 ```
 
 - 测试相关构建细节（DLL 拷贝、双 glm 冲突）见 `documents/PRECOMPILED_HEADER.md` 与 kb/KB-01。
