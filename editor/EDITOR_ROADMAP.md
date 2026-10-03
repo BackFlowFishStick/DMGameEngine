@@ -142,15 +142,21 @@ EditorLayer::OnImGuiRender
 - **Mouse pick**：点击 viewport 选中 entity（raycast 或 entity-ID attachment）。当前只能 Hierarchy 点选。
 - **Component 动态添加**：Inspector 的 "Add Component" 下拉，运行时挂/卸 Component。
 
+> 状态标注（2026-10-03）：阶段 2 三项均已实现（gizmo + raycast 拾取 + Add/Remove Component，见 EditorLayer.cpp），roadmap 文字此前未同步。
+
 ### 阶段 3：内容能力
 - **Asset Browser**：缩略图网格，拖入 MeshComponent；浏览/加载 `engine/shaders`、模型、材质。
 - **多 Scene / Scene 标签页**：同时编辑多个场景。
 - **Prefab / Entity 预制件**：保存/实例化 Entity 模板。
 
+> 状态标注（2026-10-03）：Asset Browser 拖拽建实体（拖到 Viewport/Hierarchy）+ 类型图标 ✅（缩略图渲染未做）；Scene 管理（New 确认/Open/Save/Save As/最近文件持久化 editor_config.ini）✅，多 Scene 标签页未做；Prefab 最小版（Hierarchy 右键 Save As Prefab / Instantiate，临时 Scene + SceneSerializer，引擎零改动）✅。
+
 ### 阶段 4：工程化（你说的"可创建可运行工程"）
 - **导出可运行工程**：编辑器生成一个引用 `DMGameEngine` 的最小 game 工程（CMakeLists + main + 加载 `.scene`），脱离编辑器独立运行。
 - **Play mode 增强**：play 时隔离编辑（不可改 Transform 等），保证一致性；stop 后恢复编辑态。
 - **编辑器配置持久化**：窗口布局 / 最近场景 / 设置（`editor.ini`）。
+
+> 状态标注（2026-10-03）：Play mode 隔离 ✅（编辑态/运行态双 Scene + SceneDuplicator 深拷贝，Stop 恢复快照，选中按 UUID 回映射）；最近场景配置持久化 ✅（editor_config.ini）；导出可运行工程未做。
 
 ### 阶段 5：质量
 - Vulkan 后端适配：viewport 的 `ImGui::Image` 当前用 OpenGL 纹理 ID；切 Vulkan 时 `ImTextureID` 是 `VkDescriptorSet`，需后端适配。

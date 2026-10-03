@@ -2260,3 +2260,17 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 **涉及文件：** `Platform/Vulkan/VulkanDeletionQueue.h`（新增）、`VulkanDevice.h/.cpp`、`VulkanGraphicsContext.h/.cpp`、`VulkanTexture2D.cpp`、`VulkanTexture2DArray.cpp`、`VulkanTextureCube.cpp`、`VulkanVertexBuffer.cpp`、`VulkanIndexBuffer.cpp`、`engine/tests/test_deletion_queue.cpp`（新增）、`engine/tests/CMakeLists.txt`
 
 **验证：** 全量构建（engine + editor + game，Vulkan ON）零 error、/W4 零新增警告；ctest 全绿（含新增 DeletionQueue 4 例）；另以 `DMGE_VULKAN_BACKEND=OFF` 复测 OpenGL 默认路径无回归。运行时 Validation Layer 场景（resize/纹理中途释放）待人工跑 editor/game exe 确认。
+
+### 2026-10-03 - 编辑器阶段 3/4 补完：Play 隔离 + 拖拽建实体 + Scene 管理 + Prefab
+
+分支 `agent/editor-agent/stage3-4`（worktree `.worktrees/editor-agent`）。四个独立 commit：
+
+- **Play mode 快照隔离（阶段 4，commit 22abb0a）**：编辑态/运行态分离。`EnterPlayMode` 用 `SceneDuplicator`（新增 `editor/src/SceneDuplicator.{h,cpp}`，跨 Scene 实体子树深拷贝 + 层级重映射）把编辑态 Scene 拷为运行态副本，Play 期间模拟跑副本、Inspector/Entity CRUD/gizmo 只读禁用；Stop 丢弃副本恢复编辑态，选中项按 UUID 回映射。未走 SceneSerializer JSON 快照——它只存 MeshAsset UUID，程序化网格会被丢（新坑 K-012）。`EditorScene` 拆 m_EditScene/m_PlayScene/m_Scene；`LoadSceneFromFile` 载入空场景不再与默认实体合并；编辑态 dt=0 tick 仅驱动脏变换。
+- **Asset Browser 拖模型创建实体（阶段 3，commit 56dac01）**：拖 `.fbx/.obj/.gltf/.glb/.mesh` 到 Viewport 或 Hierarchy（`BeginDragDropTargetCustom` 全窗口目标）新建带 `MeshComponent` 实体；走 `AssetManager::Load<Mesh>` 公共 API（K-002 不触碰），材质编辑器自建默认 Blinn-Phong（helper 提取），回填 MeshAsset UUID 支持序列化往返；Play 期间拒绝。
+- **Scene 管理（阶段 3，commit f9a0f60）**：File 菜单重做——New Scene 确认弹窗防丢、Open（路径输入 + 存在性校验）、Save、Save As、最近场景子菜单；最近文件持久化到自管 `editor_config.ini`（已入 .gitignore）。无新依赖，对话框 ImGui 自绘。
+- **Prefab 最小版（阶段 3，commit 2273405）**：Hierarchy 右键 Save As Prefab（临时 Scene 承载单实体树 → `SceneSerializer::Save`，引擎零改动）/ Instantiate（Load 后深拷贝进当前场景）；Asset Browser 增加 `.prefab` 图标并浏览 `prefabs/`。
+- 另补录 `editor/GIZMO_HITTEST_FIX.md`（K-007 关联，commit dd5b933）；新坑沉淀 K-012/K-013。
+
+**涉及文件：** `editor/src/SceneDuplicator.h/.cpp`（新增）、`editor/src/EditorScene.h/.cpp`、`editor/src/EditorLayer.h/.cpp`、`editor/CMakeLists.txt`、`.gitignore`、`editor/GIZMO_HITTEST_FIX.md`（补录）、kb/KB-07
+
+**验证：** 全量构建（engine+editor+game+tests，build-agent）零 error、editor 侧零新增警告（还消掉 2 个既有 strncpy C4996）；ctest --test-dir build-agent/engine 37/37 全绿。GUI 行为（Play 隔离/拖拽/对话框/Prefab 往返）待人工验证。
