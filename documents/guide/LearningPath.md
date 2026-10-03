@@ -113,13 +113,13 @@ flowchart LR
 - **自检问题**：
   1. Viewport 里显示的图像从哪来？（`EditorScene` 的 FB 颜色附件 → `GetColorAttachment(0)->GetRendererID()` → `ImGui::Image`。）
   2. 点击 viewport 选中实体的射线是怎么构造的？用到了渲染层的哪份缓存？（逆 view-projection + AABB 相交，`EditorLayer.cpp` 的 DrawViewport 内。）
-  3. `Ctrl+N/S/O` 与 gizmo 的 1/2/3/4 分别触发什么？场景保存在什么格式？
+  3. 场景的新建/打开/保存走什么 UI 路径？（File 菜单项触发，打开/另存为走编辑器内自绘的 ImGui 文件对话框——`EditorLayer.cpp` 的 `Dialog` 状态机；菜单项上显示的 "Ctrl+N/S/O" 只是标注文本，并未实现对应快捷键处理。）gizmo 的 1/2/3/4 分别触发什么？场景保存在什么格式？
   4. 编辑器为什么能直接 `ImGui::Image` 一个 GPU 纹理 ID？这依赖哪条红线（引擎导出 ImGui 符号、编辑器复用同一 context，红线 R7）？
   5. Play 模式里把一个立方体挪走再 Stop，它回得来吗？Play 快照为什么不用 `SceneSerializer` 的 JSON 往返、而用 `SceneDuplicator` 的按值复制 + 资源引用共享？（提示：K-012 与 `SceneDuplicator.h` 文件头注释。）
 - **常见误区**：
   - 以为编辑器有独立的渲染路径——它复用的就是站 ③ 的 `Renderer`，只是把 target 换成了离屏 FB。
   - 忽略 `ImGui/ImGuiLayer.h` 是**引擎侧编译并导出**的——编辑器不得再链一份 ImGui。
-- **后续**：编辑器自身的路线图与面板划分见 `documents/EDITOR_ROADMAP.md`（Subsystem Tour — 编辑器 是 P1 待写清单的下一篇之一）。
+- **后续**：编辑器自身的路线图与面板划分见 `editor/EDITOR_ROADMAP.md`。
 
 ---
 
@@ -130,7 +130,7 @@ flowchart LR
 通读完成后，按兴趣分流：
 
 - 想做渲染特性 → 先读 `documents/ENGINE_ROADMAP.md` §2b（双后端收敛）与 `documents/LIGHTING_ASSESSMENT.md`，理解"为什么阴影/PBR 要等 2b"。
-- 想做编辑器功能 → `documents/EDITOR_ROADMAP.md` + 站 ⑦。
+- 想做编辑器功能 → `editor/EDITOR_ROADMAP.md` + 站 ⑦。
 - 想修 Vulkan → `documents/VULKAN_FIXES.md` 台账先行（站 ④ 的告诫）。
 - 想了解各模块历史决策的来龙去脉 → `documents/` 根下 17 篇工程档案，从 `ENGINE_REVIEW.md` 与 `ENGINE_SUMMARY.md` 入手。
 

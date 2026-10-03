@@ -29,7 +29,7 @@
 |---|---|---|---|
 | P1 | Subsystem Tour — 场景与 ECS | entt registry、Transform 层级（左孩子右兄弟）、System 机制、序列化两趟加载 | `Scene/**`、ECS_DESIGN / SCENE_DESIGN 档案 |
 | P1 | Subsystem Tour — 资产系统 | AssetUUID 三表结构、Load 去重缓存、Registry 持久化、assimp 导入 | `Asset/**`、ASSET_DESIGN / ASSET_UUID_CONCEPTS |
-| P1 | Subsystem Tour — 编辑器 | dockspace 布局、viewport RTT、gizmo、面板划分、Play mode 现状 | `editor/**`、EDITOR_ROADMAP |
+| P1 | Subsystem Tour — 编辑器 | dockspace 布局、viewport RTT、gizmo、面板划分、Play mode 现状 | `editor/**`、`editor/EDITOR_ROADMAP.md` |
 
 ## 维护约定
 
