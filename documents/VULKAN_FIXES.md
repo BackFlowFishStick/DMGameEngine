@@ -389,3 +389,51 @@ void EndUploadBatch();  // 一次 submit + fence + wait
 ### 11.5 涉及文件
 
 `VulkanRendererAPI.h/.cpp`、`VulkanShader.cpp`（P0-1）；`VulkanDevice.h/.cpp`、`VulkanGraphicsContext.cpp`（P0-2）。无新文件，无 CMake 改动，无公共抽象变更（R5：新增的 `OnShaderDestroyed` / `BeginImmediateBatch` 均为后端内部或 VulkanDevice 层 API，不动 `RendererAPI`/`GraphicsContext` 公共语义）。
+
+---
+
+## 12. 阶段 2c — Vulkan 性能 P1-P2 四项（2026-10-03，agent/render-agent/vulkan-p1p2）
+
+> 背景：ROADMAP 阶段 2c 指派 render-agent 落地 P1（VertexArray::Bind 每 draw 堆分配、PipelineCache 落盘）+ P2（per-frame command pool TRANSIENT、descriptor pool 超限告警+扩容）。四项各自独立 commit（`394edd2` / `3a8c44e` / `9b338f8` / `754d8fa`）。建立于 §10 deletion queue 与 §11 P0 descriptor 缓存之上。
+
+### 12.1 P1 — VulkanVertexArray::Bind 去每 draw 堆分配
+
+- `VkBuffer` 句柄在 `AddVertexBuffer`/`SetIndexBuffer`（一次性 setup 路径）解析进定长 C 数组成员 `m_VkBuffers[8]`/`m_VkIndexBuffer`（R1：不新增 STL 成员）；唯一一次 `dynamic_pointer_cast` 留在 setup 路径钉死具体类型。`Bind()` 热路径只剩 `vkCmdBindVertexBuffers` + `vkCmdBindIndexBuffer` 两次驱动调用，零堆分配、零 RTTI（原来每 draw 两个 `std::vector` + 3 次 RTTI 下转）。
+- 句柄缓存的安全性：`VulkanVertexBuffer`/`VulkanIndexBuffer` 从不重建 `VkBuffer`（`SetData` 只改内容），且 `m_VertexBuffers` 的 `Ref` 持对象保活。超过 8 个顶点缓冲在 setup 时报错拒绝（非 per-draw 静默）。
+
+### 12.2 P1 — VkPipelineCache 落盘
+
+- **文件**：进程 CWD 的 `vulkan_pipeline_cache.bin`，格式 = 44 字节头（magic `'DMPC'`、format version、vendorID/deviceID/driverVersion/apiVersion、`pipelineCacheUUID`、payload 字节数）+ 驱动不透明 blob。头结构 `static_assert` 无 padding。
+- **加载**：`Init` 时读文件，头校验全过则经 `VkPipelineCacheCreateInfo::pInitialData` 种入；`vkCreatePipelineCache` 若仍被驱动拒绝（校验器查不出的 blob 损坏），回退空参数重建——**不能只用 VK_CHECK**，否则缓存对象为 NULL 后续崩溃（新坑 K-019）。
+- **保存**：渲染 API 析构（`vkDeviceWaitIdle` 之后、`vkDestroyPipelineCache` 之前）`vkGetPipelineCacheData` 序列化；写临时文件 + `remove`/`rename` 原子替换。保存失败只告警（纯优化）。
+- **失效策略**：头里钉死设备身份——驱动更新（driverVersion 变）、换 GPU、驱动 blob 格式变化（`pipelineCacheUUID` 变）、文件损坏/截断/版本升位 → 任何一条不匹配即告警丢弃、空缓存启动；下次干净关闭重写文件。应用升级不会使文件失效（驱动按 UUID 自行判定 blob 兼容性，且身份校验兜底）。
+
+### 12.3 P2 — per-frame command pool 加 `VK_COMMAND_POOL_CREATE_TRANSIENT_BIT`
+
+- `VulkanGraphicsContext` 的 per-frame 槽 pool 与 `VulkanDevice` 的 ImmediateSubmit pool（P2 review 点的两处）都录一次性短生命周期命令缓冲，flags 改为 `TRANSIENT | RESET_COMMAND_BUFFER`。保留 `RESET_COMMAND_BUFFER_BIT`：两处都逐 CB `vkResetCommandBuffer`，非整池 reset。
+
+### 12.4 P2 — descriptor pool 超限告警 + 自动扩容
+
+- 每帧槽持有 pool **列表**（file static，R1）：分配从最新 pool 起逐个尝试；全部失败（`OUT_OF_POOL_MEMORY`/`FRAGMENTED`）→ WARN 日志（本帧已分配 set 数、pool 数、最大容量）→ 追加双倍容量新 pool → 重试一次；仍失败才 ERROR 丢 draw（现在全程可观测）。
+- **与 P0-1 descriptor 缓存的交互**：扩容**保留**旧 pool，旧 set（含缓存命中的）全部继续有效——扩容不需要清缓存；失效仍只在 `ResetFrame`（整池 reset 后清缓存，P0-1 规则不变）。
+- **回收缩**：`ResetFrame` 顺带销毁除最大 pool 外的其余池（set 已被 reset 释放、缓存已清，无引用），稳态内存跟随峰值帧而非单调上涨；下次扩容从保留峰值双倍起。
+- pool 存储移至 `.cpp` 文件静态（与 §11.1 descriptor 缓存同模式），头文件删除 `m_DescriptorPools` 数组成员；`Init` 在 `CreateFrameResources` **之前**做簿记重置（顺序反了会把新建 pool 句柄孤儿化——实现时踩过一次，已修）。
+
+### 12.5 性能证据（量化，独立无 surface VkDevice 微基准，K-014 方法）
+
+- 方法：临时微基准（用后即删），/O2 编译，NVIDIA RTX 4070 Ti，Vulkan SDK 1.4.350.0。deletion queue flush 语义本波未触碰，`test_deletion_queue.cpp` 性质测试原样通过（37/37 含 K-009 全部用例）。
+- **P1 VertexArray::Bind prep**（100 万次模拟，含真实 `std::vector` 分配与 `dynamic_pointer_cast`）：旧路径 **105~113 ns/draw**，新路径 **0.4~0.6 ns/draw**，约 **195~237×**。说明：只测 CPU 侧 prep（两侧的 `vkCmdBindVertexBuffers` 驱动调用相同故相消）；/O2 下已保守，Debug(/Od) 下差值更大。
+- **P1 PipelineCache 落盘**（32 个状态各异的 dynamic-rendering graphics pipeline，引擎同款管线结构）：空缓存冷建 **3.83 ms（120 µs/pipe）**；经"落盘→头校验→pInitialData 种入"后重建 **0.18 ms（6 µs/pipe）**，**约 21×**，单次启动省 ~3.6 ms（32 管线规模；管线越多收益线性放大）。加载+校验+建缓存本体 ~5 ms（一次性的启动开销）。失效路径实测：坏 magic / 驱动身份变 / 截断 payload 均被正确拒绝回退。
+- **P2 descriptor pool 扩容**（真实驱动分配）：8192 set 分配 ~124 ns/set，耗尽检测（`-1000069000` OUT_OF_POOL_MEMORY）< 1 µs，扩容新建 16384-set pool ~2 ms——一次性、仅真实需要时发生且有 WARN 观测。
+- **P2 TRANSIENT_BIT**：定性——[GUIDE] 官方建议 per-frame/一次性 CB pool 标 TRANSIENT，驱动按此优化内存回收；无量化（收益在驱动内部），以无回归 + validation 干净为准。
+- 运行时（game/editor）Profiler 复核待人工（K-014）。
+
+### 12.6 验证（2026-10-03）
+
+- 构建环境：VS 18 Community (vcvars64) + Ninja + `DMGE_BUILD_SHARED=ON` + `DMGE_BUILD_TESTS=ON`。
+- `DMGE_VULKAN_BACKEND=ON`：全量零 error，ctest **37/37 全绿**；改动文件零新增警告（仅存量 C4251/C4100/C5311 基线）。
+- `DMGE_VULKAN_BACKEND=OFF`：全量零 error，ctest 37/37 全绿，OpenGL 路径无回归。
+
+### 12.7 涉及文件
+
+`VulkanVertexArray.h/.cpp`（P1 Bind）；`VulkanRendererAPI.h/.cpp`（P1 PipelineCache 落盘 + P2 descriptor pool）。P2 TRANSIENT：`VulkanGraphicsContext.cpp`、`VulkanDevice.cpp`。无新源文件、无 CMake 改动、无公共抽象变更（R5：pool 列表与落盘均为后端内部实现；`m_DescriptorPools` 私有成员删除不影响公共 ABI 语义）。

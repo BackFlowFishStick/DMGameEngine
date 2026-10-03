@@ -201,6 +201,8 @@
 
 ### 2c. Vulkan 性能 P1-P2
 
+> 状态（2026-10-03）：四项全部落地——Bind 零堆分配/零 RTTI、PipelineCache 落盘（头校验 + 损坏回退）、per-frame/一次性 pool 补 TRANSIENT、descriptor pool 超限 WARN + 自动扩容/回收缩（与 P0-1 缓存的失效交互见 `VULKAN_FIXES.md` §12.4）。量化证据（Bind ~200×、pipeline 热建 ~21×）见 §12.5，分支 `agent/render-agent/vulkan-p1p2`。
+
 - `VulkanVertexArray::Bind` 改栈数组/预留容量，去掉每 draw `std::vector` + `dynamic_pointer_cast`。
 - `VkPipelineCache` 落盘（`vkGetPipelineCacheData` 序列化，启动加载）。
 - per-frame CB pool 改 `VK_COMMAND_POOL_CREATE_TRANSIENT_BIT`。
