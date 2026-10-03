@@ -294,7 +294,12 @@ void VulkanDevice::CreateCommandPool()
 {
     VkCommandPoolCreateInfo info{};
     info.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    info.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    // TRANSIENT (P2): this pool only serves one-time submit command buffers
+    // (ImmediateSubmit / upload batches) - short-lived by definition.
+    // RESET_COMMAND_BUFFER stays: ImmediateSubmit resets its command buffer
+    // individually before each recording.
+    info.flags            = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
+                          | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     info.queueFamilyIndex = GraphicsFamily;
     VK_CHECK(vkCreateCommandPool(Device, &info, nullptr, &CommandPool));
 }

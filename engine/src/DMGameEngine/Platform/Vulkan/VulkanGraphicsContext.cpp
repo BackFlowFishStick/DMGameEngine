@@ -211,7 +211,12 @@ void VulkanGraphicsContext::CreateFrameResources()
     {
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        poolInfo.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        // TRANSIENT (P2): the frame's command buffer is recorded once and
+        // submitted immediately - exactly the short-lived usage the flag
+        // lets drivers optimize for. RESET_COMMAND_BUFFER stays because the
+        // per-slot command buffer is reset individually in BeginFrame.
+        poolInfo.flags            = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
+                                  | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         poolInfo.queueFamilyIndex = dev.GraphicsFamily;
         VK_CHECK(vkCreateCommandPool(dev.Device, &poolInfo, nullptr, &m_CommandPools[i]));
 
