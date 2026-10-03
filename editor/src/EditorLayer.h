@@ -3,6 +3,7 @@
 #include "EditorScene.h"
 #include "LogPanel.h"
 #include <string>
+#include <cstdint>
 
 class EditorLayer : public DMGameEngine::Layer {
 public:
@@ -29,6 +30,12 @@ private:
     void DrawSystems();
     void DrawAssetBrowser();
 
+    // ── Play mode isolation (stage 4) ───────────────────────────
+    // EnterPlay snapshots the selection (by UUID) so it can be restored on
+    // the edit scene after Stop; EndPlay restores it.
+    void BeginPlay();
+    void EndPlay();
+
     EditorScene m_Scene;
     DMGameEngine::Entity m_Selected = DMGameEngine::NullEntity;
     glm::vec2 m_ViewportSize{0.0f, 0.0f};
@@ -38,4 +45,7 @@ private:
     std::string m_SelectedAsset;
     LogPanel m_Log;
     int m_GizmoType = 0; // -1 off, 0 translate, 1 rotate, 2 scale
+
+    // Play-mode selection preservation.
+    uint64_t m_SelectedUUID = 0;
 };

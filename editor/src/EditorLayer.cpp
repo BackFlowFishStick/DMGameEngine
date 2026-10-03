@@ -6,7 +6,7 @@
 #include <imgui_internal.h>
 #include <ImGuizmo.h>
 #include <filesystem>
-#include <cstring>
+#include <cstdio>
 #include <cfloat>
 #include <cmath>
 #include <algorithm>
@@ -105,6 +105,35 @@ void EditorLayer::OnImGuiRender() {
     m_Log.OnImGuiRender();
 }
 
+// ── Play mode isolation (stage 4) ───────────────────────────────
+
+void EditorLayer::BeginPlay() {
+    if (m_Scene.IsPlaying()) return;
+    // Remember the selection by UUID so it can be restored on the edit scene
+    // after Stop (runtime entity ids differ between the two scenes).
+    Scene* s = m_Scene.GetEditScene();
+    m_SelectedUUID = 0;
+    if (s && m_Selected != NullEntity && s->HasComponent<IDComponent>(m_Selected))
+        m_SelectedUUID = s->GetComponent<IDComponent>(m_Selected).UUID;
+    m_Scene.EnterPlayMode();
+    DMGE_CLIENT_INFO("Play mode entered - edit state snapshotted, changes during play will be discarded on Stop");
+}
+
+void EditorLayer::EndPlay() {
+    if (!m_Scene.IsPlaying()) return;
+    m_Scene.ExitPlayMode();   // discards the play copy, restores the edit scene
+    m_Selected = NullEntity;
+    Scene* s = m_Scene.GetEditScene();
+    if (s && m_SelectedUUID != 0) {
+        s->GetRegistry().view<IDComponent>().each([&](auto eh, IDComponent& idc) {
+            if (idc.UUID == m_SelectedUUID)
+                m_Selected = static_cast<Entity>(eh);
+        });
+    }
+    m_SelectedUUID = 0;
+    DMGE_CLIENT_INFO("Play mode stopped - edit state restored");
+}
+
 void EditorLayer::DrawDockspace() {
 #ifdef IMGUI_HAS_DOCK
     ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -166,8 +195,7 @@ void EditorLayer::DrawMenuBar() {
             }
             ImGui::Separator();
             char pathBuf[512];
-            std::strncpy(pathBuf, m_ScenePath.c_str(), 511);
-            pathBuf[511] = '\0';
+            std::snprintf(pathBuf, sizeof(pathBuf), "%s", m_ScenePath.c_str());
             if (ImGui::InputText("Scene path", pathBuf, 512))
                 m_ScenePath = pathBuf;
             ImGui::Separator();
@@ -176,11 +204,13 @@ void EditorLayer::DrawMenuBar() {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Entity")) {
-            if (ImGui::MenuItem("Create Empty", "Ctrl+Shift+A")) {
+            // Play-mode isolation: entity CRUD only in edit mode (the play
+            // copy is discarded on Stop - editing it would mislead the user).
+            if (ImGui::MenuItem("Create Empty", "Ctrl+Shift+A", false, !m_Scene.IsPlaying())) {
                 if (auto* s = m_Scene.GetScene())
                     m_Selected = s->CreateEntity("Entity");
             }
-            if (m_Selected != NullEntity && ImGui::MenuItem("Delete", "Del")) {
+            if (m_Selected != NullEntity && ImGui::MenuItem("Delete", "Del", false, !m_Scene.IsPlaying())) {
                 if (auto* s = m_Scene.GetScene()) {
                     s->DestroyEntity(m_Selected);
                     m_Selected = NullEntity;
@@ -189,10 +219,14 @@ void EditorLayer::DrawMenuBar() {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Play")) {
-            if (ImGui::MenuItem(m_Scene.IsPlaying() ? "Pause" : "Play", "F5"))
-                m_Scene.SetPlaying(!m_Scene.IsPlaying());
-            if (ImGui::MenuItem("Stop", "F6"))
-                m_Scene.SetPlaying(false);
+            if (m_Scene.IsPlaying()) {
+                if (ImGui::MenuItem(m_Scene.IsPaused() ? "Resume" : "Pause", "F5"))
+                    m_Scene.SetPaused(!m_Scene.IsPaused());
+                if (ImGui::MenuItem("Stop", "F6"))
+                    EndPlay();
+            } else if (ImGui::MenuItem("Play", "F5")) {
+                BeginPlay();
+            }
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -312,7 +346,10 @@ void EditorLayer::DrawViewport() {
             }
         }
 
-        if (m_Selected != NullEntity && m_GizmoType >= 0) {
+        // Gizmo editing only in edit mode: writing transforms during play
+        // would mutate the play copy that gets discarded on Stop, and the
+        // inspector is read-only then - keep them consistent.
+        if (!m_Scene.IsPlaying() && m_Selected != NullEntity && m_GizmoType >= 0) {
 
             Scene* sc = m_Scene.GetScene();
             if (sc && sc->HasComponent<TransformComponent>(m_Selected)) {
@@ -420,11 +457,20 @@ void EditorLayer::DrawInspector() {
 void EditorLayer::DrawComponents(Entity e) {
     Scene* s = m_Scene.GetScene();
 
+    // Play-mode isolation: the entity under inspection belongs to the play
+    // copy, which is discarded on Stop - make everything read-only.
+    const bool readOnly = m_Scene.IsPlaying();
+    if (readOnly) {
+        ImGui::TextColored(ImVec4(1.0f, 0.78f, 0.3f, 1.0f),
+            "Play mode - read-only (changes are discarded on Stop)");
+        ImGui::Separator();
+        ImGui::BeginDisabled(true);
+    }
+
     if (s->HasComponent<TagComponent>(e)) {
         auto& tag = s->GetComponent<TagComponent>(e).Tag;
         char buf[256];
-        std::strncpy(buf, tag.c_str(), 255);
-        buf[255] = '\0';
+        std::snprintf(buf, sizeof(buf), "%s", tag.c_str());
         if (ImGui::InputText("Tag", buf, 256))
             tag = buf;
     }
@@ -555,6 +601,9 @@ void EditorLayer::DrawComponents(Entity e) {
             s->RemoveComponent<MeshComponent>(e);
         ImGui::EndPopup();
     }
+
+    if (readOnly)
+        ImGui::EndDisabled();
 }
 
 void EditorLayer::DrawSystems() {
@@ -570,12 +619,17 @@ void EditorLayer::DrawSystems() {
             ImGui::Text("%d. %s", i++, sys ? sys->GetName() : "(null)");
         }
         ImGui::Separator();
-        ImGui::Text("Play mode: %s", m_Scene.IsPlaying() ? "PLAYING" : "Editing");
-        if (ImGui::Button(m_Scene.IsPlaying() ? "Pause##sys" : "Play##sys"))
-            m_Scene.SetPlaying(!m_Scene.IsPlaying());
-        ImGui::SameLine();
-        if (ImGui::Button("Stop##sys"))
-            m_Scene.SetPlaying(false);
+        ImGui::Text("Play mode: %s",
+            m_Scene.IsPlaying() ? (m_Scene.IsPaused() ? "PAUSED" : "PLAYING") : "Editing");
+        if (m_Scene.IsPlaying()) {
+            if (ImGui::Button(m_Scene.IsPaused() ? "Resume##sys" : "Pause##sys"))
+                m_Scene.SetPaused(!m_Scene.IsPaused());
+            ImGui::SameLine();
+            if (ImGui::Button("Stop##sys"))
+                EndPlay();
+        } else if (ImGui::Button("Play##sys")) {
+            BeginPlay();
+        }
     }
     ImGui::End();
 }

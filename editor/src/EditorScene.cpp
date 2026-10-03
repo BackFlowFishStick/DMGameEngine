@@ -1,4 +1,6 @@
 #include "EditorScene.h"
+#include "SceneDuplicator.h"
+#include <DMGameEngine/Scene/SceneSerializer.h>
 #include <glm/gtc/matrix_transform.hpp>
 
 using namespace DMGameEngine;
@@ -20,7 +22,7 @@ static DM::Ref<Mesh> MakeCubeMesh() {
     v(-1, 1, 1,  0, 1, 0, 0,0); v( 1, 1, 1,  0, 1, 0, 1,0); v( 1, 1,-1,  0, 1, 0, 1,1); v(-1, 1,-1,  0, 1, 0, 0,1);
     v(-1,-1,-1,  0,-1, 0, 0,0); v( 1,-1,-1,  0,-1, 0, 1,0); v( 1,-1, 1,  0,-1, 0, 1,1); v(-1,-1, 1,  0,-1, 0, 0,1);
     v(-1,-1, 1,  0, 0, 1, 0,0); v( 1,-1, 1,  0, 0, 1, 1,0); v( 1, 1, 1,  0, 0, 1, 1,1); v(-1, 1, 1,  0, 0, 1, 0,1);
-    v( 1,-1,-1,  0, 0,-1, 0,0); v(-1,-1,-1,  0, 0,-1, 1,0); v(-1, 1,-1,  0, 0,-1, 1,1); v( 1, 1,-1,  0, 0,-1, 0,1);
+    v( 1,-1,-1,  0, 0,-1, 0,0); v(-1,-1,-1,  0, 0,-1, 1,0); v(-1, 1,-1,  0, 0,-1, 1,1); v(-1, 1,-1,  0, 0,-1, 0,1);
     for (uint32_t face = 0; face < 6; ++face) {
         uint32_t base = face * 4;
         mesh->Indices.push_back(base + 0); mesh->Indices.push_back(base + 1); mesh->Indices.push_back(base + 2);
@@ -42,16 +44,24 @@ EditorScene::EditorScene() {
     SetupDefaultScene();
 }
 
-void EditorScene::SetupDefaultScene() {
-    m_Scene = DM::CreateRef<Scene>();
-    m_Scene->AddSystem(DM::CreateRef<TransformSystem>(*m_Scene));
-    m_Scene->AddSystem(DM::CreateRef<LightSystem>(*m_Scene));
-    m_Scene->AddSystem(DM::CreateRef<MeshRenderSystem>(*m_Scene));
+void EditorScene::RegisterSystems(Scene& s) {
+    s.AddSystem(DM::CreateRef<TransformSystem>(s));
+    s.AddSystem(DM::CreateRef<LightSystem>(s));
+    s.AddSystem(DM::CreateRef<MeshRenderSystem>(s));
+}
+
+void EditorScene::CreateEmptyScene() {
+    m_EditScene = DM::CreateRef<Scene>();
+    RegisterSystems(*m_EditScene);
 
     RenderCommand::SetClearColor({0.10f, 0.10f, 0.12f, 1.0f});
     RenderCommand::SetDepthTest(true);
     RenderCommand::SetDepthFunc(DepthFunc::Less);
     RenderCommand::SetCullMode(CullMode::Back);
+}
+
+void EditorScene::SetupDefaultScene() {
+    CreateEmptyScene();
 
     auto shader = AssetManager::Get().Load<Shader>(
         "D:/CPPPractices/DMGameEngine/engine/shaders/BlinnPhong.glsl");
@@ -64,28 +74,79 @@ void EditorScene::SetupDefaultScene() {
         baseMat->SetInt("u_UseTexture", 0);
     }
 
-    auto light = m_Scene->CreateEntity("Directional Light");
-    auto& ltc = m_Scene->GetComponent<TransformComponent>(light);
+    auto light = m_EditScene->CreateEntity("Directional Light");
+    auto& ltc = m_EditScene->GetComponent<TransformComponent>(light);
     ltc.Translation = {4.0f, 6.0f, 3.0f}; ltc.Dirty = true;
-    auto& lc = m_Scene->AddComponent<LightComponent>(light);
+    auto& lc = m_EditScene->AddComponent<LightComponent>(light);
     lc.LightType = LightComponent::Type::Directional;
     lc.Color = {1.0f, 1.0f, 1.0f};
     lc.Intensity = 1.0f;
     lc.AmbientIntensity = 0.2f;
 
-    auto cube = m_Scene->CreateEntity("Cube");
-    m_Scene->GetComponent<TransformComponent>(cube).Dirty = true;
-    auto& mc = m_Scene->AddComponent<MeshComponent>(cube);
+    auto cube = m_EditScene->CreateEntity("Cube");
+    m_EditScene->GetComponent<TransformComponent>(cube).Dirty = true;
+    auto& mc = m_EditScene->AddComponent<MeshComponent>(cube);
     mc.Mesh = MakeCubeMesh();
     if (baseMat) {
         mc.MaterialOverrides.resize(1);
         mc.MaterialOverrides[0] = DM::CreateRef<MaterialInstance>(baseMat);
     }
+
+    m_Scene = m_EditScene;
+}
+
+void EditorScene::NewScene() {
+    SetupDefaultScene();
+}
+
+bool EditorScene::LoadSceneFromFile(const std::string& path) {
+    // Load into a fresh empty scene so opening never merges with existing entities.
+    auto s = DM::CreateRef<Scene>();
+    RegisterSystems(*s);
+    if (!SceneSerializer::Load(*s, path))
+        return false;
+    m_EditScene = s;
+    if (!m_Playing)
+        m_Scene = m_EditScene;
+    return true;
+}
+
+void EditorScene::EnterPlayMode() {
+    if (m_Playing || !m_EditScene)
+        return;
+    // Snapshot isolation: the edit scene object stays untouched; we run on a
+    // deep copy (shared read-only Mesh/Material refs - see SceneDuplicator.h
+    // for why a ref-sharing copy beats a SceneSerializer JSON round-trip).
+    m_PlayScene = DM::CreateRef<Scene>();
+    RegisterSystems(*m_PlayScene);
+    EditorSceneCopy::CopyAllEntities(*m_EditScene, *m_PlayScene);
+    m_Scene = m_PlayScene;
+    m_Playing = true;
+    m_Paused = false;
+}
+
+void EditorScene::ExitPlayMode() {
+    if (!m_Playing)
+        return;
+    m_PlayScene.reset();          // discard every change made during play
+    m_Scene = m_EditScene;        // restore the pristine edit scene
+    m_Playing = false;
+    m_Paused = false;
 }
 
 void EditorScene::OnUpdate(Timestep ts) {
-    if (m_Scene)
-        m_Scene->OnUpdate(ts);
+    if (m_Scene) {
+        if (m_Playing) {
+            // Simulation ticks on the play copy; Pause freezes it.
+            if (!m_Paused)
+                m_Scene->OnUpdate(ts);
+        } else {
+            // Edit mode: tick with dt=0 purely so the TransformSystem
+            // recomputes dirty world matrices (gizmo/picking/render read
+            // WorldMatrix); no time-dependent behavior is driven.
+            m_Scene->OnUpdate(Timestep(0.0f));
+        }
+    }
     if (m_Camera)
         m_Camera->OnUpdate(ts);
 }
@@ -103,8 +164,4 @@ void EditorScene::Resize(uint32_t w, uint32_t h) {
     if (w == 0 || h == 0) return;
     if (m_FB) m_FB->Resize(w, h);
     if (m_Camera) m_Camera->SetViewportSize(w, h);
-}
-
-void EditorScene::NewScene() {
-    SetupDefaultScene();
 }
