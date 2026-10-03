@@ -7,6 +7,7 @@
 | Job | Runner | 做什么 |
 |---|---|---|
 | `build-test` | `windows-latest` | configure → build → ctest（MSVC / VS2022 生成器 / x64 / Debug / `DMGE_BUILD_TESTS=ON`） |
+| `clang-tidy` | `windows-latest` | Ninja configure 导出 `compile_commands.json` → 对 `engine/src` 跑 clang-tidy 报告（`continue-on-error: true`，不拦截） |
 
 - **触发**：push 到 `main` / `develop`、所有 pull_request、手动 `workflow_dispatch`。
 - **并发取消**：同分支新提交自动取消旧运行（`concurrency.cancel-in-progress`）。
@@ -18,8 +19,9 @@
   SDK 安装方案（社区 action 或 LunarG 安装器）可靠性未验证，暂以注释骨架形式保留在 ci.yml 末尾，
   固定 SDK 版本后再启用。
 - **clang-tidy**：仓库根 `.clang-tidy` 为保守检查集（bugprone 精选 + modernize-use-nullptr +
-  performance 精选 + readability-identifier-naming 按 KB-06）。**暂不设 CI 强制 job**，
-  避免存量告警卡死首轮 CI；噪声清理完后再升级为门禁。
+  performance 精选 + readability-identifier-naming 按 KB-06）。CI 有**报告型 job**
+  （`continue-on-error: true`，只出报告不拦截合并）；噪声清理完后再升级为门禁。
+  注意 VS 生成器不导出 `compile_commands.json`，tidy job 用 Ninja + `ilammy/msvc-dev-cmd`。
 
 ## 本地等价命令
 
@@ -33,8 +35,8 @@ cmake -S . -B cmake-build-debug -G Ninja -DDMGE_BUILD_TESTS=ON
 # 构建（等价于 CI 的 build 步骤）
 cmake --build cmake-build-debug
 
-# 跑测试（等价于 CI 的 test 步骤；⚠️ 必须指向 build 目录下的 engine/ 子目录，原因见下）
-ctest --test-dir cmake-build-debug/engine --output-on-failure
+# 跑测试（等价于 CI 的 test 步骤；enable_testing() 在根 CMakeLists.txt，直接指向构建根目录）
+ctest --test-dir cmake-build-debug --output-on-failure
 
 # 可选：Vulkan 后端（需本机 Vulkan SDK）
 # cmake -S . -B cmake-build-debug -G Ninja -DDMGE_BUILD_TESTS=ON -DDMGE_VULKAN_BACKEND=ON
@@ -42,10 +44,10 @@ ctest --test-dir cmake-build-debug/engine --output-on-failure
 
 ## 注意事项
 
-- **ctest 目录陷阱**：`enable_testing()` 目前写在 `engine/CMakeLists.txt`（子目录）里而非根
-  CMakeLists，所以根 build 目录不生成 `CTestTestfile.cmake`，对根目录跑 `ctest` 会报
-  "No tests were found!!!"。必须 `ctest --test-dir <build>/engine`。正确修法是把
-  `enable_testing()` 挪进根 CMakeLists.txt（热点文件，待修 CMake 时处理，见 kb/KB-07 K-009）。
+- **ctest 目录陷阱（已修复）**：2026-10-03 之前 `enable_testing()` 写在 `engine/CMakeLists.txt`
+  （子目录）里，根 build 目录不生成 `CTestTestfile.cmake`，对根目录跑 `ctest` 会报
+  "No tests were found!!!"（exit 0，假绿）。现已挪到根 CMakeLists.txt，`ctest --test-dir <build>`
+  即可；历史与"假绿"识别规则见 kb/KB-07 K-011。
 - GoogleTest / entt / nlohmann_json 走 CMake FetchContent，configure 需要网络。
 - 测试 target `dmge_tests` 的 POST_BUILD 会自动拷引擎 DLL，直接 `ctest` 即可，别手动搬 DLL。
 - 新增源文件必须手动注册进对应 CMakeLists 的 `set(DMGE_SOURCES ...)`（禁 GLOB，R2）。
