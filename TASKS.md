@@ -8,11 +8,12 @@
 
 | 任务 | 状态 | 备注 |
 |---|---|---|
-| 编辑器功能补完：Play 隔离 + Asset Browser 拖拽 + Scene 管理 + Prefab | 🚧 @editor-agent agent/editor-agent/stage3-4 2026-10-03 | worktree `.worktrees/editor-agent`；EDITOR_ROADMAP 阶段 2 已核验落地（gizmo/拾取/Add Component），本波做阶段 3/4 功能缺口 |
-| guide/ P1 文档：渲染 Subsystem Tour + 学习路线图 | 🚧 @docs-agent docs/guide-p1 2026-10-03 | worktree `.worktrees/docs-agent`；guide/ 已建库（✅ 见下方已合并） |
+| （暂无——等待下一波认领） | | |
 
 ## 已合并 ✅
 
+- ✅ 编辑器功能补完（阶段 3/4）@editor-agent（分支 tip `7b435e9`；Play 快照隔离走 SceneDuplicator 对象级深拷贝而非 JSON 快照——K-012：序列化会丢程序化网格；Asset 拖拽建 Mesh 实体；File 菜单 + editor_config.ini 最近文件；Prefab 走临时 Scene 方案引擎零改动；构建 0 error、ctest 37/37、/W4 零新增。GUI 行为待人工验证，步骤见该 agent 报告 / EDITOR_ROADMAP 标注）
+- ✅ guide P1：渲染导览 + 阅读路线图 @docs-agent（分支 tip `08b990f`；RendererTour/LearningPath 两篇全事实核验；发现 4 处既有文档与代码不一致已登记待修，见 RendererTour §4 注记）
 - ✅ 0a Vulkan 正确性修复 A/B/C/D/F @render-agent（分支 tip `1ae2aa6`；A/C/D/F 核验为 07-26 已修，本次加固 A `9219cc7` + 落地 B per-frame deletion queue `1ae2aa6` 含 headless 性质单测；PB-08 通过：Vulkan ON/OFF 双路径构建零 error、/W4 零新增、ctest 37/37；遗留：Validation 运行时场景待人工跑 editor/game；E 项留 2b）
 - ✅ 0b CI 骨架 @test-agent（分支 tip `35fedb2`；交付 `.github/workflows/ci.yml` + `.github/CI.md` + 保守版 `.clang-tidy` 暂不强制门禁；本地 Ninja+vcvars 全量构建 0 error、ctest 32/32 绿；Vulkan job 留注释骨架待固定 SDK 版本；ctest 目录坑见 KB-07/K-011）
 
