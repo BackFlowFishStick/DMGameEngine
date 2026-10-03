@@ -28,6 +28,7 @@ add_executable(dmge_tests
     test_asset.cpp
     test_scene.cpp
     test_assimp_import.cpp
+    test_deletion_queue.cpp
 )
 
 target_link_libraries(dmge_tests PRIVATE

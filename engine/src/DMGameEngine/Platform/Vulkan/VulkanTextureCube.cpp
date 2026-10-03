@@ -68,10 +68,13 @@ VulkanTextureCube::VulkanTextureCube(const std::array<std::string, CubeFaceCount
 
 VulkanTextureCube::~VulkanTextureCube()
 {
-    auto& dev = VulkanDevice::Get();
-    if (m_Sampler   != VK_NULL_HANDLE) vkDestroySampler(dev.Device, m_Sampler, nullptr);
-    if (m_ImageView != VK_NULL_HANDLE) vkDestroyImageView(dev.Device, m_ImageView, nullptr);
-    if (m_Image     != VK_NULL_HANDLE) vmaDestroyImage(dev.Allocator, m_Image, m_Alloc);
+    // Deferred (review item B): an in-flight frame may still sample this
+    // texture; destroying here would be use-while-in-flight.
+    VulkanDevice::DeferDestroyTexture(m_Sampler, m_ImageView, m_Image, m_Alloc);
+    m_Sampler = VK_NULL_HANDLE;
+    m_ImageView = VK_NULL_HANDLE;
+    m_Image = VK_NULL_HANDLE;
+    m_Alloc = nullptr;
 }
 
 void VulkanTextureCube::Bind(uint32_t slot) const
@@ -102,11 +105,13 @@ void VulkanTextureCube::GenerateMipmaps()
 
 void VulkanTextureCube::Invalidate()
 {
-    auto& dev = VulkanDevice::Get();
-
-    if (m_Sampler   != VK_NULL_HANDLE) vkDestroySampler(dev.Device, m_Sampler, nullptr);
-    if (m_ImageView != VK_NULL_HANDLE) vkDestroyImageView(dev.Device, m_ImageView, nullptr);
-    if (m_Image     != VK_NULL_HANDLE) vmaDestroyImage(dev.Allocator, m_Image, m_Alloc);
+    // Old resources may still be referenced by an in-flight frame: defer
+    // instead of destroying (review item B).
+    VulkanDevice::DeferDestroyTexture(m_Sampler, m_ImageView, m_Image, m_Alloc);
+    m_Sampler = VK_NULL_HANDLE;
+    m_ImageView = VK_NULL_HANDLE;
+    m_Image = VK_NULL_HANDLE;
+    m_Alloc = nullptr;
 
     VkFormat format = TextureFormatToVk(m_Spec.Format);
     VkImageAspectFlags aspect = FormatAspect(m_Spec.Format);
