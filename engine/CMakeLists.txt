@@ -16,6 +16,10 @@ option(DMGE_BUILD_EXAMPLES "Build example projects" OFF)
 option(DMGE_BUILD_TESTS "Build unit tests (GoogleTest via FetchContent; needs network)" ON)
 option(DMGE_PROFILE "Enable engine CPU profiling instrumentation" ON)
 option(DMGE_USE_PCH "Enable precompiled header for faster builds (MSVC/GCC/Clang)" ON)
+# Skeletal animation subsystem (stage 1: import + Skeleton/AnimationClip assets
+# + AnimatorComponent/AnimationSystem + OpenGL skinning). Default OFF until the
+# subsystem is verified; DMGE_VULKAN_BACKEND is the compile-switch precedent.
+option(DMGE_ANIMATION "Enable the skeletal animation subsystem" OFF)
 
 # ── ImGui multi-viewport: auto-detect the docking branch ─────────
 # The vendored master-branch ImGui does not define
@@ -203,6 +207,24 @@ set(DMGE_HEADERS
     "src/DMGameEngine/DMGameEngine.h"
 )
 
+# ── Animation subsystem (DMGE_ANIMATION gate; see option above) ─────
+# Everything animation lives behind the switch: OFF = the subsystem's files
+# are not compiled at all and no DMGE_ANIMATION define reaches any TU, so the
+# OFF build is bit-for-bit the pre-animation behavior. The define is PUBLIC:
+# the gated public headers (MeshRenderSystem.h exclude, DMGameEngine.h) must
+# agree with the engine's state or consumer TUs would mismatch.
+if(DMGE_ANIMATION)
+    list(APPEND DMGE_SOURCES
+        "src/DMGameEngine/Animation/Skeleton.cpp"
+        "src/DMGameEngine/Animation/AnimationMath.cpp"
+    )
+    list(APPEND DMGE_HEADERS
+        "src/DMGameEngine/Animation/Skeleton.h"
+        "src/DMGameEngine/Animation/AnimationClip.h"
+        "src/DMGameEngine/Animation/AnimationMath.h"
+    )
+endif()
+
 # ── Engine Library Target ────────────────────────────────────────
 if(DMGE_BUILD_SHARED)
     add_library(DMGameEngine SHARED ${DMGE_SOURCES} ${DMGE_HEADERS})
@@ -374,6 +396,8 @@ target_compile_definitions(DMGameEngine
         $<$<CONFIG:Debug>:DMGE_ENABLE_ASSERTS>
         $<$<BOOL:DMGE_PROFILE>:DMGE_PROFILE>
         $<$<BOOL:${DMGE_IMGUI_VIEWPORTS}>:DMGE_IMGUI_VIEWPORTS>
+    PUBLIC
+        $<$<BOOL:${DMGE_ANIMATION}>:DMGE_ANIMATION>
 )
 
 if(MSVC)
