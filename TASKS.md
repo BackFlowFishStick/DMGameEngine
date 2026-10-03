@@ -6,13 +6,13 @@
 
 ## 进行中 / 待 review
 
-| 任务 | 状态 | 备注 |
-|---|---|---|
-| 骨骼动画系统阶段 1：导入 + Skeleton 资产 + AnimationComponent/System + 蒙皮渲染 | 🚧 @anim-agent agent/anim-agent/skeleton-stage1 2026-10-03 | worktree `.worktrees/anim-agent`；IDEA 新立项（用户要求），依赖 1b/1a 已满足 |
-| 2c Vulkan 性能 P1-P2：VertexArray 每帧分配 / PipelineCache 落盘 / CB pool TRANSIENT / descriptor pool 告警扩容 | 🚧 @render-agent agent/render-agent/vulkan-p1p2 2026-10-03 | worktree `.worktrees/render-agent`；本波禁改 CMakeLists/DMGameEngine.h/shaders（动画 Agent 在动） |
-| docs：修复 3 处登记不一致 + 场景/ECS Tour + 编辑器 Tour | 🚧 @docs-agent docs/tours 2026-10-03 | worktree `.worktrees/docs-agent`；编辑器 Tour 现在可写（多场景已合入） |
+（暂无——等待下一波认领）
 
 ## 已合并 ✅
+
+- ✅ 骨骼动画系统阶段 1 @anim-agent（合并 `37eb198`；assimp aiBone/aiAnimation 导入、Skeleton/AnimationClip 派生资产 `<model>#skeleton`/`#anim/<i>`、AnimatorComponent+AnimationSystem、per-draw 调色板蒙皮（论证避开 descriptor 缓存失效）、BlinnPhongSkinned.glsl、序列化往返；DMGE_ANIMATION ON/OFF 双开关 61/61 与 37/37 全绿；Vulkan 蒙皮路径留后续）
+- ✅ 2c Vulkan 性能 P1-P2 @render-agent（合并 `edb9f8e`；Bind 热路径去 vector/dynamic_cast ~200×、PipelineCache 落盘热建 ~21×（失效四路径实测）、TRANSIENT command pool、descriptor pool 告警+双倍扩容（扩容不清 P0 缓存）；Vulkan ON/OFF 37/37 双绿；PipelineCache 驱动拒绝坑 K-019）
+- ✅ docs：3 处不一致修正 + SceneAndECSTour/EditorTour @docs-agent（合并 `d939249`；EDITOR_ROADMAP 死路径/Ctrl 快捷键假标注/KB-06 指涉修正；新发现菜单假快捷键与 EDITOR_ROADMAP 过时已登记）
 
 - ✅ 编辑器阶段3收尾+阶段4 @editor-agent（合并 `d527f04`；多 Scene 标签页：SceneTab 容器/独立相机与选中态/全局单 Play 语义；导出可运行工程：ProjectExporter 生成 add_subdirectory 模板工程+资产拷贝+相对路径 shader；实测发现引擎 install(EXPORT) 根本不可用（K-015）与 EntryPoint 丢 argv（K-016）；构建 0 error、ctest 37/37、/W4 零新增。GUI 与导出工程构建待人工验证）
 - ✅ 0c Vulkan 性能 P0 @render-agent（合并 `d1d357c`；descriptor (shaderID,纹理句柄hash) 缓存复用 ~7.6×、ImmediateSubmit Begin/End 批量化 ~450×（独立无 surface 微基准，RTX 4070 Ti Debug，方法与限制见 VULKAN_FIXES §11.3）；deletion queue flush 语义未变、test_deletion_queue 未改仍绿；Vulkan ON/OFF 双路径 37/37）
