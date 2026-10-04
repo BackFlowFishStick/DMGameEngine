@@ -10,6 +10,10 @@
 //    computes M*v exactly like GLSL's M * v.
 //  - Vertex inputs use engine semantics (POSITION/NORMAL/TEXCOORD/COLOR)
 //    assigned by D3D11VertexArray from BufferElement names.
+//  - IMPORTANT: declare varyings BEFORE SV_Position in the VS output struct.
+//    Some D3D11 runtimes link PS inputs to VS outputs by register ORDER, and
+//    SV_Position declared first would occupy register 0 - the PS would then
+//    receive the clip position instead of the varyings (kb/KB-07 K-023).
 //  - Stage B: this file becomes the D3D11 backend's forward-path shader.
 //    The stage-A smoke test embeds a simplified subset inline (K-022: no
 //    external test assets).
@@ -32,10 +36,10 @@ struct VSInput
 
 struct VSOutput
 {
-    float4 v_Position : SV_Position;
     float3 v_WorldPos : TEXCOORD0;
     float3 v_Normal   : TEXCOORD1;
     float2 v_TexCoords : TEXCOORD2;
+    float4 v_Position : SV_Position;
 };
 
 VSOutput VSMain(VSInput input)

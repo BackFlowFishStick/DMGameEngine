@@ -27,6 +27,16 @@
 
 namespace DMGameEngine {
 
+// C4251 ("needs dll-interface for members") is intentionally suppressed for
+// the D3D11 backend classes: members are COM pointers (no CRT state),
+// header-only template types (ComPtr/glm), or private STL members that are
+// only ever touched inside the engine DLL (same CRT by construction) - the
+// pattern the OpenGL backend's exported classes already accept (kb/KB-02).
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4251)
+#endif
+
 class DMGE_API D3D11VertexArray : public VertexArray
 {
 public:
@@ -61,3 +71,7 @@ private:
 };
 
 } // namespace DMGameEngine
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif

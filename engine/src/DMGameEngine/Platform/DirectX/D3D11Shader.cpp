@@ -200,7 +200,7 @@ void D3D11Shader::ReflectStage(ID3DBlob* blob, uint32_t stage)
 
 // ── Bind / Unbind ────────────────────────────────────────────────
 
-void D3D11Shader::Bind() const
+void D3D11Shader::UploadStaging() const
 {
     ID3D11DeviceContext* context = D3D11Backend::Context();
     if (!context)
@@ -232,6 +232,18 @@ void D3D11Shader::Bind() const
         else
             context->PSSetConstantBuffers(0, slotCount, rawBuffers.data());
     }
+}
+
+void D3D11Shader::Bind() const
+{
+    ID3D11DeviceContext* context = D3D11Backend::Context();
+    if (!context)
+        return;
+
+    // Upload current staging (uniforms set before Bind) and bind the
+    // program state. Uniforms set AFTER Bind are flushed at draw time via
+    // UploadBoundStaging(), mirroring the engine's GL semantics.
+    UploadStaging();
 
     context->VSSetShader(m_VS.Get(), nullptr, 0);
     context->PSSetShader(m_PS.Get(), nullptr, 0);
@@ -267,6 +279,12 @@ void D3D11Shader::Unbind() const
 D3D11Shader* D3D11Shader::CurrentBound()
 {
     return s_Bound;
+}
+
+void D3D11Shader::UploadBoundStaging()
+{
+    if (s_Bound)
+        s_Bound->UploadStaging();
 }
 
 

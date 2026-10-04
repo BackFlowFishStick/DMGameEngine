@@ -30,6 +30,16 @@
 
 namespace DMGameEngine {
 
+// C4251 ("needs dll-interface for members") is intentionally suppressed for
+// the D3D11 backend classes: members are COM pointers (no CRT state),
+// header-only template types (ComPtr/glm), or private STL members that are
+// only ever touched inside the engine DLL (same CRT by construction) - the
+// pattern the OpenGL backend's exported classes already accept (kb/KB-02).
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4251)
+#endif
+
 class DMGE_API D3D11Shader : public Shader
 {
 public:
@@ -67,6 +77,12 @@ public:
     // blob to build matching ID3D11InputLayout objects (D3D11 has no VAO).
     static D3D11Shader* CurrentBound();
 
+    // Flushes the currently bound shader's uniform staging into its GPU
+    // cbuffers (no-op if nothing is bound). D3D11RendererAPI calls this at
+    // DRAW time: the engine contract is shader->Bind() -> SetXxx(...)* ->
+    // DrawIndexed(...) (RenderQueue), mirroring GL glUniform timing.
+    static void UploadBoundStaging();
+
 private:
     // Where one uniform name lives: which stage, which cbuffer slot, at what
     // byte offset inside that cbuffer. A name can appear in several places.
@@ -88,6 +104,7 @@ private:
     void CompileStage(ID3DBlob** blob, const char* entryPoint, const char* target,
                       std::string_view source);
     void ReflectStage(ID3DBlob* blob, uint32_t stage);
+    void UploadStaging() const;
     bool WriteUniform(std::string_view name, const void* data, uint32_t size);
     void WarnOnceMissing(std::string_view name) const;
 
@@ -113,3 +130,7 @@ private:
 };
 
 } // namespace DMGameEngine
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif

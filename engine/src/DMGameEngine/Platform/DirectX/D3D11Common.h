@@ -44,10 +44,11 @@ namespace D3D11Backend {
 // Registered by D3D11RendererAPI::Init, cleared by its destructor.
 // Stage A is single-device, single immediate context (same lifecycle
 // assumption as the OpenGL backend's shared GL state).
-void     SetDeviceContext(ID3D11Device* device, ID3D11DeviceContext* context);
-void     ClearDeviceContext();
-ID3D11Device*        Device();
-ID3D11DeviceContext* Context();
+// DMGE_API: the headless smoke test exe consumes these through the DLL.
+DMGE_API void SetDeviceContext(ID3D11Device* device, ID3D11DeviceContext* context);
+DMGE_API void ClearDeviceContext();
+DMGE_API ID3D11Device*        Device();
+DMGE_API ID3D11DeviceContext* Context();
 
 // ── Format mapping ───────────────────────────────────────────────
 // Color formats usable for both SRV (sampling) and RTV (render target).
@@ -66,10 +67,10 @@ uint32_t TextureFormatBytesPerPixel(TextureFormat format);
 // kb/KB-03 item F).
 constexpr uint32_t kMaxTextureUnits = 32;
 
-void BindSRVToUnit(uint32_t unit, ID3D11ShaderResourceView* srv);
-ID3D11ShaderResourceView* SRVForUnit(uint32_t unit);
+DMGE_API void BindSRVToUnit(uint32_t unit, ID3D11ShaderResourceView* srv);
+DMGE_API ID3D11ShaderResourceView* SRVForUnit(uint32_t unit);
 // Never null once a device is registered; 1x1 white fallback SRV.
-ID3D11ShaderResourceView* WhiteDummySRV();
+DMGE_API ID3D11ShaderResourceView* WhiteDummySRV();
 
 } // namespace D3D11Backend
 } // namespace DMGameEngine

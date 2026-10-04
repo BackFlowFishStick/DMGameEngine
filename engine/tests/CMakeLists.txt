@@ -31,6 +31,34 @@ add_executable(dmge_tests
     test_deletion_queue.cpp
 )
 
+# D3D11 backend headless smoke tests (device -> resources -> shader -> draw
+# -> readback, no window needed; see documents/DIRECTX_BACKEND_DESIGN.md §6
+# and kb/KB-07 K-014/K-021 for why this is possible for D3D11 specifically).
+# Gated on the backend switch (DMGE_D3D11 gate in engine/CMakeLists.txt) -
+# the tests construct backend classes that only exist when it is built.
+if(DMGE_D3D11)
+    add_executable(dmge_d3d11_tests
+        test_d3d11_smoke.cpp
+    )
+    target_link_libraries(dmge_d3d11_tests PRIVATE
+        DMGameEngine
+        gtest
+        gtest_main
+    )
+    # No PCH reuse (same dual-glm reasoning as dmge_tests, PRECOMPILED_HEADER.md).
+    target_compile_definitions(dmge_d3d11_tests PRIVATE DMGE_TEST_HEADLESS)
+    if(MSVC)
+        target_compile_options(dmge_d3d11_tests PRIVATE /utf-8 /W4)
+    endif()
+    if(DMGE_BUILD_SHARED)
+        add_custom_command(TARGET dmge_d3d11_tests POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:DMGameEngine> $<TARGET_FILE_DIR:dmge_d3d11_tests>)
+    endif()
+    include(GoogleTest)
+    gtest_discover_tests(dmge_d3d11_tests)
+endif()
+
 # Animation subsystem tests (pure logic + loaders + serialization round-trip).
 # Only built when the subsystem itself is compiled (DMGE_ANIMATION gate in
 # engine/CMakeLists.txt) - the tests exercise DLL-exported animation symbols.

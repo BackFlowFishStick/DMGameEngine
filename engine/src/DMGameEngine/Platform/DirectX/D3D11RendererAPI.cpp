@@ -5,6 +5,7 @@
 #include "DMGameEngine/Platform/DirectX/D3D11RendererAPI.h"
 #include "DMGameEngine/Platform/DirectX/D3D11FrameBuffer.h"
 #include "DMGameEngine/Platform/DirectX/D3D11VertexArray.h"
+#include "DMGameEngine/Platform/DirectX/D3D11Shader.h"
 #include "DMGameEngine/Renderer/VertexArray.h" // full VertexArray / IndexBuffer types
 
 #include "DMGameEngine/Core/Log.h"
@@ -136,8 +137,11 @@ void D3D11RendererAPI::Init(const RendererAPIInitConfig& config)
                                &m_Device, nullptr, &m_Context);
         if (SUCCEEDED(hr))
         {
-            std::strncpy(m_DriverTypeName, kDriverTypeNames[i], sizeof(m_DriverTypeName) - 1);
-            m_DriverTypeName[sizeof(m_DriverTypeName) - 1] = '\0';
+            const size_t nameLen = std::strlen(kDriverTypeNames[i]);
+            const size_t maxLen  = sizeof(m_DriverTypeName) - 1;
+            std::memcpy(m_DriverTypeName, kDriverTypeNames[i],
+                        (nameLen < maxLen) ? nameLen : maxLen);
+            m_DriverTypeName[(nameLen < maxLen) ? nameLen : maxLen] = '\0';
             break;
         }
     }
@@ -237,6 +241,10 @@ void D3D11RendererAPI::EndRenderPass()
 
 void D3D11RendererAPI::DrawIndexed(const VertexArray& vertexArray)
 {
+    // GL glUniform timing: uniforms set after shader->Bind() take effect on
+    // the next draw (engine contract, RenderQueue flush order).
+    D3D11Shader::UploadBoundStaging();
+
     vertexArray.Bind();
 
     const auto& indexBuffer = vertexArray.GetIndexBuffer();
@@ -250,6 +258,8 @@ void D3D11RendererAPI::DrawIndexedInstanced(const VertexArray& vertexArray,
                                             uint32_t instanceCount,
                                             uint32_t baseInstance)
 {
+    D3D11Shader::UploadBoundStaging();
+
     vertexArray.Bind();
 
     const auto& indexBuffer = vertexArray.GetIndexBuffer();
