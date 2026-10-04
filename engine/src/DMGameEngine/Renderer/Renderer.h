@@ -127,6 +127,8 @@ public:
     // and are released by SetAPI / Shutdown.
     static void        SetRenderPath(RenderPath path);
     static RenderPath  GetRenderPath() { return s_PathState.Requested; }
+    // Frame-locked snapshot (what the current/last frame actually ran under).
+    static RenderPath  GetActiveRenderPath() { return s_PathState.Active; }
 
     static API  GetAPI()      { return s_API; }
     static void SetAPI(API api)

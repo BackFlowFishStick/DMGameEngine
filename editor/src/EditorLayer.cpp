@@ -577,6 +577,29 @@ void EditorLayer::DrawMenuBar() {
             }
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Rendering")) {
+            // Render path toggle (ROADMAP 3e): takes effect from the next
+            // frame; the current frame always finishes on its own path.
+            auto cur = Renderer::GetRenderPath();
+            if (ImGui::MenuItem("Forward", nullptr, cur == RenderPath::Forward))
+            {
+                if (cur != RenderPath::Forward) {
+                    Renderer::SetRenderPath(RenderPath::Forward);
+                    DMGE_CLIENT_INFO("Render path -> Forward");
+                }
+            }
+            if (ImGui::MenuItem("Deferred", nullptr, cur == RenderPath::Deferred))
+            {
+                if (cur != RenderPath::Deferred) {
+                    Renderer::SetRenderPath(RenderPath::Deferred);
+                    DMGE_CLIENT_INFO("Render path -> Deferred");
+                }
+            }
+            ImGui::Separator();
+            ImGui::TextDisabled("Active: %s",
+                Renderer::GetActiveRenderPath() == RenderPath::Deferred ? "Deferred" : "Forward");
+            ImGui::EndMenu();
+        }
         ImGui::EndMainMenuBar();
     }
 }
