@@ -2374,3 +2374,14 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 **涉及文件：** `engine/src/DMGameEngine/Platform/DirectX/*`（新增 19 文件含 HLSL）、`DMGameEngine.h`（`#ifdef DMGE_D3D11` 门控 include）、`engine/CMakeLists.txt`（末尾独立 `if(DMGE_D3D11)` 区块：PUBLIC 定义 + d3d11/dxgi/d3dcompiler/dxguid 系统库 + 显式源列表）、`engine/tests/CMakeLists.txt`（门控测试目标）、`engine/tests/test_d3d11_smoke.cpp`（新增）、`documents/DIRECTX_BACKEND_DESIGN.md`（新增）。
 
 **验证：** 三组开关矩阵全量构建零 error、D3D11 文件 /W4 零新增（既有 C4251 基线类别已在后端头内按 KB-02 模式定点抑制）：`DMGE_D3D11=ON` ctest **41/41 绿**（新增 4）；`DMGE_D3D11=OFF` ctest **37/37 绿**（改动前基线一致，OFF 路径与现状逐字节相同）；`DMGE_VULKAN_BACKEND=ON + DMGE_D3D11=ON` 双后端共存 ctest **41/41 绿**。新坑：kb/KB-07 K-025（D3D11 PS 输入按寄存器序链接——varying 必须声明在 SV_Position 前）。
+
+### 2026-10-04 - 第五波集成（管理员）：延迟渲染与 DirectX 后端工厂接线
+
+合并 `agent/render-agent/deferred`（3e 可配置延迟渲染）与 `agent/d3d-agent/stage-a`（D3D11 后端阶段 A）后，按两份报告的集成清单完成接线：
+
+- `RendererAPI.cpp`：`case API::DirectX` 接入 `DirectX::CreateDirectXRendererAPI()`（`#ifdef DMGE_D3D11` 门控，未开启时断言提示）。
+- `DMGameEngine.h`：追加 `Renderer/DeferredRendering.h` include（R9）。
+- `engine/CMakeLists.txt`：`DMGE_HEADERS` 追加 DeferredRendering.h（IDE 展示）。
+- KB-07 撞号处理：d3d 侧 K-023 重编号为 K-025，SUMMARY/代码注释引用同步。
+
+**验证：** `DMGE_ANIMATION=ON + DMGE_D3D11=ON` 全量构建零 error，ctest **78/78 绿**（61 基线 + 13 延迟 + 4 D3D11 smoke）。

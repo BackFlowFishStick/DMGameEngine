@@ -10,6 +10,9 @@
 #ifdef DMGE_VULKAN
 #include "DMGameEngine/Platform/Vulkan/VulkanRendererAPI.h"
 #endif
+#ifdef DMGE_D3D11
+#include "DMGameEngine/Platform/DirectX/DirectXIntegration.h"
+#endif
 
 namespace DMGameEngine {
 
@@ -41,6 +44,13 @@ DM::Scope<RendererAPI> RendererAPI::Create()
 #endif
 
         case Renderer::API::DirectX:
+#ifdef DMGE_D3D11
+            return DirectX::CreateDirectXRendererAPI();
+#else
+            DMGE_CORE_ASSERT(false, "DirectX backend not built (enable DMGE_D3D11).");
+            return nullptr;
+#endif
+
         case Renderer::API::None:
             DMGE_CORE_ASSERT(false, "Renderer::API not supported yet!");
             return nullptr;

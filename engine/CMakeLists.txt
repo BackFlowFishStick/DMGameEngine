@@ -220,6 +220,7 @@ if(DMGE_ANIMATION)
         "src/DMGameEngine/Animation/AnimationAssetLoaders.cpp"
     )
     list(APPEND DMGE_HEADERS
+        "src/DMGameEngine/Renderer/DeferredRendering.h"
         "src/DMGameEngine/Animation/Skeleton.h"
         "src/DMGameEngine/Animation/AnimationClip.h"
         "src/DMGameEngine/Animation/AnimationMath.h"

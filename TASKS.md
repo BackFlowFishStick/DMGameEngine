@@ -6,12 +6,13 @@
 
 ## 进行中 / 待 review
 
-| 任务 | 状态 | 备注 |
-|---|---|---|
-| 3e 延迟渲染（可配置）：G-buffer MRT + 光照 pass，OpenGL/Vulkan 双后端，默认仍前向 | 🚧 @render-agent agent/render-agent/deferred 2026-10-03 | worktree `.worktrees/render-agent`；拥有 Renderer/**+shaders/** |
-| DirectX 后端阶段 A：D3D11 基础设施（device/shader/texture/buffer/FB + WARP headless 验证） | 🚧 @d3d-agent agent/d3d-agent/stage-a 2026-10-03 | worktree `.worktrees/d3d-agent`；拥有 Platform/DirectX/**+engine/CMakeLists+DMGameEngine.h；禁改 Renderer.h/RendererAPI.cpp（工厂接线由管理员合并后完成） |
+（暂无——等待下一波认领）
 
 ## 已合并 ✅
+
+- ✅ 3e 延迟渲染（可配置，双后端）@render-agent（合并 `3c10480`；G-buffer RT0 RGBA8/RT1 RGBA16F/深度复用 + 全屏光照 pass；OpenGL 零改动（MRT 已具备）、Vulkan 补齐 3 处 MRT（K-024：pipeline 键必须含附件数）；默认 Forward，运行时可切换；光源 uniform 与前向同名；透明物阶段 1 限制已记录；双后端 ctest 50/50）
+- ✅ DirectX 后端阶段 A（D3D11）@d3d-agent（合并 `eadde05`；设备/shader 反射/纹理/缓冲/VA/状态对象/离屏 FB + headless 渲染回读 smoke 测试（硬件→WARP 回退）；K-025：D3D11 PS 输入按寄存器序链接——varying 必须声明在 SV_Position 前；ON/OFF/Vulkan 共存三组 41/41、37/37、41/41；管理员完成 RendererAPI 工厂接线）
+- ✅ CI 首跑三连修复 @管理员（Ninja 化修复 VS2026 镜像 generator 失败；测试资产收编 engine/tests/assets + DMGE_TEST_ASSETS_DIR 宏；.gitignore *.obj 例外——K-022；第三跑全绿 26c1664）
 
 - ✅ 骨骼动画系统阶段 1 @anim-agent（合并 `37eb198`；assimp aiBone/aiAnimation 导入、Skeleton/AnimationClip 派生资产 `<model>#skeleton`/`#anim/<i>`、AnimatorComponent+AnimationSystem、per-draw 调色板蒙皮（论证避开 descriptor 缓存失效）、BlinnPhongSkinned.glsl、序列化往返；DMGE_ANIMATION ON/OFF 双开关 61/61 与 37/37 全绿；Vulkan 蒙皮路径留后续）
 - ✅ 2c Vulkan 性能 P1-P2 @render-agent（合并 `edb9f8e`；Bind 热路径去 vector/dynamic_cast ~200×、PipelineCache 落盘热建 ~21×（失效四路径实测）、TRANSIENT command pool、descriptor pool 告警+双倍扩容（扩容不清 P0 缓存）；Vulkan ON/OFF 37/37 双绿；PipelineCache 驱动拒绝坑 K-019）

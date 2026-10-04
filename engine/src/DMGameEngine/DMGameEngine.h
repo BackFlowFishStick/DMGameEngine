@@ -64,6 +64,10 @@
 #include "DMGameEngine/Scene/Systems/TransformSystem.h"
 #include "DMGameEngine/Scene/Systems/MeshRenderSystem.h"
 #include "DMGameEngine/Scene/Systems/LightSystem.h"
+// Configurable deferred rendering path (ROADMAP 3e). Forward remains the
+// default; see Renderer::SetRenderPath and documents/DEFERRED_RENDERING_DESIGN.md.
+#include "DMGameEngine/Renderer/DeferredRendering.h"
+
 #ifdef DMGE_ANIMATION
 // Skeletal animation subsystem (stage 1). Built when DMGE_ANIMATION=ON; see
 // engine/CMakeLists.txt. AnimationSystem must be registered BEFORE
