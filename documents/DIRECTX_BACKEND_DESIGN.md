@@ -135,3 +135,4 @@
 | 日期 | 阶段 | 内容 |
 |---|---|---|
 | 2026-10-04 | A | 初版设计；阶段 A 基础设施 + headless smoke 落地于 `agent/d3d-agent/stage-a` |
+| 2026-10-04 | A | 补充 K-023：本机 D3D11 运行时按寄存器序链接 PS 输入——**所有 D3D11 HLSL 的 VS 输出 struct 必须先声明 varying、最后声明 SV_Position**（§3.1/`BlinnPhong.hlsl` 头注释已落实） |
