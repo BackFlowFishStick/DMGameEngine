@@ -29,6 +29,7 @@ add_executable(dmge_tests
     test_scene.cpp
     test_assimp_import.cpp
     test_deletion_queue.cpp
+    test_deferred.cpp
 )
 
 # Animation subsystem tests (pure logic + loaders + serialization round-trip).
