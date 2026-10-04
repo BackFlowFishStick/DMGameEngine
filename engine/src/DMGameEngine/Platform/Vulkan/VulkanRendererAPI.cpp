@@ -16,6 +16,7 @@
 
 #include <cstring>
 #include <cstdio>
+#include <array>
 #include <functional>
 #include <vector>
 
@@ -487,7 +488,7 @@ void VulkanRendererAPI::OnSwapchainRecreate()
     auto& dev = VulkanDevice::Get();
 
     // Destroy all cached pipelines. The next Clear()/BeginRenderPass will
-    // refresh m_ActiveColorFormat/m_ActiveDepthFormat from the new swapchain
+    // refresh m_ActiveColorFormats/m_ActiveDepthFormat from the new swapchain
     // (or offscreen target), so pipelines are recreated lazily with the
     // correct format on their next draw. The VkPipelineCache object is kept.
     for (auto& [key, pipeline] : m_Pipelines)
@@ -511,7 +512,8 @@ void VulkanRendererAPI::Clear()
     // The swapchain pass opened by BeginFrame is the active render target;
     // record its formats as the baseline for PipelineKey (overridden by an
     // offscreen BeginRenderPass).
-    m_ActiveColorFormat = ctx.GetSwapchain().GetImageFormat();
+    m_ActiveColorAttachmentCount = 1;
+    m_ActiveColorFormats[0] = ctx.GetSwapchain().GetImageFormat();
     m_ActiveDepthFormat = ctx.GetSwapchain().GetDepthFormat();
     // If a frame is already started, the framebuffer was cleared at
     // BeginFrame (loadOp = CLEAR); nothing more to do.
@@ -532,7 +534,8 @@ void VulkanRendererAPI::BeginRenderPass(FrameBuffer* target)
     if (!offscreen)
     {
         auto& swap = ctx.GetSwapchain();
-        m_ActiveColorFormat = swap.GetImageFormat();
+        m_ActiveColorAttachmentCount = 1;
+        m_ActiveColorFormats[0] = swap.GetImageFormat();
         m_ActiveDepthFormat = swap.GetDepthFormat();
         m_ActiveFrameBuffer = nullptr;
         return;
@@ -576,13 +579,22 @@ void VulkanRendererAPI::BeginRenderPass(FrameBuffer* target)
     colorClear.color.float32[2] = m_ClearColor.b;
     colorClear.color.float32[3] = m_ClearColor.a;
 
-    VkRenderingAttachmentInfo colorAttachment{};
-    colorAttachment.sType        = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    colorAttachment.imageView    = fbo->GetColorImageView(0);
-    colorAttachment.imageLayout  = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    colorAttachment.loadOp       = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp      = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.clearValue   = colorClear;
+    // MRT (3e): one attachment info per color attachment of the FBO, all
+    // cleared to the app clear color and stored.
+    const uint32_t colorCount = static_cast<uint32_t>(fbo->GetColorAttachmentCount());
+    DMGE_CORE_ASSERT(colorCount <= kMaxColorAttachments,
+                     "Vulkan: offscreen FrameBuffer exceeds kMaxColorAttachments!");
+    std::array<VkRenderingAttachmentInfo, kMaxColorAttachments> colorAttachments{};
+    for (uint32_t i = 0; i < colorCount && i < kMaxColorAttachments; ++i)
+    {
+        VkRenderingAttachmentInfo& att = colorAttachments[i];
+        att.sType        = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        att.imageView    = fbo->GetColorImageView(i);
+        att.imageLayout  = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        att.loadOp       = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        att.storeOp      = VK_ATTACHMENT_STORE_OP_STORE;
+        att.clearValue   = colorClear;
+    }
 
     VkRenderingAttachmentInfo depthAttachment{};
     if (fbo->HasDepth())
@@ -603,8 +615,8 @@ void VulkanRendererAPI::BeginRenderPass(FrameBuffer* target)
     renderingInfo.renderArea.offset   = { 0, 0 };
     renderingInfo.renderArea.extent   = { fbo->GetWidth(), fbo->GetHeight() };
     renderingInfo.layerCount          = 1;
-    renderingInfo.colorAttachmentCount = 1; // single color attachment this iteration
-    renderingInfo.pColorAttachments   = &colorAttachment;
+    renderingInfo.colorAttachmentCount = colorCount;
+    renderingInfo.pColorAttachments   = colorAttachments.data();
     renderingInfo.pDepthAttachment    = fbo->HasDepth() ? &depthAttachment : nullptr;
     vkCmdBeginRendering(cmd, &renderingInfo);
 
@@ -621,7 +633,9 @@ void VulkanRendererAPI::BeginRenderPass(FrameBuffer* target)
     scissor.extent = { fbo->GetWidth(), fbo->GetHeight() };
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    m_ActiveColorFormat = fbo->GetColorFormat(0);
+    m_ActiveColorAttachmentCount = colorCount;
+    for (uint32_t i = 0; i < colorCount && i < kMaxColorAttachments; ++i)
+        m_ActiveColorFormats[i] = fbo->GetColorFormat(i);
     m_ActiveDepthFormat = fbo->GetDepthFormat();
     m_InOffscreenPass   = true;
 }
@@ -704,7 +718,8 @@ void VulkanRendererAPI::EndRenderPass()
     scissor.extent = swap.GetExtent();
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    m_ActiveColorFormat = swap.GetImageFormat();
+    m_ActiveColorAttachmentCount = 1;
+    m_ActiveColorFormats[0] = swap.GetImageFormat();
     m_ActiveDepthFormat = swap.GetDepthFormat();
     m_InOffscreenPass   = false;
     m_ActiveFrameBuffer = nullptr;
@@ -838,17 +853,25 @@ void VulkanRendererAPI::SetBoundTexture(uint32_t slot, VulkanTexture* texture)
 
 bool VulkanRendererAPI::PipelineKey::operator==(const PipelineKey& o) const
 {
-    return shaderID         == o.shaderID &&
-           vertexLayoutHash == o.vertexLayoutHash &&
-           blendEnabled     == o.blendEnabled &&
-           srcBlend          == o.srcBlend &&
-           dstBlend          == o.dstBlend &&
-           blendEq           == o.blendEq &&
-           depthTestEnabled == o.depthTestEnabled &&
-           depthFunc         == o.depthFunc &&
-           cullMode          == o.cullMode &&
-           colorFormat      == o.colorFormat &&
-           depthFormat      == o.depthFormat;
+    if (shaderID         != o.shaderID ||
+        vertexLayoutHash != o.vertexLayoutHash ||
+        blendEnabled     != o.blendEnabled ||
+        srcBlend          != o.srcBlend ||
+        dstBlend          != o.dstBlend ||
+        blendEq           != o.blendEq ||
+        depthTestEnabled != o.depthTestEnabled ||
+        depthFunc         != o.depthFunc ||
+        cullMode          != o.cullMode ||
+        colorAttachmentCount != o.colorAttachmentCount ||
+        depthFormat      != o.depthFormat)
+        return false;
+
+    // Only the active attachment formats participate: a key's unused tail
+    // entries may hold stale values from a previous pass.
+    for (uint32_t i = 0; i < colorAttachmentCount && i < kMaxColorAttachments; ++i)
+        if (colorFormats[i] != o.colorFormats[i])
+            return false;
+    return true;
 }
 
 size_t VulkanRendererAPI::PipelineKeyHash::operator()(const PipelineKey& k) const noexcept
@@ -862,7 +885,10 @@ size_t VulkanRendererAPI::PipelineKeyHash::operator()(const PipelineKey& k) cons
     h ^= std::hash<bool>{}(k.depthTestEnabled) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<uint8_t>{}(static_cast<uint8_t>(k.depthFunc)) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<uint8_t>{}(static_cast<uint8_t>(k.cullMode)) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    h ^= std::hash<uint32_t>{}(static_cast<uint32_t>(k.colorFormat)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<uint32_t>{}(k.colorAttachmentCount) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    // Only the active attachment formats participate (mirrors operator==).
+    for (uint32_t i = 0; i < k.colorAttachmentCount && i < kMaxColorAttachments; ++i)
+        h ^= std::hash<uint32_t>{}(static_cast<uint32_t>(k.colorFormats[i])) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<uint32_t>{}(static_cast<uint32_t>(k.depthFormat)) + 0x9e3779b9 + (h << 6) + (h >> 2);
     return h;
 }
@@ -880,7 +906,9 @@ VkPipeline VulkanRendererAPI::GetOrCreatePipeline(VulkanShader& shader,
     key.depthTestEnabled   = m_DepthTestEnabled;
     key.depthFunc          = m_DepthFunc;
     key.cullMode           = m_CullMode;
-    key.colorFormat        = m_ActiveColorFormat;
+    key.colorAttachmentCount = m_ActiveColorAttachmentCount;
+    for (uint32_t i = 0; i < m_ActiveColorAttachmentCount && i < kMaxColorAttachments; ++i)
+        key.colorFormats[i] = m_ActiveColorFormats[i];
     key.depthFormat        = m_ActiveDepthFormat;
 
     auto it = m_Pipelines.find(key);
@@ -888,7 +916,7 @@ VkPipeline VulkanRendererAPI::GetOrCreatePipeline(VulkanShader& shader,
         return it->second;
 
     auto& dev   = VulkanDevice::Get();
-    VkFormat colorFormat = m_ActiveColorFormat;
+    const uint32_t colorCount = m_ActiveColorAttachmentCount;
     VkFormat depthFormat  = m_ActiveDepthFormat;
 
     // ── Shader stages ────────────────────────────────────────────
@@ -942,6 +970,10 @@ VkPipeline VulkanRendererAPI::GetOrCreatePipeline(VulkanShader& shader,
     depthStencil.stencilTestEnable    = VK_FALSE;
 
     // ── Color blend ───────────────────────────────────────────────
+    // MRT (3e): the blend state is engine-global (mirrors the OpenGL
+    // backend's uniform glBlendFunc), so the SAME state is replicated to
+    // every color attachment; the attachment COUNT must match the active
+    // pass (baked into the pipeline + PipelineKey).
     VkPipelineColorBlendAttachmentState blendAttachment{};
     blendAttachment.blendEnable         = m_BlendEnabled ? VK_TRUE : VK_FALSE;
     blendAttachment.srcColorBlendFactor = BlendFactorToVk(m_SrcBlend);
@@ -953,11 +985,14 @@ VkPipeline VulkanRendererAPI::GetOrCreatePipeline(VulkanShader& shader,
     blendAttachment.colorWriteMask       = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                                         | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
+    std::array<VkPipelineColorBlendAttachmentState, kMaxColorAttachments> blendAttachments{};
+    blendAttachments.fill(blendAttachment);
+
     VkPipelineColorBlendStateCreateInfo colorBlend{};
     colorBlend.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     colorBlend.logicOpEnable   = VK_FALSE;
-    colorBlend.attachmentCount = 1;
-    colorBlend.pAttachments     = &blendAttachment;
+    colorBlend.attachmentCount = colorCount;
+    colorBlend.pAttachments     = blendAttachments.data();
 
     // ── Dynamic state ────────────────────────────────────────────
     VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
@@ -969,8 +1004,8 @@ VkPipeline VulkanRendererAPI::GetOrCreatePipeline(VulkanShader& shader,
     // ── Dynamic rendering info ───────────────────────────────────
     VkPipelineRenderingCreateInfo renderingInfo{};
     renderingInfo.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    renderingInfo.colorAttachmentCount     = 1;
-    renderingInfo.pColorAttachmentFormats = &colorFormat;
+    renderingInfo.colorAttachmentCount     = colorCount;
+    renderingInfo.pColorAttachmentFormats = m_ActiveColorFormats;
     renderingInfo.depthAttachmentFormat    = depthFormat;
 
     // ── Assemble ─────────────────────────────────────────────────

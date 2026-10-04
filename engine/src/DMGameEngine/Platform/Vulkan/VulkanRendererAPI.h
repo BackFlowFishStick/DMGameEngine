@@ -103,6 +103,10 @@ private:
     static constexpr uint32_t kMaxFramesInFlight = 2;
     static constexpr uint32_t kMaxBoundTextures  = 32;
     static constexpr VkDeviceSize kUniformBufferSize = 16ull * 1024 * 1024; // 16 MB / frame
+    // Max color attachments a pass/pipeline can target (engine-side headroom;
+    // the deferred G-buffer uses 2). Declared before PipelineKey, which uses
+    // it as an array bound.
+    static constexpr uint32_t kMaxColorAttachments = 4;
 
     // ── Pipeline cache ──────────────────────────────────────────
     struct PipelineKey
@@ -116,7 +120,15 @@ private:
         bool     depthTestEnabled = true;
         DepthFunc depthFunc       = DepthFunc::Less;
         CullMode cullMode         = CullMode::None;
-        VkFormat colorFormat = VK_FORMAT_UNDEFINED;
+        // Color attachment count + all formats: the pipeline's
+        // VkPipelineRenderingCreateInfo / colorBlend attachmentCount must
+        // match the active pass, so the same shader needs separate pipelines
+        // for a 1-attachment (forward / swapchain) and a 2-attachment
+        // (deferred G-buffer) pass (3e MRT).
+        uint32_t colorAttachmentCount = 1;
+        VkFormat colorFormats[kMaxColorAttachments] = {
+            VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED,
+            VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED };
         VkFormat depthFormat = VK_FORMAT_UNDEFINED;
 
         bool operator==(const PipelineKey& other) const;
@@ -165,8 +177,13 @@ private:
     int m_ViewportX = 0, m_ViewportY = 0, m_ViewportW = 0, m_ViewportH = 0;
     // Active render-target formats (set when a pass begins). Fed into the
     // PipelineKey so an offscreen HDR target (e.g. RGBA16F) gets its own
-    // cached pipeline instead of mismatching the swapchain format.
-    VkFormat m_ActiveColorFormat = VK_FORMAT_UNDEFINED;
+    // cached pipeline instead of mismatching the swapchain format. MRT (3e):
+    // a pass can target multiple color attachments; count + formats are
+    // recorded per pass.
+    uint32_t m_ActiveColorAttachmentCount = 1;
+    VkFormat m_ActiveColorFormats[kMaxColorAttachments] = {
+        VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED,
+        VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED };
     VkFormat m_ActiveDepthFormat = VK_FORMAT_UNDEFINED;
     bool            m_InOffscreenPass   = false;
     VulkanFrameBuffer* m_ActiveFrameBuffer = nullptr;
