@@ -16,6 +16,7 @@
 #pragma once
 
 #include "DMGameEngine/Core/Export.h"
+#include "DMGameEngine/Renderer/DeferredRendering.h"  // DeferredShaderSet for FlushDeferred
 #include "glm/glm.hpp"
 #include <cstddef>
 #include <vector>
@@ -94,6 +95,18 @@ public:
     void Flush(const glm::mat4& viewProjection,
                   const glm::vec3& cameraPosition,
                   const SceneLightData& lightData);
+
+    // Deferred-path flush (3e stage 1, documents/DEFERRED_RENDERING_DESIGN.md):
+    // submits every queued renderable into the G-buffer instead of the
+    // forward shaders - per-draw and skinned draws go through the static /
+    // skinned G-buffer shader, instanced batches through the instanced one.
+    // Material values are copied per group from the queued Material onto the
+    // G-buffer shader by well-known Blinn-Phong uniform names (2b debt: no
+    // reflection). Light uniforms are NOT uploaded here (the G-buffer pass
+    // stores geometry only; the lighting pass uploads them in Renderer).
+    // The queue is drained (cleared) after submission.
+    void FlushDeferred(const glm::mat4& viewProjection,
+                       const DeferredShaderSet& shaders);
 
     // Number of renderables currently queued (read before Flush).
     std::size_t GetCount() const { return m_Queue.size(); }

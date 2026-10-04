@@ -91,6 +91,11 @@ public:
     virtual DM::Ref<Texture2D> GetColorAttachment(uint32_t index = 0) const = 0;
     virtual size_t             GetColorAttachmentCount()               const = 0;
 
+    // Sampleable depth attachment (deferred lighting samples it to reproject
+    // world positions; also shadow-map use cases). Default nullptr for
+    // backends/targets without a depth attachment.
+    virtual DM::Ref<Texture2D> GetDepthAttachment() const { return nullptr; }
+
     virtual const FramebufferSpecification& GetSpecification() const = 0;
 
     // -- Factory --------------------------------------------------

@@ -20,6 +20,7 @@
 #pragma once
 
 #include "DMGameEngine/Core/Export.h"
+#include "DMGameEngine/Renderer/DeferredRendering.h"  // RenderPath / DeferredPathState / DeferredShaderSet
 #include "DMGameEngine/Renderer/RendererAPI.h"
 #include "DMGameEngine/Renderer/RenderQueue.h"
 #include "DMGameEngine/Renderer/Light.h"
@@ -115,8 +116,28 @@ public:
 
     static void OnWindowResize(int width, int height);
 
+    // ── Render path (3e deferred rendering, stage 1) ────────────
+    // Selects Forward (default) or Deferred (G-buffer pass + full-screen
+    // lighting pass; see documents/DEFERRED_RENDERING_DESIGN.md). The
+    // switch takes effect at the NEXT BeginScene - a frame that already
+    // started always completes under the path it began with (mid-frame
+    // switches are ignored by design). Deferred resources (G-buffer
+    // FrameBuffer, internal shaders, full-screen quad) are created lazily
+    // on the first deferred BeginScene, follow the render target's size,
+    // and are released by SetAPI / Shutdown.
+    static void        SetRenderPath(RenderPath path);
+    static RenderPath  GetRenderPath() { return s_PathState.Requested; }
+
     static API  GetAPI()      { return s_API; }
-    static void SetAPI(API api) { s_API = api; }
+    static void SetAPI(API api)
+    {
+        // Backend-owning resources (deferred shaders / G-buffer / quad) are
+        // API-specific: release them when the API changes. Cheap when the
+        // deferred path was never used (no-op before first deferred frame).
+        if (api != s_API)
+            DestroyDeferredResources();
+        s_API = api;
+    }
 
 private:
     struct SceneData
@@ -129,6 +150,16 @@ private:
     static SceneData    s_SceneData;
     static SceneLightData s_LightData;
     static RenderQueue s_Queue;
+    static DeferredPathState s_PathState;
+
+    // ── Deferred-path orchestration (3e stage 1) ────────────────
+    // Implemented in Renderer.cpp; the resource bundle (G-buffer
+    // FrameBuffer, internal shaders, full-screen quad) lives as
+    // file-statics there so the public header stays free of
+    // implementation types (R1/R5).
+    static void EnsureDeferredResources(uint32_t width, uint32_t height);
+    static void DrawDeferredLighting();
+    static void DestroyDeferredResources();
 };
 
 } // namespace DMGameEngine

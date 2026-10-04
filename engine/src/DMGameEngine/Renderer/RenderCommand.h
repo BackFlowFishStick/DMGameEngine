@@ -31,6 +31,10 @@ public:
 
     // ── Framebuffer / draw commands ──────────────────────────
     static void SetClearColor(const glm::vec4& color);
+    // Last color set via SetClearColor (cached on the facade so callers -
+    // e.g. the deferred lighting pass's sky passthrough - can read it back
+    // without a virtual getter on the backend interface).
+    static const glm::vec4& GetClearColor();
     static void Clear();
     static void SetViewport(int x, int y, int width, int height);
 
