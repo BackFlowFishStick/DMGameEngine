@@ -156,6 +156,9 @@ private:
             mc.Mesh = m_CubeMesh;
             auto sunMat = DM::CreateRef<Material>(m_UnlitShader);
             sunMat->SetFloat3("u_Color", {1.0f, 0.95f, 0.7f});
+            // Deferred G-buffer pass uploads u_AlbedoColor (not u_Color):
+            // without it the light visuals would lose their color.
+            sunMat->SetFloat3("u_AlbedoColor", {1.0f, 0.95f, 0.7f});
             mc.MaterialOverrides.resize(1);
             mc.MaterialOverrides[0] = DM::CreateRef<MaterialInstance>(sunMat);
         }
@@ -180,6 +183,7 @@ private:
             mc.Mesh = m_CubeMesh;
             auto lightMat = DM::CreateRef<Material>(m_UnlitShader);
             lightMat->SetFloat3("u_Color", specs[i].color);
+            lightMat->SetFloat3("u_AlbedoColor", specs[i].color);
             mc.MaterialOverrides.resize(1);
             mc.MaterialOverrides[0] = DM::CreateRef<MaterialInstance>(lightMat);
         }
@@ -279,5 +283,8 @@ private:
 DMGameEngine::Application* DMGameEngine::CreateApplication()
 {
     DMGameEngine::Renderer::SetAPI(DMGameEngine::Renderer::API::OpenGL);
+    // ROADMAP 3e: the demo runs the deferred path (G-buffer + fullscreen
+    // lighting pass). Switch back to RenderPath::Forward to compare.
+    DMGameEngine::Renderer::SetRenderPath(DMGameEngine::RenderPath::Deferred);
     return new LitCubesGame();
 }
