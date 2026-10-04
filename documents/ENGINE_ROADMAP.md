@@ -246,7 +246,8 @@
 
 - 后处理管线（bloom/tonemap/SSAO）：基于 `BeginRenderPass` 多 pass + 全屏 quad。
 - 阴影贴图：depth-only FrameBuffer（当前离屏路径断言 `GetColorAttachmentCount()>0`，需放开）。
-- PBR 材质 + IBL + 延迟渲染（G-buffer MRT，当前 FrameBuffer 支持 MRT 但 pipeline blend 假设单颜色附件）。
+- **可配置延迟渲染（阶段 1）✅ 已落地**（2026-10-04，分支 `agent/render-agent/deferred`）：`Renderer::RenderPath`（默认 Forward，运行时可切）+ G-buffer MRT（RT0 RGBA8 albedo+spec / RT1 RGBA16F 法线+shininess / 深度复用）+ 全屏 quad 光照 pass，OpenGL（`glDrawBuffers`，已有）与 Vulkan（dynamic rendering 多附件 + pipeline 键扩展）双后端；透明回退、RenderPassDesc 统一留 2b/后续。设计与 2b 欠债清单见 `documents/DEFERRED_RENDERING_DESIGN.md`。
+- PBR 材质 + IBL + 阴影（待做；依赖 2b 收敛）。
 
 ### 3f. 骨骼动画（2026-10-03 立项，TASKS.md 第四波）
 
