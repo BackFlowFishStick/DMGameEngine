@@ -2342,3 +2342,23 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 **涉及文件：** `engine/src/DMGameEngine/Animation/*`（新增）、`Asset/AssetLoader.h`、`Asset/AssetTypes.h`、`Asset/MeshImporterAssimp.cpp`、`Scene/Components/AnimatorComponent.h`（新增）、`Scene/Components/Components.h`、`Scene/Systems/AnimationSystem.h`（新增）、`Scene/Systems/SkinnedMeshRenderSystem.h`（新增）、`Scene/Systems/MeshRenderSystem.h`、`Scene/SceneSerializer.cpp`、`Renderer/Shader.h`、`Renderer/RenderQueue.h/.cpp`、`Renderer/Renderer.h/.cpp`、`Platform/OpenGL/OpenGLShader.h/.cpp`、`DMGameEngine.h`、`engine/shaders/BlinnPhongSkinned.glsl`（新增）、`engine/CMakeLists.txt`、`engine/tests/CMakeLists.txt`、`engine/tests/test_animation_*.cpp`（新增）。
 
 **验证：** `DMGE_ANIMATION=ON`（build-agent，engine+editor+game+tests 全量）零 error、/W4 零新增（仅既有 C4251 基线）、ctest **61/61 绿**；`DMGE_ANIMATION=OFF`（build-agent-off 全量 327 targets 含 editor/game）零 error、ctest **37/37 绿**（与改动前基线一致）。运行时人工验证步骤（需要带骨骼动画的模型）见 agent 报告。
+
+---
+
+## 2026-10-04 可配置延迟渲染阶段 1（ROADMAP 3e）——render-agent
+
+**一句话：** `Renderer` 新增 `RenderPath`（Forward 默认 / Deferred 可运行时切换，切换下一帧生效），Deferred 下场景经 G-buffer MRT pass + 全屏 quad 光照 pass 渲染，OpenGL 与 Vulkan 双后端落地；默认前向路径零行为变化。
+
+**要点：**
+- G-buffer 布局（`Renderer/DeferredRendering.h::GBufferLayout` 单一事实源）：RT0 `RGBA8` albedo+specular strength（a）、RT1 `RGBA16F` 世界法线+shininess（w）、深度 attachment 复用（光照 pass 反投影世界坐标，`u_NdcZMin` 折叠 GL/Vulkan 深度范围差异——2b 债）。
+- 光照 pass：全屏三角，Blinn-Phong 与前向 shader **同名光源 uniform**（沿用 Light.h MAX_*，per-name uniform 上传，未引入 UBO 改动），`UploadSceneLighting` 从 RenderQueue.cpp 提取共享。
+- 场景集成：MeshRenderSystem/LightSystem 零改动；分流收口在 `Renderer::EndScene`（前向 `RenderQueue::Flush` / 延迟 `RenderQueue::FlushDeferred`，后者把排队 draw 改写到内嵌源创建的 G-buffer shader：static/skinned/instanced 三变体；材质参数按 Blinn-Phong 知名名从 Material 复制）。
+- Vulkan MRT：`BeginRenderPass` 按附件数构造 rendering attachment 数组；pipeline 的 blend attachment state 按附件数复制；**PipelineKey 纳入 colorAttachmentCount + 全部活动颜色格式**（跨 pass 复用错管线的隐患，见 KB-07 K-024）。
+- editor viewport / game swapchain 两条输出路径在 Deferred 下语义不变（G-buffer 渲到离屏 FB，光照 pass 进原目标）；透明物体阶段 1 全部按不透明处理（无透明标记，文档注明限制）。
+- 延迟资源（G-buffer FB / 4 个内嵌源 shader / 全屏三角 VA）惰性创建、随目标尺寸 Resize、`SetAPI`/`Shutdown` 释放。
+
+**涉及文件：** `Renderer/DeferredRendering.h`（新增，公共头）、`Renderer/Renderer.h/.cpp`（RenderPath API + 延迟编排）、`Renderer/RenderQueue.h/.cpp`（FlushDeferred）、`Renderer/FrameBuffer.h`（GetDepthAttachment 默认实现）、`Renderer/RenderCommand.h/.cpp`（GetClearColor）、`Platform/OpenGL/OpenGLFrameBuffer.h`、`Platform/Vulkan/VulkanFrameBuffer.h`（深度访问器 override）、`Platform/Vulkan/VulkanRendererAPI.h/.cpp`（MRT）、`engine/shaders/{GBuffer,GBufferSkinned,GBufferInstanced,DeferredLighting}.glsl`（新增参考副本）、`engine/tests/test_deferred.cpp`（新增 13 例）+ tests/CMakeLists.txt、`documents/DEFERRED_RENDERING_DESIGN.md`（新增）、KB-07 K-023/K-024。
+
+**验证：** 双配置全量构建零 error、改动文件 /W4 零新增警告；`DMGE_VULKAN_BACKEND=OFF` ctest **50/50 绿**（37 基线 + 13 新增）、`ON` ctest **50/50 绿**。运行时人工验证步骤（前向/延迟一致性对比等）见 agent 报告；Vulkan 运行时受 K-014 无 surface 限制，agent 会话内以构建 + 纯逻辑单测兜底。
+
+**集成待办（管理员）：** ① `engine/CMakeLists.txt` 的 `DMGE_HEADERS` 注册 `Renderer/DeferredRendering.h`；② `DMGameEngine.h` 追加 `#include "DMGameEngine/Renderer/DeferredRendering.h"`（Renderer.h 的 RenderPath API 依赖它）。

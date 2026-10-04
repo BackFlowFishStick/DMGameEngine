@@ -16,6 +16,11 @@ namespace DMGameEngine {
 
 DM::Scope<RendererAPI> RenderCommand::s_RendererAPI;
 
+// Cached copy of the clear color (see GetClearColor in the header).
+namespace {
+glm::vec4 s_LastClearColor{0.0f, 0.0f, 0.0f, 0.0f};
+}
+
 // ── Lifecycle ────────────────────────────────────────────────────
 void RenderCommand::Init(const RendererAPIInitConfig& config)
 {
@@ -32,8 +37,14 @@ void RenderCommand::Shutdown()
 // ── Framebuffer / draw commands ──────────────────────────────────
 void RenderCommand::SetClearColor(const glm::vec4& color)
 {
+    s_LastClearColor = color;
     DMGE_CORE_ASSERT(s_RendererAPI, "RenderCommand not initialized! Call RenderCommand::Init() first.");
     s_RendererAPI->SetClearColor(color);
+}
+
+const glm::vec4& RenderCommand::GetClearColor()
+{
+    return s_LastClearColor;
 }
 
 void RenderCommand::Clear()

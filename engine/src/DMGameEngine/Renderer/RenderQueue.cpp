@@ -20,8 +20,10 @@
  */
 
 #include "DMGameEngine/Renderer/RenderQueue.h"
+#include "DMGameEngine/Renderer/DeferredRendering.h"  // DeferredShaderSet + shared UploadSceneLighting
 #include "DMGameEngine/Renderer/Material.h"
 #include "DMGameEngine/Renderer/Shader.h"
+#include "DMGameEngine/Renderer/Texture.h"
 #include "DMGameEngine/Renderer/VertexArray.h"
 #include "DMGameEngine/Renderer/RenderCommand.h"
 #include "DMGameEngine/Renderer/Light.h"
@@ -36,54 +38,48 @@ namespace DMGameEngine {
 
 namespace {
 
-// Upload all per-scene lighting uniforms to a shader. Called once per
-// shader/material group at Flush time. Missing uniforms are silently
-// skipped (location -1 -> glUniform no-op per GL spec).
-void UploadSceneLighting(const DM::Ref<Shader>& shader,
-                         const glm::vec3& cameraPosition,
-                         const SceneLightData& light)
+// UploadSceneLighting moved to DeferredRendering.h (inline) so the deferred
+// lighting pass in Renderer.cpp shares the exact same per-name uploads.
+
+// Copy a queued Material's Blinn-Phong parameter values onto a G-buffer
+// shader (deferred flush). Reads the well-known uniform names by value off
+// the Material (Get() returns nullptr when unset -> keep the shader default).
+// The albedo texture, when present, is bound to slot 0. 2b debt: no shader
+// reflection - the names are the Blinn-Phong contract (see design doc §7).
+void ApplyGBufferMaterial(const DM::Ref<Shader>& shader,
+                          const DM::Ref<Material>& material)
 {
-    // Camera
-    shader->SetFloat3("u_CameraPosition", cameraPosition);
+    if (!material)
+        return;
 
-    // Ambient
-    shader->SetFloat3("u_AmbientColor", light.AmbientColor);
-    shader->SetFloat("u_AmbientIntensity", light.AmbientIntensity);
+    auto setFloat = [&](std::string_view name) {
+        if (const UniformValue* v = material->Get(name))
+            if (const float* f = std::get_if<float>(v))
+                shader->SetFloat(name, *f);
+    };
+    auto setFloat3 = [&](std::string_view name) {
+        if (const UniformValue* v = material->Get(name))
+            if (const glm::vec3* f = std::get_if<glm::vec3>(v))
+                shader->SetFloat3(name, *f);
+    };
+    auto setInt = [&](std::string_view name) {
+        if (const UniformValue* v = material->Get(name))
+            if (const int* i = std::get_if<int>(v))
+                shader->SetInt(name, *i);
+    };
 
-    // Directional light
-    shader->SetFloat3("u_DirectionalLight_direction", light.DirectionalLight.Direction);
-    shader->SetFloat3("u_DirectionalLight_color",
-                      light.HasDirectional ? light.DirectionalLight.Color : glm::vec3(0.0f));
-    shader->SetFloat("u_DirectionalLight_intensity",
-                     light.HasDirectional ? light.DirectionalLight.Intensity : 0.0f);
+    setFloat3("u_AlbedoColor");
+    setFloat("u_SpecularStrength");
+    setFloat("u_Shininess");
+    setInt("u_UseTexture");
 
-    // Point lights
-    shader->SetInt("u_PointLightCount", static_cast<int>(light.PointLightCount));
-    for (uint32_t i = 0; i < light.PointLightCount && i < MAX_POINT_LIGHTS; ++i)
+    if (const TextureSlot* slot = material->GetTexture("u_AlbedoTexture"))
     {
-        const auto& pl = light.PointLights[i];
-        shader->SetFloat3("u_PointLights_position["     + std::to_string(i) + "]", pl.Position);
-        shader->SetFloat3("u_PointLights_color["        + std::to_string(i) + "]", pl.Color);
-        shader->SetFloat("u_PointLights_intensity["     + std::to_string(i) + "]", pl.Intensity);
-        shader->SetFloat("u_PointLights_constant["      + std::to_string(i) + "]", pl.Constant);
-        shader->SetFloat("u_PointLights_linear["        + std::to_string(i) + "]", pl.Linear);
-        shader->SetFloat("u_PointLights_quadratic["     + std::to_string(i) + "]", pl.Quadratic);
-    }
-
-    // Spot lights
-    shader->SetInt("u_SpotLightCount", static_cast<int>(light.SpotLightCount));
-    for (uint32_t i = 0; i < light.SpotLightCount && i < MAX_SPOT_LIGHTS; ++i)
-    {
-        const auto& sl = light.SpotLights[i];
-        shader->SetFloat3("u_SpotLights_position["       + std::to_string(i) + "]", sl.Position);
-        shader->SetFloat3("u_SpotLights_direction["      + std::to_string(i) + "]", sl.Direction);
-        shader->SetFloat3("u_SpotLights_color["          + std::to_string(i) + "]", sl.Color);
-        shader->SetFloat("u_SpotLights_intensity["       + std::to_string(i) + "]", sl.Intensity);
-        shader->SetFloat("u_SpotLights_constant["        + std::to_string(i) + "]", sl.Constant);
-        shader->SetFloat("u_SpotLights_linear["          + std::to_string(i) + "]", sl.Linear);
-        shader->SetFloat("u_SpotLights_quadratic["       + std::to_string(i) + "]", sl.Quadratic);
-        shader->SetFloat("u_SpotLights_innerCutoffCos["  + std::to_string(i) + "]", sl.InnerCutoffCos);
-        shader->SetFloat("u_SpotLights_outerCutoffCos["  + std::to_string(i) + "]", sl.OuterCutoffCos);
+        if (slot->Texture)
+        {
+            slot->Texture->Bind(0);
+            shader->SetInt("u_AlbedoTexture", 0);
+        }
     }
 }
 
@@ -247,6 +243,114 @@ void RenderQueue::Flush(const glm::mat4& viewProjection,
             lastInstancedMaterial = r.Material.get();
         }
 
+        RenderCommand::DrawIndexedInstanced(*r.VertexArray, r.InstanceCount);
+    }
+
+    s_InstancedBatchCount = 0;
+}
+
+// ── Deferred-path flush (3e stage 1) ──────────────────────────────
+// Rewrites every queued draw into the G-buffer: same material-grouped order
+// as Flush, but the bound shader is always one of the internal G-buffer
+// shaders and the material's Blinn-Phong parameters are copied onto it.
+// No lighting uniforms here - the G-buffer pass stores geometry only; the
+// lighting pass (Renderer::DrawDeferredLighting) evaluates the lights.
+void RenderQueue::FlushDeferred(const glm::mat4& viewProjection,
+                                const DeferredShaderSet& shaders)
+{
+    // Same sort key as Flush: material groups contiguous, shader-only draws
+    // after materials.
+    auto sortKey = [](const Renderable& r) {
+        const bool hasMaterial = static_cast<bool>(r.Material);
+        const void* obj = hasMaterial
+            ? static_cast<const void*>(r.Material.get())
+            : static_cast<const void*>(r.Shader.get());
+        return std::pair<uint32_t, uintptr_t>{
+            hasMaterial ? 0u : 1u,
+            reinterpret_cast<uintptr_t>(obj)
+        };
+    };
+
+    std::sort(m_Queue.begin(), m_Queue.end(),
+        [&](const Renderable& a, const Renderable& b) {
+            return sortKey(a) < sortKey(b);
+        });
+
+    const Shader*   lastShader   = nullptr;
+    const Material* lastMaterial = nullptr;
+
+    // ── Per-draw queue (static + skinned) ───────────────────────
+    for (const auto& r : m_Queue)
+    {
+        DMGE_CORE_ASSERT(r.VertexArray, "RenderQueue::FlushDeferred - vertexArray is null!");
+
+        // Skinned draws route to the skinned G-buffer shader so they can
+        // receive the bone palette (u_BoneMatrices; OpenGL-only at this
+        // stage - same restriction as the forward path).
+        const DM::Ref<Shader>& shader =
+            (r.BonePalette && r.BonePaletteCount > 0) ? shaders.Skinned
+                                                      : shaders.Static;
+        DMGE_CORE_ASSERT(shader, "RenderQueue::FlushDeferred - G-buffer shader missing!");
+
+        if (shader.get() != lastShader)
+        {
+            shader->Bind();
+            shader->SetMat4("u_ViewProjection", viewProjection);
+            lastShader   = shader.get();
+            lastMaterial = nullptr;   // new shader: reapply material params
+        }
+
+        if (r.Material)
+        {
+            // ApplyGBufferMaterial uploads every parameter (cheap per draw,
+            // correct per material-instance). Track the pointer only to skip
+            // repeats of the exact same material.
+            if (r.Material.get() != lastMaterial)
+            {
+                ApplyGBufferMaterial(shader, r.Material);
+                lastMaterial = r.Material.get();
+            }
+        }
+
+        // Per-draw uniforms: model transform + normal matrix.
+        shader->SetMat4("u_Transform", r.Transform);
+        glm::mat3 normalMat3 = glm::transpose(glm::inverse(glm::mat3(r.Transform)));
+        glm::mat4 normalMat4(
+            glm::vec4(normalMat3[0], 0.0f),
+            glm::vec4(normalMat3[1], 0.0f),
+            glm::vec4(normalMat3[2], 0.0f),
+            glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+        shader->SetMat4("u_NormalMatrix", normalMat4);
+
+        if (r.BonePalette && r.BonePaletteCount > 0)
+            shader->SetMat4Array("u_BoneMatrices", r.BonePalette, r.BonePaletteCount);
+
+        RenderCommand::DrawIndexed(*r.VertexArray);
+    }
+
+    m_Queue.clear();
+
+    // ── Instanced batches ──────────────────────────────────────
+    if (s_InstancedBatchCount == 0)
+        return;
+    DMGE_CORE_ASSERT(shaders.Instanced,
+                     "RenderQueue::FlushDeferred - instanced G-buffer shader missing!");
+
+    shaders.Instanced->Bind();
+    shaders.Instanced->SetMat4("u_ViewProjection", viewProjection);
+
+    const Material* lastInstancedMaterial = nullptr;
+    for (uint32_t i = 0; i < s_InstancedBatchCount; ++i)
+    {
+        const auto& r = s_InstancedBatches[i];
+        DMGE_CORE_ASSERT(r.Material, "RenderQueue::FlushDeferred - instanced renderable has no material!");
+        DMGE_CORE_ASSERT(r.VertexArray, "RenderQueue::FlushDeferred - instanced vertexArray is null!");
+
+        if (r.Material.get() != lastInstancedMaterial)
+        {
+            ApplyGBufferMaterial(shaders.Instanced, r.Material);
+            lastInstancedMaterial = r.Material.get();
+        }
         RenderCommand::DrawIndexedInstanced(*r.VertexArray, r.InstanceCount);
     }
 

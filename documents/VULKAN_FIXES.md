@@ -437,3 +437,25 @@ void EndUploadBatch();  // 一次 submit + fence + wait
 ### 12.7 涉及文件
 
 `VulkanVertexArray.h/.cpp`（P1 Bind）；`VulkanRendererAPI.h/.cpp`（P1 PipelineCache 落盘 + P2 descriptor pool）。P2 TRANSIENT：`VulkanGraphicsContext.cpp`、`VulkanDevice.cpp`。无新源文件、无 CMake 改动、无公共抽象变更（R5：pool 列表与落盘均为后端内部实现；`m_DescriptorPools` 私有成员删除不影响公共 ABI 语义）。
+
+---
+
+## 13. 阶段 3e-1 — Vulkan MRT（延迟渲染 G-buffer）（2026-10-04，agent/render-agent/deferred）
+
+### 13.1 变更内容
+
+可配置延迟渲染（`documents/DEFERRED_RENDERING_DESIGN.md`）要求 G-buffer pass 以 2 个颜色附件 + 深度附件渲染。此前 `VulkanRendererAPI` 三处硬编码单颜色附件，全部扩展：
+
+1. **`BeginRenderPass`**：按离屏 FBO 的颜色附件数构造 `VkRenderingAttachmentInfo` 数组（统一 loadOp=CLEAR / storeOp=STORE，clear color 同前），`VkRenderingInfo::colorAttachmentCount` 透传；活动格式记录从单 `m_ActiveColorFormat` 改为 `m_ActiveColorAttachmentCount + m_ActiveColorFormats[4]`。布局转移循环本就遍历全部颜色附件（0a 阶段实现），未改动。
+2. **`GetOrCreatePipeline`**：`VkPipelineColorBlendStateCreateInfo::attachmentCount` = 活动附件数，blend state（引擎级全局语义，与 GL 的 glBlendFunc 对所有 draw buffer 一致生效对齐）复制到每个附件；`VkPipelineRenderingCreateInfo` 传入格式数组。
+3. **`PipelineKey`**：纳入 `colorAttachmentCount + 全部活动颜色格式`（比较/哈希只看前 N 个活动项）。这是正确性关键：`colorAttachmentCount` 烘焙进 VkPipeline，同一 shader 在前向（1 附件）与延迟（2 附件）pass 必须是两个 pipeline（kb/KB-07 K-024）。
+
+### 13.2 兼容性
+
+- 前向路径（swapchain / 单附件离屏）的 pipeline 键与产物形态不变（count=1，formats[0] 同原 colorFormat）；OnSwapchainRecreate 清空 pipeline 的语义不变（§12 的 PipelineCache 对象保留）。
+- K-009 descriptor 缓存、§10 删除队列、§11 ImmediateSubmit 均未触碰；延迟路径的纹理采样沿用既有 SHADER_READ_ONLY_OPTIMAL 约定（EndRenderPass 的全附件转移已覆盖深度纹理）。
+
+### 13.3 验证
+
+- `DMGE_VULKAN_BACKEND=ON` 全量构建零 error，ctest 50/50 绿（37 基线 + 13 延迟纯逻辑例）；改动文件零新增 /W4 警告。
+- 运行时（Validation Layer + editor/game）受 kb/KB-07 K-014 无 surface 限制，agent 会话内未执行；人工步骤见 agent 报告（G-buffer pass 的 2 附件 rendering info、pipeline 键分流、深度纹理采样三项为观察点）。

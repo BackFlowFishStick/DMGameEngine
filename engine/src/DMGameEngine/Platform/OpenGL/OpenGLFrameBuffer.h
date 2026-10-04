@@ -43,6 +43,7 @@ public:
 
     DM::Ref<Texture2D> GetColorAttachment(uint32_t index = 0) const override;
     size_t             GetColorAttachmentCount()        const override { return m_ColorAttachments.size(); }
+    DM::Ref<Texture2D> GetDepthAttachment()             const override { return m_DepthAttachment; }
 
     const FramebufferSpecification& GetSpecification() const override { return m_Spec; }
 
