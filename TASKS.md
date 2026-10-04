@@ -6,7 +6,10 @@
 
 ## 进行中 / 待 review
 
-（暂无——等待下一波认领）
+| 任务 | 状态 | 备注 |
+|---|---|---|
+| 3e 延迟渲染（可配置）：G-buffer MRT + 光照 pass，OpenGL/Vulkan 双后端，默认仍前向 | 🚧 @render-agent agent/render-agent/deferred 2026-10-03 | worktree `.worktrees/render-agent`；拥有 Renderer/**+shaders/** |
+| DirectX 后端阶段 A：D3D11 基础设施（device/shader/texture/buffer/FB + WARP headless 验证） | 🚧 @d3d-agent agent/d3d-agent/stage-a 2026-10-03 | worktree `.worktrees/d3d-agent`；拥有 Platform/DirectX/**+engine/CMakeLists+DMGameEngine.h；禁改 Renderer.h/RendererAPI.cpp（工厂接线由管理员合并后完成） |
 
 ## 已合并 ✅
 
