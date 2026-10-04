@@ -454,6 +454,36 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     )
 endif()
 
+# ── DirectX 11 backend (optional, Windows/MSVC only) ─────────────
+# Third renderer backend, stage A (device + base resources + offscreen
+# render target + headless smoke test). See documents/DIRECTX_BACKEND_DESIGN.md.
+# Default OFF like DMGE_VULKAN_BACKEND: optional backends stay out of the
+# default build; the OFF path is bit-for-bit the pre-D3D11 build. The define
+# is PUBLIC: DMGameEngine.h gates the DirectX include on it, so consumer TUs
+# (editor/game/tests) must agree with the DLL's state (DMGE_ANIMATION precedent).
+# NOTE: this block must stay BEFORE add_subdirectory(tests) below - the test
+# target registration is itself gated on DMGE_D3D11.
+option(DMGE_D3D11 "Build the Direct3D 11 renderer backend (Windows/MSVC)" OFF)
+if(DMGE_D3D11)
+    if(NOT WIN32 OR NOT MSVC)
+        message(FATAL_ERROR "DMGE_D3D11 requires Windows + MSVC (d3d11/d3dcompiler system libraries).")
+    endif()
+    message(STATUS "DirectX 11 backend ENABLED (DMGE_D3D11)")
+    target_compile_definitions(DMGameEngine PUBLIC DMGE_D3D11)
+    target_link_libraries(DMGameEngine PRIVATE d3d11 dxgi d3dcompiler dxguid)
+    target_sources(DMGameEngine PRIVATE
+        "src/DMGameEngine/Platform/DirectX/D3D11Common.cpp"
+        "src/DMGameEngine/Platform/DirectX/D3D11FrameBuffer.cpp"
+        "src/DMGameEngine/Platform/DirectX/D3D11IndexBuffer.cpp"
+        "src/DMGameEngine/Platform/DirectX/D3D11RendererAPI.cpp"
+        "src/DMGameEngine/Platform/DirectX/D3D11Shader.cpp"
+        "src/DMGameEngine/Platform/DirectX/D3D11Texture2D.cpp"
+        "src/DMGameEngine/Platform/DirectX/D3D11VertexArray.cpp"
+        "src/DMGameEngine/Platform/DirectX/D3D11VertexBuffer.cpp"
+        "src/DMGameEngine/Platform/DirectX/DirectXIntegration.cpp"
+    )
+endif()
+
 # ── Examples (optional) ──────────────────────────────────────────
 if(DMGE_BUILD_TESTS)
     if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)

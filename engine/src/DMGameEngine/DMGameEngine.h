@@ -90,3 +90,11 @@
 #include "DMGameEngine/Debug/ProfilerLayer.h"
 #include "DMGameEngine/Debug/Console.h"
 #include "DMGameEngine/Debug/ConsoleLayer.h"
+
+// ── DirectX 11 backend (optional) ────────────────────────────────
+// Built when DMGE_D3D11=ON (engine/CMakeLists.txt). The define is PUBLIC on
+// the engine target so consumer TUs agree with the DLL (DMGE_ANIMATION gate
+// precedent). See documents/DIRECTX_BACKEND_DESIGN.md.
+#ifdef DMGE_D3D11
+#include "DMGameEngine/Platform/DirectX/DirectXIntegration.h"
+#endif
