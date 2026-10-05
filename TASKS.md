@@ -34,37 +34,38 @@
 
 ## 待认领（按优先级）
 
-### 阶段 0：技术债与基线加固
+> 2026-10-05 看板重整：已完成条目归档至"已合并 ✅"区，本区只保留真正可开工的任务。
 
-- [x] ✅ **0a Vulkan 正确性修复（A/B/C/D/F）**— 已完成（见上方已合并）
-- [x] ✅ **0c Vulkan 性能 P0** — 已完成；P1-P2 由第四波 render-agent 认领中
-- [ ] ⬜ **CI：GitHub Actions 矩阵 + ctest + clang-tidy/cppcheck**（ROADMAP 0b 剩余；GoogleTest 已就位）— 🔴 必做
-  - 提示：MSVC 环境依赖 VS 工具链，CI 上用 microsoft/setup-msvc 或 vsdevcmd。
+### 渲染与后端
 
-### 阶段 2：渲染与工具化
+- [ ] ⬜ **DirectX 阶段 C**（DIRECTX_BACKEND_DESIGN 路线表）：ImGui D3D11 后端（编辑器面板当前 D3D11 下缺失）、蒙皮 `SetMat4Array`、TextureCube/2DArray、延迟路径对齐（当前 D3D11 固定 Forward）— 🟠
+- [ ] ⬜ **2b 阶段 2**（ROADMAP 2b 余量）：SPIR-V 反射（取代 regex+手算 std140）、Y-flip 实移除（投影约定统一，消除路径见 DEFERRED_RENDERING_DESIGN §7.1）、per-target blend、资源屏障抽象 — 🟡
+- [ ] ⬜ **3e 剩余**：后处理管线（bloom/tonemap）、阴影贴图、PBR/IBL — 🟢 远期（依赖 2b 余量）
+- [ ] ⬜ **透明物体前向回退**（延迟渲染阶段 1 限制）：场景侧提供透明标记数据 + 光照 pass 后补画（挂载点已预留）— 🟢
+- [ ] ⬜ **Vulkan 蒙皮路径**：`SetMat4Array` Vulkan 实现（阶段 1 骨骼动画为 OpenGL-only，TODO warn-once 中）— 🟢
+- [ ] ⬜ **editor 的 D3D11 资产适配**：editor 的 GLSL shader 资产在 D3D11 下无法编译（D3D 阶段 B 未验证 editor 运行时）——依赖 DirectX 阶段 C 的 shader 侧方案 — 🟢
 
-- [ ] ⬜ **编辑器：ImGuizmo 集成 + 鼠标拾取 + Add Component 动态加组件**（EDITOR_ROADMAP 阶段 2；拾取注意 KB-07/K-007 坐标换算先例）— 🟠
-- [ ] ⬜ **2b 双后端抽象收敛：SPIR-V 反射 + RenderPassDesc + 去除 Y 翻转 hack**（ROADMAP 2b）— 🟡 可延后但 3e 依赖它
-- [ ] ⬜ **2c Vulkan 性能 P1-P2 + PipelineCache 落盘**（ROADMAP 2c）— 🟡
-- [ ] ⬜ **资产：Material 纹理绑定 + 导出 AssetLoader<Material> 特化**（KB-05 待办）— 🟠
-- [ ] ⬜ **资产：异步加载 + 热重载（mtime 监听）**（KB-05 待办）— 🟢
+### 资产系统
 
-### 阶段 3：内容子系统（按需，各子系统独立分支）
+- [ ] ⬜ **registry.json 生产接线**：`LoadRegistry/SaveRegistry` 目前只有测试调用——编辑器/游戏启动加载与退出保存，让"跨启动 UUID 稳定"真正闭环（AssetTour §6 已如实标注）— 🟠
+- [ ] ⬜ **资产异步加载 + 热重载（mtime 监听）**（KB-05 待办；依赖 3d Job System 更佳）— 🟢
+- [ ] ⬜ **GPU 延迟释放**：资产 `Ref` 归零后的延迟释放队列（对齐 Vulkan deletion queue，帧在飞不可即删）— 🟢
 
-- [ ] ⬜ **3a 物理：Box3D 集成**（dependencies 已有 box3d-main；走 PB-01）— 🟢
-- [ ] ⬜ **3b 音频：miniaudio**（走 PB-01）— 🟢
-- [ ] ⬜ **3c 脚本：Lua（sol2）**（走 PB-01）— 🟢
-- [ ] ⬜ **3d Job System**（1a 异步加载的地基）— 🟢
-- [ ] ⬜ **3e 后处理/阴影/PBR**（依赖 2b）— 🟢 远期
+### 内容子系统（各子系统独立分支，走 PB-01）
 
-### 文档（文档 Agent 持续）
+- [ ] ⬜ **3a 物理：Box3D 集成**（dependencies 已有 box3d-main）— 🟢
+- [ ] ⬜ **3b 音频：miniaudio** — 🟢
+- [ ] ⬜ **3c 脚本：Lua（sol2）** — 🟢
+- [ ] ⬜ **3d Job System**（资产异步加载的地基）— 🟢
 
-- [ ] ⬜ **建立 `documents/guide/`：GettingStarted + ArchitectureOverview**（PB-06 P0 清单）— 🔴
+### 文档（文档 Agent）
+
+- [ ] ⬜ **KB-05 刷新**：特化导出清单（五个已导出）、纹理绑定已实现、骨骼动画已落地——过时描述会误导子系统 Agent（第六波 docs-agent 登记）— 🟠
+- [ ] ⬜ **LearningPath 站⑦快捷键文本对齐**：editor-agent 第六波已实现真快捷键，按其报告更新 — 🟢
+- [ ] ⬜ **EDITOR_ROADMAP 结构性进度对齐**：阶段 3/4 均已落地，正文严重滞后——文档 Agent 开 `docs/` 分支做"阶段 3-4 演进"新章（非增量注记）— 🟢
+- [ ] ⬜ **动画子系统 Tour**（P2 候选）：Skeleton/AnimationClip/AnimationSystem/Palette — 🟢
+- [ ] ⬜ **Play 模式与 SceneDuplicator 专题**（P2 候选）— 🟢
 
 ## 🔍 需要更多信息
 
 （暂无）
-
-## 已合并 ✅
-
-（暂无——示例行：`✅ 0a-A pipeline 缓存重建修复 @render-agent agent/render-agent/vulkan-pipeline-cache abc1234`）
