@@ -62,6 +62,14 @@ DXGI_FORMAT ElementFormat(ShaderDataType type, uint32_t components)
             break;
         case ShaderDataType::Bool:
             return DXGI_FORMAT_R8_UINT;
+        case ShaderDataType::Mat3:
+        case ShaderDataType::Mat4:
+            // Matrix attributes expand into consecutive float4 rows
+            // (AppendInputElements); each row reads 4 floats. NOTE: a Mat3
+            // buffer must therefore store its columns as padded float4s -
+            // the engine's instanced path uses Mat4 (a_InstanceModel), which
+            // is naturally 16-byte aligned.
+            return DXGI_FORMAT_R32G32B32A32_FLOAT;
         default:
             break;
     }

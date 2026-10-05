@@ -61,6 +61,15 @@ void D3D11FrameBuffer::Destroy()
 
 void D3D11FrameBuffer::Invalidate()
 {
+    // SwapChainTarget framebuffers represent the default render target (the
+    // window's swapchain); no GPU objects of their own - D3D11RendererAPI
+    // binds the DirectXGraphicsContext backbuffer/depth views for them.
+    if (m_Spec.SwapChainTarget)
+    {
+        m_RendererID = 0;
+        return;
+    }
+
     ID3D11Device* device = D3D11Backend::Device();
     DMGE_CORE_ASSERT(device, "D3D11FrameBuffer created before D3D11RendererAPI::Init (no device)!");
 
@@ -146,6 +155,11 @@ void D3D11FrameBuffer::Invalidate()
 
 void D3D11FrameBuffer::Bind()
 {
+    // SwapChainTarget: D3D11RendererAPI::BeginRenderPass owns the swapchain
+    // target binding (BeginScene passes the FrameBuffer* there).
+    if (m_Spec.SwapChainTarget)
+        return;
+
     ID3D11DeviceContext* context = D3D11Backend::Context();
     if (!context)
         return;
@@ -156,6 +170,9 @@ void D3D11FrameBuffer::Bind()
 
 void D3D11FrameBuffer::Unbind()
 {
+    if (m_Spec.SwapChainTarget)
+        return;
+
     ID3D11DeviceContext* context = D3D11Backend::Context();
     if (!context)
         return;

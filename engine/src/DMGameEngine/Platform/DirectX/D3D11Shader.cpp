@@ -10,6 +10,8 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <cstring>
+#include <fstream>
+#include <sstream>
 
 namespace DMGameEngine {
 
@@ -20,10 +22,134 @@ namespace {
 constexpr uint32_t kStageVS = 0;
 constexpr uint32_t kStagePS = 1;
 
+// ── `#type vertex` / `#type fragment` block splitting (filepath ctor) ──
+// Mirrors the OpenGL backend's PreProcess convention (K-023: combined-stage
+// sources only load through a filepath). Returns false when the source does
+// not carry the expected blocks.
+bool SplitTypedSources(std::string_view source,
+                       std::string* vertexOut,
+                       std::string* fragmentOut)
+{
+    constexpr std::string_view kToken = "#type";
+    size_t pos = source.find(kToken, 0);
+    if (pos == std::string::npos)
+        return false;
+
+    while (pos != std::string::npos)
+    {
+        const size_t eol = source.find_first_of("\r\n", pos);
+        if (eol == std::string::npos)
+            return false;
+
+        const size_t begin = pos + kToken.size() + 1; // skip "#type "
+        std::string_view type = source.substr(begin, eol - begin);
+
+        const size_t nextLinePos = source.find_first_not_of("\r\n", eol);
+        if (nextLinePos == std::string::npos)
+            return false;
+
+        pos = source.find(kToken, nextLinePos);
+        const std::string block(pos == std::string::npos
+                                    ? std::string(source.substr(nextLinePos))
+                                    : std::string(source.substr(nextLinePos, pos - nextLinePos)));
+
+        if (type == "vertex")
+            *vertexOut = block;
+        else if (type == "fragment" || type == "pixel")
+            *fragmentOut = block;
+        // unknown block types are ignored (GL backend behavior)
+    }
+    return !vertexOut->empty() && !fragmentOut->empty();
+}
+
+// ── Indexed array names: "u_PointLights_position[3]" ─────────────
+// Splits into base name + index. Returns false for non-indexed names.
+// baseOut may be null when only the index is wanted.
+bool SplitIndex(std::string_view name, std::string* baseOut, uint32_t* indexOut)
+{
+    const size_t open = name.rfind('[');
+    if (open == std::string::npos || name.empty() || name.back() != ']')
+        return false;
+
+    std::string_view indexStr = name.substr(open + 1, name.size() - open - 2);
+    if (indexStr.empty())
+        return false;
+
+    uint32_t index = 0;
+    for (const char c : indexStr)
+    {
+        if (c < '0' || c > '9')
+            return false;
+        index = index * 10u + static_cast<uint32_t>(c - '0');
+    }
+    *indexOut = index;
+    if (baseOut)
+        *baseOut = std::string(name.substr(0, open));
+    return true;
+}
+
 } // anonymous namespace
 
 
 // ── Construction / destruction ───────────────────────────────────
+
+D3D11Shader::D3D11Shader(std::string_view filepath)
+{
+    std::ifstream in(std::string(filepath), std::ios::in | std::ios::binary);
+    DMGE_CORE_ASSERT(in, "Could not open shader file: {0}", filepath);
+    if (!in)
+        return;
+
+    std::ostringstream content;
+    content << in.rdbuf();
+
+    std::string vertexSrc, fragmentSrc;
+    const auto lastSlash = std::string(filepath).find_last_of("/\\");
+    m_Name = (lastSlash == std::string::npos)
+                 ? std::string(filepath)
+                 : std::string(filepath).substr(lastSlash + 1);
+
+    if (!SplitTypedSources(content.str(), &vertexSrc, &fragmentSrc))
+    {
+        DMGE_LOG_ERROR("[D3D11] Shader file '{0}' has no #type vertex/#type fragment blocks",
+                       filepath);
+        return;
+    }
+
+    ID3D11Device* device = D3D11Backend::Device();
+    DMGE_CORE_ASSERT(device, "D3D11Shader created before D3D11RendererAPI::Init (no device)!");
+
+    CompileStage(&m_VSBlob, "VSMain", "vs_5_0", vertexSrc);
+    CompileStage(&m_PSBlob, "PSMain", "ps_5_0", fragmentSrc);
+    if (!m_VSBlob || !m_PSBlob)
+        return;
+
+    HRESULT hr = device->CreateVertexShader(m_VSBlob->GetBufferPointer(),
+                                            m_VSBlob->GetBufferSize(), nullptr, &m_VS);
+    DMGE_D3D_CHECK(hr, "CreateVertexShader");
+
+    hr = device->CreatePixelShader(m_PSBlob->GetBufferPointer(),
+                                   m_PSBlob->GetBufferSize(), nullptr, &m_PS);
+    DMGE_D3D_CHECK(hr, "CreatePixelShader");
+
+    ReflectStage(m_VSBlob.Get(), kStageVS);
+    ReflectStage(m_PSBlob.Get(), kStagePS);
+
+    // Shared sampler (identical to the two-source constructor; see it for
+    // the description and the stage-B per-texture-state TODO).
+    D3D11_SAMPLER_DESC samplerDesc{};
+    samplerDesc.Filter         = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    samplerDesc.AddressU       = D3D11_TEXTURE_ADDRESS_WRAP;
+    samplerDesc.AddressV       = D3D11_TEXTURE_ADDRESS_WRAP;
+    samplerDesc.AddressW       = D3D11_TEXTURE_ADDRESS_WRAP;
+    samplerDesc.MipLODBias     = 0.0f;
+    samplerDesc.MaxAnisotropy  = 1;
+    samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    samplerDesc.MinLOD         = 0.0f;
+    samplerDesc.MaxLOD         = D3D11_FLOAT32_MAX;
+    hr = device->CreateSamplerState(&samplerDesc, &m_Sampler);
+    DMGE_D3D_CHECK(hr, "CreateSamplerState");
+}
 
 D3D11Shader::D3D11Shader(std::string_view name,
                          std::string_view vertexSrc,
@@ -176,10 +302,22 @@ void D3D11Shader::ReflectStage(ID3DBlob* blob, uint32_t stage)
             if (FAILED(hr))
                 continue;
 
+            // Array members: record the element stride so per-element writes
+            // ("u_PointLights_position[3]") land on the packed offset (HLSL
+            // packs float3 array elements at 16-byte steps).
+            uint32_t elementStride = 0;
+            if (ID3D11ShaderReflectionType* varType = variable->GetType())
+            {
+                D3D11_SHADER_TYPE_DESC typeDesc{};
+                if (SUCCEEDED(varType->GetDesc(&typeDesc)) && typeDesc.Elements > 1)
+                    elementStride = varDesc.Size / typeDesc.Elements;
+            }
+
             m_UniformTargets[varDesc.Name].push_back(
                 UniformTarget{ stage, static_cast<uint32_t>(slot),
                                static_cast<uint32_t>(varDesc.StartOffset),
-                               static_cast<uint32_t>(varDesc.Size) });
+                               static_cast<uint32_t>(varDesc.Size),
+                               elementStride });
         }
     }
 
@@ -292,22 +430,46 @@ void D3D11Shader::UploadBoundStaging()
 
 bool D3D11Shader::WriteUniform(std::string_view name, const void* data, uint32_t size)
 {
-    const auto it = m_UniformTargets.find(std::string(name));
-    if (it == m_UniformTargets.end())
+    // Base name: "u_PointLights_position[3]" -> "u_PointLights_position".
+    std::string baseName(name.substr(0, name.find('[')));
+    const auto targets = m_UniformTargets.find(baseName);
+    if (targets == m_UniformTargets.end() || targets->second.empty())
         return false;
 
-    for (const UniformTarget& target : it->second)
+    // Indexed array element ("name[i]"): address the packed element
+    // (HLSL packs float3 array elements at 16-byte strides - ElementStride
+    // comes from reflection). A plain array name writes the whole array.
+    std::string splitBase;
+    uint32_t elementIndex = 0;
+    const bool indexed = SplitIndex(name, &splitBase, &elementIndex);
+
+    for (const UniformTarget& t : targets->second)
     {
-        auto& staging = m_StageResources[target.Stage].Staging[target.BufferSlot];
+        UniformTarget resolved = t;
+        if (t.ElementStride != 0 && indexed)
+        {
+            const size_t wanted = static_cast<size_t>(elementIndex) * t.ElementStride;
+            if (wanted + t.ElementStride > t.Size)
+            {
+                DMGE_LOG_WARN("[D3D11] Uniform '{0}' index {1} out of range "
+                              "(array holds {2} elements)",
+                              name, elementIndex, t.Size / t.ElementStride);
+                continue;
+            }
+            resolved.Offset += static_cast<uint32_t>(wanted);
+            resolved.Size    = t.ElementStride;
+        }
+
+        auto& staging = m_StageResources[resolved.Stage].Staging[resolved.BufferSlot];
         // Member size from reflection is authoritative; clamp for safety.
-        const uint32_t bytes = (size < target.Size) ? size : target.Size;
-        if (target.Offset + bytes > staging.size())
+        const uint32_t bytes = (size < resolved.Size) ? size : resolved.Size;
+        if (resolved.Offset + bytes > staging.size())
         {
             DMGE_LOG_WARN("[D3D11] Uniform '{0}' write out of range (offset {1} + {2} > {3})",
-                          name, target.Offset, bytes, staging.size());
+                          name, resolved.Offset, bytes, staging.size());
             continue;
         }
-        std::memcpy(staging.data() + target.Offset, data, bytes);
+        std::memcpy(staging.data() + resolved.Offset, data, bytes);
     }
     return true;
 }
@@ -327,12 +489,61 @@ void D3D11Shader::WarnOnceMissing(std::string_view name) const
 
 bool D3D11Shader::HasUniform(std::string_view name) const
 {
+    // Plain member names, plus indexed array element names ("name[2]").
+    std::string base;
+    uint32_t index = 0;
+    if (SplitIndex(name, &base, &index))
+    {
+        const auto it = m_UniformTargets.find(base);
+        if (it == m_UniformTargets.end() || it->second.empty())
+            return false;
+        const UniformTarget& t = it->second.front();
+        if (t.ElementStride == 0)
+            return false; // member is not an array
+        return static_cast<size_t>(index) * t.ElementStride + t.ElementStride <= t.Size;
+    }
     return m_UniformTargets.count(std::string(name)) > 0;
 }
 
 bool D3D11Shader::HasTexture(std::string_view name) const
 {
     return m_TextureBindPoints.count(std::string(name)) > 0;
+}
+
+bool D3D11Shader::ReadUniformStaging(std::string_view name, void* dst, uint32_t size) const
+{
+    if (!dst)
+        return false;
+
+    std::string base;
+    uint32_t elementIndex = 0;
+    const bool indexed = SplitIndex(name, &base, &elementIndex);
+    const std::string& lookup = indexed ? base : std::string(name);
+
+    const auto it = m_UniformTargets.find(lookup);
+    if (it == m_UniformTargets.end() || it->second.empty())
+        return false;
+
+    const UniformTarget& t = it->second.front();
+    UniformTarget resolved = t;
+    if (indexed)
+    {
+        if (t.ElementStride == 0)
+            return false;
+        const size_t wanted = static_cast<size_t>(elementIndex) * t.ElementStride;
+        if (wanted + t.ElementStride > t.Size)
+            return false;
+        resolved.Offset += static_cast<uint32_t>(wanted);
+        resolved.Size    = t.ElementStride;
+    }
+
+    const auto& staging = m_StageResources[resolved.Stage].Staging[resolved.BufferSlot];
+    const uint32_t bytes = (size < resolved.Size) ? size : resolved.Size;
+    if (resolved.Offset + bytes > staging.size())
+        return false;
+
+    std::memcpy(dst, staging.data() + resolved.Offset, bytes);
+    return true;
 }
 
 
@@ -394,11 +605,18 @@ void D3D11Shader::SetMat4(std::string_view name, const glm::mat4& value)
 
 void D3D11Shader::SetMat4Array(std::string_view name, const glm::mat4* values, uint32_t count)
 {
-    (void)name; (void)values; (void)count;
+    (void)values; (void)count;
     // TODO(stage C): skeletal skinning (u_BoneMatrices palette). Needs either
     // a dedicated large cbuffer with dynamic offsets or an SSBO-equivalent
     // (structured buffer) path - same follow-up as the Vulkan backend (KB-03).
-    DMGE_LOG_WARN("[D3D11] SetMat4Array('{0}') not implemented yet (stage C)", name);
+    // Warn once per (shader, name): RenderQueue calls this per skinned draw.
+    std::string key = "mat4array:" + std::string(name);
+    if (m_MissingWarned.find(key) == m_MissingWarned.end())
+    {
+        DMGE_LOG_WARN("[D3D11] Shader '{0}': SetMat4Array('{1}') not implemented yet (stage C)",
+                      m_Name, name);
+        m_MissingWarned.emplace(std::move(key), true);
+    }
 }
 
 } // namespace DMGameEngine
