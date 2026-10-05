@@ -34,14 +34,18 @@
  *     stage reference copies kept in sync (see design doc section 7 - 2b
  *     will unify this).
  *
- * NOTE (2b debt): deliberately minimal - no RenderPassDesc, no SPIR-V
- * reflection, lights stay per-name uniforms. See design doc section 7.
+ * NOTE (2b progress): stage 1 of the 2b convergence landed - RenderPassDesc
+ * (Renderer/RenderPassDesc.h) exists, the G-buffer pass is built from it and
+ * MatchesGBufferLayout asserts desc/layout consistency; u_NdcZMin is
+ * backend-annotated via the desc. Still owed: SPIR-V reflection, unified
+ * shader asset path, per-target blend. See design doc section 7.
  */
 
 #pragma once
 
 #include "DMGameEngine/Core/Export.h"
 #include "DMGameEngine/Renderer/Light.h"
+#include "DMGameEngine/Renderer/RenderPassDesc.h"
 #include "DMGameEngine/Renderer/Shader.h"
 #include "DMGameEngine/Renderer/Texture.h"      // TextureFormat
 #include "glm/glm.hpp"
@@ -103,6 +107,19 @@ struct GBufferLayout
     static constexpr const char* NormalShininessRole = "world normal.xyz + shininess (w)";
     static constexpr const char* DepthRole           = "depth (reprojected in the lighting pass)";
 };
+
+// Consistency assertion between a G-buffer render pass desc and the layout
+// table (2b stage 1): the desc the renderer builds for the G-buffer pass
+// MUST describe exactly the attachments the shaders write and the lighting
+// pass samples. Pure logic - unit-tested headless (test_renderpass.cpp).
+inline bool MatchesGBufferLayout(const RenderPassDesc& desc)
+{
+    return desc.ColorAttachmentCount == GBufferLayout::kColorAttachmentCount
+        && desc.Color[GBufferLayout::kAlbedoSpecSlot].Format      == GBufferLayout::AlbedoSpecFormat()
+        && desc.Color[GBufferLayout::kNormalShininessSlot].Format == GBufferLayout::NormalShininessFormat()
+        && desc.HasDepth
+        && desc.Depth.Format == GBufferLayout::DepthFormat();
+}
 
 // Resize-vs-reuse decision for the G-buffer FrameBuffer. Zero/absurd wanted
 // sizes never trigger a (re)build (parity with the GL FBO K-017 guard);
@@ -399,8 +416,9 @@ uniform sampler2D u_GDepth;
 // view-projection the G-buffer pass used (including the Vulkan Y-flip, so
 // it is self-consistent). u_NdcZMin folds the one real per-API depth
 // difference into a constant: OpenGL maps NDC z [-1,1] -> window [0,1],
-// Vulkan uses NDC z [0,1] directly. The Renderer sets it to -1.0 (OpenGL) /
-// 0.0 (Vulkan); 2b will remove this.
+// Vulkan uses NDC z [0,1] directly. The value comes from the G-buffer
+// RenderPassDesc (backend-annotated: GL -1 / Vulkan 0); 2b stage 1 removed
+// the Renderer-layer API branch.
 uniform mat4  u_InverseViewProjection;
 uniform float u_NdcZMin = -1.0;
 

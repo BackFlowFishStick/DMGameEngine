@@ -57,6 +57,13 @@ struct DeferredResources
     // The real output target of the current deferred frame (nullptr =
     // swapchain). Recorded by BeginScene, consumed by EndScene.
     FrameBuffer* Target = nullptr;
+
+    // The G-buffer pass desc as backend-annotated at BeginRenderPass
+    // (NdcZMin filled per the active API's clip convention). Consumed by
+    // DrawDeferredLighting for the depth reprojection - replaces the
+    // Renderer-layer API branch (2b stage 1, DEFERRED_RENDERING_DESIGN.md
+    // §7 debt absorbed).
+    RenderPassDesc GBufferPass;
 };
 
 DeferredResources s_Deferred;
@@ -173,10 +180,19 @@ void Renderer::BeginScene(const Camera& camera, const DM::Ref<FrameBuffer>& targ
         {
             EnsureDeferredResources(w, h);
             s_Deferred.Target = target.get();
-            // G-buffer pass: the queue's draws are rewritten to the
-            // G-buffer shaders at EndScene; the real target pass opens
-            // there too (after the lighting input exists).
-            RenderCommand::BeginRenderPass(s_Deferred.GBuffer.get());
+            // G-buffer pass via RenderPassDesc (2b stage 1): attachments +
+            // load ops come from the G-buffer spec (GBufferLayout formats).
+            // The backend annotates NdcZMin into its active-pass snapshot;
+            // read it back so the lighting pass's depth reprojection gets
+            // the value WITHOUT an API branch here.
+            RenderPassDesc gbufferPass = MakeRenderPassDescForTarget(s_Deferred.GBuffer.get());
+            DMGE_CORE_ASSERT(MatchesGBufferLayout(gbufferPass),
+                             "G-buffer pass desc does not match GBufferLayout!");
+            RenderCommand::BeginRenderPass(gbufferPass);
+            s_Deferred.GBufferPass = RenderCommand::GetActiveRenderPassDesc();
+            // The queue's draws are rewritten to the G-buffer shaders at
+            // EndScene; the real target pass opens there too (after the
+            // lighting input exists).
             return;
         }
     }
@@ -288,9 +304,11 @@ void Renderer::DrawDeferredLighting()
 
     // Depth reprojection inputs: the inverse of the EXACT view-projection
     // the G-buffer pass used (self-consistent with the Vulkan flipY), and
-    // the per-API NDC z minimum (GL -1 / Vulkan 0; 2b debt, see design doc).
+    // the per-API NDC z minimum taken from the G-buffer pass desc (the
+    // backend annotated it at BeginRenderPass: GL -1 / Vulkan 0 / DirectX
+    // family 0). No Renderer-layer API branch any more (2b stage 1).
     lighting->SetMat4("u_InverseViewProjection", glm::inverse(s_SceneData.ViewProjectionMatrix));
-    lighting->SetFloat("u_NdcZMin", s_API == API::Vulkan ? 0.0f : -1.0f);
+    lighting->SetFloat("u_NdcZMin", s_Deferred.GBufferPass.NdcZMin);
     lighting->SetFloat4("u_SkyColor", RenderCommand::GetClearColor());
 
     // Lighting uniforms: identical names to the forward path, shared upload.
