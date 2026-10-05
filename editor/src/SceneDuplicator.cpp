@@ -84,6 +84,25 @@ void CopyComponents(Scene& src, Entity from, Scene& dst, Entity to, const Entity
         c.Mesh              = mc.Mesh;
         c.MaterialOverrides = mc.MaterialOverrides;
     }
+
+#ifdef DMGE_ANIMATION
+    // AnimatorComponent: pure data (R4), so a field copy is correct. The
+    // play copy must animate identically - playback state (Playing/Loop/
+    // PlaybackSpeed/ActiveClip/CurrentTime) carries over. Palette is runtime
+    // output and is left empty: AnimationSystem recomputes it on the play
+    // copy's first tick (edit scene keeps its own last-scrubbed palette).
+    if (src.HasComponent<AnimatorComponent>(from)) {
+        const auto& a = src.GetComponent<AnimatorComponent>(from);
+        auto& c = dst.AddComponent<AnimatorComponent>(to);
+        c.SkeletonAsset  = a.SkeletonAsset;
+        c.Clips          = a.Clips;
+        c.ActiveClip     = a.ActiveClip;
+        c.Playing        = a.Playing;
+        c.Loop           = a.Loop;
+        c.PlaybackSpeed  = a.PlaybackSpeed;
+        c.CurrentTime    = a.CurrentTime;
+    }
+#endif
 }
 
 } // namespace
