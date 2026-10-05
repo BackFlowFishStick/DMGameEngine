@@ -5,6 +5,9 @@
 #include "DMGameEngine/Renderer/Shader.h"
 #include "DMGameEngine/Renderer/Renderer.h"
 #include "DMGameEngine/Platform/OpenGL/OpenGLShader.h"
+#ifdef DMGE_D3D11
+#include "DMGameEngine/Platform/DirectX/D3D11Shader.h"
+#endif
 #include "DMGameEngine/Asset/AssetManager.h"  // ShaderLibrary::Load delegates to AssetManager
 #ifdef DMGE_VULKAN
 #include "DMGameEngine/Platform/Vulkan/VulkanShader.h"
@@ -28,6 +31,13 @@ DM::Ref<Shader> Shader::Create(std::string_view filepath)
 #endif
 
         case Renderer::API::DirectX:
+#ifdef DMGE_D3D11
+            return DM::CreateRef<D3D11Shader>(filepath);
+#else
+            DMGE_CORE_ASSERT(false, "DirectX backend not built (enable DMGE_D3D11).");
+            return nullptr;
+#endif
+
         case Renderer::API::None:
             DMGE_CORE_ASSERT(false, "Renderer::API not supported yet!");
             return nullptr;
@@ -55,6 +65,13 @@ DM::Ref<Shader> Shader::Create(std::string_view name,
 #endif
 
         case Renderer::API::DirectX:
+#ifdef DMGE_D3D11
+            return DM::CreateRef<D3D11Shader>(name, vertexSrc, fragmentSrc);
+#else
+            DMGE_CORE_ASSERT(false, "DirectX backend not built (enable DMGE_D3D11).");
+            return nullptr;
+#endif
+
         case Renderer::API::None:
             DMGE_CORE_ASSERT(false, "Renderer::API not supported yet!");
             return nullptr;

@@ -35,6 +35,18 @@ static void ImGuiVkCheckResult(VkResult err)
 // ── Lifecycle ────────────────────────────────────────────────────
 
 void ImGuiLayer::OnAttach() {
+    // Stage-B known limitation: the D3D11 backend has no ImGui rendering
+    // backend yet (ImGui D3D11 port is stage C). Initializing the OpenGL
+    // ImGui backend under GLFW_NO_API would crash, so under DirectX the
+    // whole layer degrades to a no-op - no ImGui context, no panels.
+    // ProfilerLayer/ConsoleLayer OnImGuiRender calls are guarded here and
+    // stay safe (see Begin/OnEvent below).
+    if (Renderer::GetAPI() == Renderer::API::DirectX)
+    {
+        DMGE_LOG_WARN("ImGuiLayer: no D3D11 ImGui backend yet (stage C) - UI disabled");
+        return;
+    }
+
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
 
@@ -107,6 +119,9 @@ void ImGuiLayer::OnAttach() {
 }
 
 void ImGuiLayer::OnDetach() {
+    if (ImGui::GetCurrentContext() == nullptr)
+        return; // DirectX degradation path: never created (or already gone)
+
 #ifdef DMGE_VULKAN
     if (Renderer::GetAPI() == Renderer::API::Vulkan)
         ImGui_ImplVulkan_Shutdown();
@@ -122,6 +137,8 @@ void ImGuiLayer::OnDetach() {
 // ── Per-frame ImGui pass ─────────────────────────────────────────
 
 void ImGuiLayer::Begin() {
+    if (ImGui::GetCurrentContext() == nullptr)
+        return; // DirectX degradation path
 #ifdef DMGE_VULKAN
     if (Renderer::GetAPI() == Renderer::API::Vulkan)
         ImGui_ImplVulkan_NewFrame();
@@ -133,6 +150,8 @@ void ImGuiLayer::Begin() {
 }
 
 void ImGuiLayer::End() {
+    if (ImGui::GetCurrentContext() == nullptr)
+        return; // DirectX degradation path
     ImGui::Render();
 
     // Render the main window's draw data, then update + render any
@@ -170,6 +189,8 @@ void ImGuiLayer::End() {
 // ── Optional demo ────────────────────────────────────────────────
 
 void ImGuiLayer::OnImGuiRender() {
+    if (ImGui::GetCurrentContext() == nullptr)
+        return; // DirectX degradation path
     if (m_ShowDemo)
         ImGui::ShowDemoWindow(&m_ShowDemo);
 }

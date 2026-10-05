@@ -9,6 +9,9 @@
 #ifdef DMGE_VULKAN
 #include "DMGameEngine/Platform/Vulkan/VulkanTexture2D.h"
 #endif
+#ifdef DMGE_D3D11
+#include "DMGameEngine/Platform/DirectX/D3D11Texture2D.h"
+#endif
 
 namespace DMGameEngine {
 
@@ -28,6 +31,13 @@ DM::Ref<Texture2D> Texture2D::Create(const Texture2DSpecification& spec)
 #endif
 
         case Renderer::API::DirectX:
+#ifdef DMGE_D3D11
+            return DM::CreateRef<D3D11Texture2D>(spec);
+#else
+            DMGE_CORE_ASSERT(false, "DirectX backend not built (enable DMGE_D3D11).");
+            return nullptr;
+#endif
+
         case Renderer::API::None:
             DMGE_CORE_ASSERT(false, "Renderer::API not supported yet!");
             return nullptr;
@@ -53,6 +63,13 @@ DM::Ref<Texture2D> Texture2D::Create(std::string_view filepath)
 #endif
 
         case Renderer::API::DirectX:
+#ifdef DMGE_D3D11
+            return DM::CreateRef<D3D11Texture2D>(filepath);
+#else
+            DMGE_CORE_ASSERT(false, "DirectX backend not built (enable DMGE_D3D11).");
+            return nullptr;
+#endif
+
         case Renderer::API::None:
             DMGE_CORE_ASSERT(false, "Renderer::API not supported yet!");
             return nullptr;
