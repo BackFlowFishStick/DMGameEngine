@@ -65,6 +65,20 @@ void RenderCommand::BeginRenderPass(FrameBuffer* target)
     s_RendererAPI->BeginRenderPass(target);
 }
 
+void RenderCommand::BeginRenderPass(const RenderPassDesc& desc)
+{
+    DMGE_CORE_ASSERT(s_RendererAPI, "RenderCommand not initialized! Call RenderCommand::Init() first.");
+    DMGE_CORE_ASSERT(ValidateRenderPassDesc(desc),
+                     "BeginRenderPass - invalid RenderPassDesc (attachment count / formats / depth pair).");
+    s_RendererAPI->BeginRenderPass(desc);
+}
+
+RenderPassDesc RenderCommand::GetActiveRenderPassDesc()
+{
+    DMGE_CORE_ASSERT(s_RendererAPI, "RenderCommand not initialized! Call RenderCommand::Init() first.");
+    return s_RendererAPI->GetActiveRenderPassDesc();
+}
+
 void RenderCommand::EndRenderPass()
 {
     DMGE_CORE_ASSERT(s_RendererAPI, "RenderCommand not initialized! Call RenderCommand::Init() first.");

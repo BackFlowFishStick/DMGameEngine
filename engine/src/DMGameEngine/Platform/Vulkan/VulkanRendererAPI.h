@@ -73,8 +73,18 @@ public:
     // See RendererAPI. Begins/ends a dynamic-rendering pass targeting target
     // (nullptr = swapchain, already open from BeginFrame). An offscreen
     // FrameBuffer temporarily replaces the swapchain pass (multi-pass RTT).
+    //
+    // 2b stage 1: the desc form is the single consumption path - the legacy
+    // FrameBuffer* overload builds a desc (MakeRenderPassDescForTarget) and
+    // delegates. The desc drives the per-attachment load ops + clear values,
+    // the depth attachment, the viewport/scissor; the attachment COUNT from
+    // the desc feeds m_ActiveColorAttachmentCount, i.e. the pipeline cache
+    // key (K-024 - pass structure flows from the description, not from
+    // backend-internal defaults).
     void BeginRenderPass(FrameBuffer* target) override;
+    void BeginRenderPass(const RenderPassDesc& desc) override;
     void EndRenderPass() override;
+    RenderPassDesc GetActiveRenderPassDesc() const override { return m_ActivePass; }
 
     // ── Backend interop hooks ───────────────────────────────────
     // VulkanShader/VulkanTexture call these during Bind() so DrawIndexed
@@ -187,6 +197,9 @@ private:
     VkFormat m_ActiveDepthFormat = VK_FORMAT_UNDEFINED;
     bool            m_InOffscreenPass   = false;
     VulkanFrameBuffer* m_ActiveFrameBuffer = nullptr;
+    // Backend-annotated snapshot of the active pass (NdcZMin = 0: Vulkan
+    // NDC z range is [0,1]).
+    RenderPassDesc m_ActivePass{};
 
     // VkPipelineCache: seeded from disk at Init and serialized back to disk
     // ("vulkan_pipeline_cache.bin", CWD) at shutdown, so pipeline binaries

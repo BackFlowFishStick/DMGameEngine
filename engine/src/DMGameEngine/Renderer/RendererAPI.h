@@ -13,6 +13,7 @@
 #pragma once
 
 #include "DMGameEngine/Core/Export.h"
+#include "DMGameEngine/Renderer/RenderPassDesc.h"
 #include "glm/glm.hpp"
 #include <memory>
 #include <cstdint>
@@ -113,8 +114,38 @@ public:
     // for OpenGL it binds the framebuffer. EndRenderPass ends/unbinds.
     // A scene layer brackets its draws so it can render into an offscreen
     // FrameBuffer (render-to-texture, multi-pass).
+    //
+    // Legacy form, KEPT for call-site compatibility (2b stage 1): backends
+    // route it through the desc form below (MakeRenderPassDescForTarget),
+    // so each backend has exactly ONE consumption path. The desc form is
+    // the primary entry: attachment formats/load ops, clear values,
+    // viewport/scissor and the depth attachment come from the description
+    // instead of backend-internal defaults. Backends that have not
+    // migrated (DirectX stage B) fall back to the legacy form via the
+    // default implementation.
     virtual void BeginRenderPass(FrameBuffer* target) = 0;
+    virtual void BeginRenderPass(const RenderPassDesc& desc)
+    {
+        // Degrade to the legacy form: sufficient for backends whose pass
+        // begin derives everything from the target alone (DirectX stage B).
+        BeginRenderPass(desc.Target);
+    }
     virtual void EndRenderPass() = 0;
+
+    // The desc as ANNOTATED by the backend for the pass currently open
+    // (or the last one begun): NdcZMin is filled per the backend's clip
+    // convention (OpenGL -1 / Vulkan 0 / DirectX-family 0), everything
+    // else mirrors what was passed to BeginRenderPass. Pure readback for
+    // consumers like the deferred lighting pass's depth reprojection -
+    // replaces Renderer-layer API branches (E1).
+    virtual RenderPassDesc GetActiveRenderPassDesc() const
+    {
+        // Default: DirectX-family depth convention (backend-independent
+        // neutral choice; OpenGL/Vulkan override with real snapshots).
+        RenderPassDesc desc;
+        desc.NdcZMin = 0.0f;
+        return desc;
+    }
 
     virtual void DrawIndexed(const VertexArray& vertexArray) = 0;
     // Instanced indexed draw: renders instanceCount copies, advancing

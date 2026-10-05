@@ -74,17 +74,67 @@ GLenum DepthFuncToGL(DepthFunc func)
 
 void OpenGLRendererAPI::BeginRenderPass(FrameBuffer* target)
 {
-    // nullptr / swapchain target: leave the default framebuffer bound.
-    if (!target || target->GetSpecification().SwapChainTarget)
+    // 2b stage 1: legacy form preserved - build the desc from the target's
+    // specification and take the single desc consumption path below.
+    BeginRenderPass(MakeRenderPassDescForTarget(target));
+}
+
+void OpenGLRendererAPI::BeginRenderPass(const RenderPassDesc& desc)
+{
+    // Snapshot the desc with the backend annotation FIRST so the caller's
+    // GetActiveRenderPassDesc() readback is valid even for the swapchain
+    // form (which otherwise does nothing - the default framebuffer is
+    // already bound and ClearFrame cleared it).
+    m_ActivePass       = desc;
+    m_ActivePass.NdcZMin = -1.0f; // OpenGL: NDC z [-1,1] -> window [0,1]
+
+    const bool offscreen = desc.Target && !desc.Target->GetSpecification().SwapChainTarget;
+    if (!offscreen)
     {
         m_ActiveTarget = nullptr;
         return;
     }
-    target->Bind();            // saves the previously-bound FBO for Unbind()
-    m_ActiveTarget = target;
-    // Mirror Vulkan loadOp = CLEAR: ClearFrame only cleared the default
-    // framebuffer, so clear the freshly-bound FBO to start the pass clean.
-    DMGE_GL_CALL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+
+    // The desc must describe exactly what the FBO provides: attachment
+    // count mismatches would silently clear the wrong draw buffers
+    // (glDrawBuffers is FBO state - K-024's GL-side note).
+    DMGE_CORE_ASSERT(desc.ColorAttachmentCount == desc.Target->GetSpecification().Attachments.size(),
+                     "OpenGL BeginRenderPass: desc color attachment count does not match the FrameBuffer.");
+
+    desc.Target->Bind();       // saves the previously-bound FBO for Unbind()
+    m_ActiveTarget = desc.Target;
+
+    // Clear only what the desc's load ops ask for. LoadOp::Clear maps to
+    // the glClear mask bit; Load/DontCare leave the freshly-bound FBO
+    // untouched (Load assumes the caller will overwrite or discard the
+    // contents). Clear color: renderer-wide clear color (default, preserves
+    // the pre-desc behavior) or the desc's explicit value.
+    GLbitfield clearMask = 0;
+    for (uint32_t i = 0; i < desc.ColorAttachmentCount; ++i)
+    {
+        if (desc.Color[i].Load == AttachmentLoadOp::Clear)
+            clearMask |= GL_COLOR_BUFFER_BIT;
+    }
+    if (desc.HasDepth && desc.Depth.Load == AttachmentLoadOp::Clear)
+        clearMask |= GL_DEPTH_BUFFER_BIT;
+
+    if (clearMask != 0)
+    {
+        if (!desc.UseRendererClearColor)
+            DMGE_GL_CALL(glClearColor(desc.ClearColor[0], desc.ClearColor[1],
+                                      desc.ClearColor[2], desc.ClearColor[3]));
+        if (clearMask & GL_DEPTH_BUFFER_BIT)
+            DMGE_GL_CALL(glClearDepth(desc.Depth.ClearDepth));
+        DMGE_GL_CALL(glClear(clearMask));
+    }
+
+    // Explicit viewport (UseTargetExtent=false only; the default leaves the
+    // viewport as the host set it - pre-desc behavior).
+    if (!desc.UseTargetExtent)
+        DMGE_GL_CALL(glViewport(static_cast<GLint>(desc.ViewportX),
+                                static_cast<GLint>(desc.ViewportY),
+                                static_cast<GLsizei>(desc.ViewportWidth),
+                                static_cast<GLsizei>(desc.ViewportHeight)));
 }
 
 void OpenGLRendererAPI::EndRenderPass()

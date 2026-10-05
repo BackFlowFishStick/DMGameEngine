@@ -2385,3 +2385,23 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 - KB-07 撞号处理：d3d 侧 K-023 重编号为 K-025，SUMMARY/代码注释引用同步。
 
 **验证：** `DMGE_ANIMATION=ON + DMGE_D3D11=ON` 全量构建零 error，ctest **78/78 绿**（61 基线 + 13 延迟 + 4 D3D11 smoke）。
+
+## 2026-10-05 RenderPassDesc 统一两后端 render pass 语义——2b 阶段 1（render-agent）
+
+分支 `agent/render-agent/renderpass-desc`（worktree `.worktrees/render-agent`），对应 ENGINE_REVIEW E1 / ROADMAP 2b 第一阶段（SPIR-V 反射、Y-flip 实移除不在本阶段）。
+
+**一句话：** 新增后端无关的 `Renderer/RenderPassDesc.h`（附件表 format+loadOp、clear 值、深度附件、viewport/scissor、NdcZMin），OpenGL 与 Vulkan 的 `BeginRenderPass` 改为以 desc 为唯一消费路径（旧 `FrameBuffer*` 形态保留、内部构造 desc），延迟路径的 `u_NdcZMin` 改从后端标注的活动 desc 读取——删除 Renderer 层的 `GetAPI()==Vulkan` 判断。
+
+**要点：**
+- `RenderPassDesc`：纯描述数据，无 GPU 对象，字段不含后端枚举（R5）；`std::array` 定长附件表（上限 8）规避 R1/C4251（不用 vector/glm 成员，见 K-027）；工厂 `MakeRenderPassDesc/ForTarget` + 校验 `ValidateRenderPassDesc` 纯逻辑 headless 可测。
+- `RendererAPI`：新增 `BeginRenderPass(const RenderPassDesc&)` 虚函数（**带默认实现**降级到 FrameBuffer* 形态——DirectX 后端零改动，d3d 阶段 B 编译面不破）；新增 `GetActiveRenderPassDesc()` 读回后端标注后的 desc（NdcZMin：GL -1 / Vulkan 0 / DirectX 族 0，由后端在 pass 开始时写入）。
+- OpenGL 消费：bind FBO + 按 loadOp 计算 glClear 掩码（默认全 Clear，与旧行为逐值一致）+ 可选显式 viewport；断言 desc 附件数 == FBO 附件数（K-024 GL 侧注记：glDrawBuffers 属 FBO 状态，在 OpenGLFrameBuffer::Bind 不动）。
+- Vulkan 消费：附件数/逐附件 loadOp/clear 值/深度/viewport-scissor 全部来自 desc；**colorCount 直通 `m_ActiveColorAttachmentCount`**——K-024（pipeline 键含附件数）在 desc 消费路径下自然覆盖，已验证；loadOp=Load 时布局从 SHADER_READ_ONLY 转移（UNDEFINED 会丢内容，主动规避，见 K-026）。
+- 债务吸收：`u_NdcZMin`（E1 渗漏）已归还——`Renderer::DrawDeferredLighting` 从 G-buffer pass desc 取值，无 API 分支；G-buffer pass 由 desc 构造并经 `MatchesGBufferLayout`（新增于 DeferredRendering.h）断言与布局表一致。**Y-flip（BeginScene flipY）本阶段不移除**，消除路径已记录于 `DEFERRED_RENDERING_DESIGN.md` §7（见该节"Y 翻转的消除路径"）。
+- 兼容性：`Renderer::BeginScene` 全部公共形态不变；现有调用点（editor viewport RTT、game 演示离屏/swapchain、延迟 G-buffer+光照）行为不变；editor/game 只经 `Renderer::BeginScene` 间接使用，无需迁移。
+
+**涉及文件：** `Renderer/RenderPassDesc.h`（新增公共头）、`Renderer/RendererAPI.h`（desc 虚函数 + 默认实现）、`Renderer/RenderCommand.h/.cpp`（转发 + desc 校验）、`Renderer/Renderer.cpp`（G-buffer pass 走 desc、u_NdcZMin 从 desc 取）、`Renderer/DeferredRendering.h`（MatchesGBufferLayout + 债务注记更新）、`Platform/OpenGL/OpenGLRendererAPI.h/.cpp`、`Platform/Vulkan/VulkanRendererAPI.h/.cpp`、`engine/tests/test_renderpass.cpp`（新增 14 例）+ tests/CMakeLists.txt、KB-07 K-026/K-027、`documents/DEFERRED_RENDERING_DESIGN.md` §7、`documents/ENGINE_ROADMAP.md` §2b。
+
+**验证：** 双配置全量构建零 error（engine+editor+game 三 target，均有产物）、改动文件 /W4 零新增警告（按改动文件过滤核账，既有 C4251 基线噪音识别见 K-027）：`DMGE_VULKAN_BACKEND=OFF + DMGE_ANIMATION=ON` ctest **88/88 绿**、`ON + ON` ctest **88/88 绿**（61 基线 + 13 延迟 + 14 新增；78 口径中的 4 例 D3D11 smoke 因 `DMGE_D3D11` 默认 OFF 未编入，加开后应为 92）。Vulkan 运行时受 K-014 无 surface 限制，agent 会话内以构建 + 纯逻辑单测兜底，人工运行时冒烟（editor viewport / game 双路径 × 前向/延迟 × 双后端）留待人工。
+
+**集成待办（管理员）：** ① `DMGameEngine.h` 追加 `#include "DMGameEngine/Renderer/RenderPassDesc.h"`（R9；当前经 RendererAPI.h→RenderPassDesc.h 传递可用，补显式 include 保持单一头清单完整）；② `engine/CMakeLists.txt` 的 `DMGE_HEADERS` 追加 RenderPassDesc.h（IDE 展示）；③ 本波新增 KB 号为 **K-026/K-027**，若与 d3d-agent 并行撞号请重编号并同步本条与代码注释引用。

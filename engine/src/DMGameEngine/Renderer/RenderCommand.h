@@ -41,6 +41,12 @@ public:
     // Begins/ends a render pass targeting target (nullptr = swapchain).
     // Forwarded to the active backend. See RendererAPI.
     static void BeginRenderPass(FrameBuffer* target);
+    // Desc form (2b stage 1): the backend consumes the full description
+    // (attachments/load ops/clear values/viewport). See RendererAPI.
+    static void BeginRenderPass(const RenderPassDesc& desc);
+    // The backend-annotated desc of the pass currently open (or last
+    // begun) - e.g. NdcZMin for depth reprojection. See RendererAPI.
+    static RenderPassDesc GetActiveRenderPassDesc();
     static void EndRenderPass();
     static void DrawIndexed(const VertexArray& vertexArray);
     static void DrawIndexedInstanced(const VertexArray& vertexArray, uint32_t instanceCount, uint32_t baseInstance = 0);

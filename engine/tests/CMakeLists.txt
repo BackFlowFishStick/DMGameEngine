@@ -30,6 +30,7 @@ add_executable(dmge_tests
     test_assimp_import.cpp
     test_deletion_queue.cpp
     test_deferred.cpp
+    test_renderpass.cpp
 )
 
 # D3D11 backend headless smoke tests (device -> resources -> shader -> draw

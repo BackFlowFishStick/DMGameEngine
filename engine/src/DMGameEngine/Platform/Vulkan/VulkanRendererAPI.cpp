@@ -14,6 +14,7 @@
 
 #include "DMGameEngine/Core/Log.h"
 
+#include <algorithm>
 #include <cstring>
 #include <cstdio>
 #include <array>
@@ -521,16 +522,29 @@ void VulkanRendererAPI::Clear()
 
 void VulkanRendererAPI::BeginRenderPass(FrameBuffer* target)
 {
+    // 2b stage 1: legacy form preserved - build the desc from the target's
+    // specification and take the single desc consumption path below.
+    BeginRenderPass(MakeRenderPassDescForTarget(target));
+}
+
+void VulkanRendererAPI::BeginRenderPass(const RenderPassDesc& desc)
+{
     auto& ctx = VulkanGraphicsContext::Get();
     if (!ctx.IsFrameStarted())
         return; // no frame yet: nothing to bind (defensive)
+
+    // Snapshot the desc with the backend annotation FIRST so the caller's
+    // GetActiveRenderPassDesc() readback is valid for both forms.
+    m_ActivePass       = desc;
+    m_ActivePass.NdcZMin = 0.0f; // Vulkan: NDC z range is [0,1]
 
     VkCommandBuffer cmd = ctx.GetCurrentCommandBuffer();
 
     // Default / swapchain target: the swapchain pass is already open from
     // BeginFrame (Clear). Just record its formats as the active pipeline
-    // formats and leave the pass open.
-    const bool offscreen = (target != nullptr) && !target->GetSpecification().SwapChainTarget;
+    // formats (K-024) and leave the pass open. The desc's attachment fields
+    // are advisory in this form (swapchain form = count 0).
+    const bool offscreen = (desc.Target != nullptr) && !desc.Target->GetSpecification().SwapChainTarget;
     if (!offscreen)
     {
         auto& swap = ctx.GetSwapchain();
@@ -541,71 +555,101 @@ void VulkanRendererAPI::BeginRenderPass(FrameBuffer* target)
         return;
     }
 
-    auto* fbo = static_cast<VulkanFrameBuffer*>(target);
-    DMGE_CORE_ASSERT(fbo->GetColorAttachmentCount() > 0,
-                     "Vulkan: offscreen FrameBuffer has no color attachment (depth-only RT not supported yet).");
+    auto* fbo = static_cast<VulkanFrameBuffer*>(desc.Target);
     m_ActiveFrameBuffer = fbo;
+
+    // Attachment count comes from the DESC (clamped to this backend's
+    // headroom) and flows straight into m_ActiveColorAttachmentCount - the
+    // pipeline key's pass-structure component (K-024). The FBO's image
+    // formats remain the authoritative VkFormats; the desc's engine-side
+    // TextureFormats must describe the same structure.
+    const uint32_t colorCount = std::min(desc.ColorAttachmentCount, kMaxColorAttachments);
+    DMGE_CORE_ASSERT(desc.ColorAttachmentCount > 0,
+                     "Vulkan: offscreen FrameBuffer has no color attachment (depth-only RT not supported yet).");
+    DMGE_CORE_ASSERT(colorCount == fbo->GetColorAttachmentCount(),
+                     "Vulkan: desc color attachment count does not match the FrameBuffer.");
+    DMGE_CORE_ASSERT(colorCount <= kMaxColorAttachments,
+                     "Vulkan: offscreen FrameBuffer exceeds kMaxColorAttachments!");
 
     // End the swapchain dynamic-rendering pass BeginFrame opened so we can
     // begin one targeting the FBO (vkCmdBeginRendering cannot nest).
     vkCmdEndRendering(cmd);
 
-    // Transition FBO color/depth images UNDEFINED -> attachment layout. UNDEFINED
-    // discards prior contents (we clear), so this is valid regardless of layout.
-    for (uint32_t i = 0; i < fbo->GetColorAttachmentCount(); ++i)
+    // Transition FBO color/depth images UNDEFINED -> attachment layout.
+    // UNDEFINED discards prior contents (we clear), so this is valid
+    // regardless of layout. EXCEPTION (loadOp = Load): the contents must
+    // survive, so the image is transitioned from SHADER_READ_ONLY_OPTIMAL -
+    // the layout EndRenderPass left it in. A first-ever use with Load
+    // (image still UNDEFINED) is invalid by construction; validation
+    // catches it (kb/KB-07 K-026).
+    for (uint32_t i = 0; i < colorCount; ++i)
     {
+        const bool load = desc.Color[i].Load == AttachmentLoadOp::Load;
         VulkanGraphicsContext::TransitionImageLayout(
             cmd, fbo->GetColorImage(i), fbo->GetColorFormat(i),
-            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            load ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_IMAGE_ASPECT_COLOR_BIT,
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
     }
-    if (fbo->HasDepth())
+    if (desc.HasDepth)
     {
+        const bool load = desc.Depth.Load == AttachmentLoadOp::Load;
         VulkanGraphicsContext::TransitionImageLayout(
             cmd, fbo->GetDepthImage(), fbo->GetDepthFormat(),
-            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            load ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             VK_IMAGE_ASPECT_DEPTH_BIT,
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
     }
 
+    // MRT: one attachment info per desc color attachment. Load ops + clear
+    // values come from the desc (defaults reproduce the previous always-
+    // CLEAR behavior); store is always STORE.
     VkClearValue colorClear{};
-    colorClear.color.float32[0] = m_ClearColor.r;
-    colorClear.color.float32[1] = m_ClearColor.g;
-    colorClear.color.float32[2] = m_ClearColor.b;
-    colorClear.color.float32[3] = m_ClearColor.a;
+    colorClear.color.float32[0] = desc.UseRendererClearColor ? m_ClearColor.r : desc.ClearColor[0];
+    colorClear.color.float32[1] = desc.UseRendererClearColor ? m_ClearColor.g : desc.ClearColor[1];
+    colorClear.color.float32[2] = desc.UseRendererClearColor ? m_ClearColor.b : desc.ClearColor[2];
+    colorClear.color.float32[3] = desc.UseRendererClearColor ? m_ClearColor.a : desc.ClearColor[3];
 
-    // MRT (3e): one attachment info per color attachment of the FBO, all
-    // cleared to the app clear color and stored.
-    const uint32_t colorCount = static_cast<uint32_t>(fbo->GetColorAttachmentCount());
-    DMGE_CORE_ASSERT(colorCount <= kMaxColorAttachments,
-                     "Vulkan: offscreen FrameBuffer exceeds kMaxColorAttachments!");
     std::array<VkRenderingAttachmentInfo, kMaxColorAttachments> colorAttachments{};
-    for (uint32_t i = 0; i < colorCount && i < kMaxColorAttachments; ++i)
+    for (uint32_t i = 0; i < colorCount; ++i)
     {
         VkRenderingAttachmentInfo& att = colorAttachments[i];
         att.sType        = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
         att.imageView    = fbo->GetColorImageView(i);
         att.imageLayout  = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        att.loadOp       = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        switch (desc.Color[i].Load)
+        {
+            case AttachmentLoadOp::Load:     att.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;     break;
+            case AttachmentLoadOp::DontCare: att.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE; break;
+            case AttachmentLoadOp::Clear:
+            default:                         att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;    break;
+        }
         att.storeOp      = VK_ATTACHMENT_STORE_OP_STORE;
         att.clearValue   = colorClear;
     }
 
     VkRenderingAttachmentInfo depthAttachment{};
-    if (fbo->HasDepth())
+    if (desc.HasDepth)
     {
         VkClearValue depthClear{};
-        depthClear.depthStencil.depth  = 1.0f;
-        depthClear.depthStencil.stencil = 0;
+        depthClear.depthStencil.depth   = desc.Depth.ClearDepth;
+        depthClear.depthStencil.stencil = desc.Depth.ClearStencil;
         depthAttachment.sType        = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
         depthAttachment.imageView    = fbo->GetDepthImageView();
         depthAttachment.imageLayout  = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        depthAttachment.loadOp       = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        switch (desc.Depth.Load)
+        {
+            case AttachmentLoadOp::Load:     depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;     break;
+            case AttachmentLoadOp::DontCare: depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE; break;
+            case AttachmentLoadOp::Clear:
+            default:                         depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;    break;
+        }
         depthAttachment.storeOp      = VK_ATTACHMENT_STORE_OP_STORE;
         depthAttachment.clearValue  = depthClear;
     }
@@ -617,25 +661,34 @@ void VulkanRendererAPI::BeginRenderPass(FrameBuffer* target)
     renderingInfo.layerCount          = 1;
     renderingInfo.colorAttachmentCount = colorCount;
     renderingInfo.pColorAttachments   = colorAttachments.data();
-    renderingInfo.pDepthAttachment    = fbo->HasDepth() ? &depthAttachment : nullptr;
+    renderingInfo.pDepthAttachment    = desc.HasDepth ? &depthAttachment : nullptr;
     vkCmdBeginRendering(cmd, &renderingInfo);
 
+    // Viewport/scissor: target extent (default, pre-desc behavior) or the
+    // desc's explicit values.
+    const float vpX = desc.UseTargetExtent ? 0.0f          : desc.ViewportX;
+    const float vpY = desc.UseTargetExtent ? 0.0f          : desc.ViewportY;
+    const float vpW = desc.UseTargetExtent ? static_cast<float>(fbo->GetWidth())  : desc.ViewportWidth;
+    const float vpH = desc.UseTargetExtent ? static_cast<float>(fbo->GetHeight()) : desc.ViewportHeight;
     VkViewport viewport{};
-    viewport.x        = 0.0f;
-    viewport.y        = 0.0f;
-    viewport.width    = static_cast<float>(fbo->GetWidth());
-    viewport.height   = static_cast<float>(fbo->GetHeight());
+    viewport.x        = vpX;
+    viewport.y        = vpY;
+    viewport.width    = vpW;
+    viewport.height   = vpH;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(cmd, 0, 1, &viewport);
     VkRect2D scissor{};
-    scissor.offset = { 0, 0 };
-    scissor.extent = { fbo->GetWidth(), fbo->GetHeight() };
+    scissor.offset = { static_cast<int32_t>(desc.UseTargetExtent ? 0.0f : desc.ScissorX),
+                       static_cast<int32_t>(desc.UseTargetExtent ? 0.0f : desc.ScissorY) };
+    scissor.extent = { static_cast<uint32_t>(desc.UseTargetExtent ? fbo->GetWidth()  : desc.ScissorWidth),
+                       static_cast<uint32_t>(desc.UseTargetExtent ? fbo->GetHeight() : desc.ScissorHeight) };
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
     m_ActiveColorAttachmentCount = colorCount;
-    for (uint32_t i = 0; i < colorCount && i < kMaxColorAttachments; ++i)
+    for (uint32_t i = 0; i < colorCount; ++i)
         m_ActiveColorFormats[i] = fbo->GetColorFormat(i);
+    // Returns UNDEFINED when the FBO has no depth attachment.
     m_ActiveDepthFormat = fbo->GetDepthFormat();
     m_InOffscreenPass   = true;
 }
