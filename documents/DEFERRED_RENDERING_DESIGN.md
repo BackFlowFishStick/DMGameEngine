@@ -62,7 +62,7 @@ vec4 world = u_InverseViewProjection * vec4(ndc, 1.0);
 vec3 worldPos = world.xyz / world.w;
 ```
 
-`u_InverseViewProjection` 是 G-buffer pass 实际使用的 ViewProjection 的逆（含 Vulkan 的 flipY，自洽）；`u_NdcZMin` 由 Renderer 按 `GetAPI()` 设置一个 float——这是已知的 2b 债务（与 BeginScene 的 Y 翻转同类，见 §7）。
+`u_InverseViewProjection` 是 G-buffer pass 实际使用的 ViewProjection 的逆（含 Vulkan 的 flipY，自洽）；~~`u_NdcZMin` 由 Renderer 按 `GetAPI()` 设置一个 float——这是已知的 2b 债务（与 BeginScene 的 Y 翻转同类，见 §7）~~ **2026-10-05（2b 阶段 1）已归还**：值由后端标注进 G-buffer pass 的 RenderPassDesc，Renderer 无 API 分支（见 §7 表）。
 
 ---
 
@@ -105,13 +105,23 @@ ImGui / 后续层 / SwapBuffers                    // 与前向完全一致
 
 ## 7. 与 2b 收敛的关系（本波欠债清单）
 
+> 2026-10-05 更新（2b 阶段 1，分支 `agent/render-agent/renderpass-desc`）：RenderPassDesc 已落地，下表前两行的债已归还（行内标注 ✅）。
+
 | 债 | 说明 | 归还时机 |
 |---|---|---|
-| `u_NdcZMin` per-API 常量 | 深度反投影的深度范围差异以 uniform 注入，与 BeginScene Y 翻转同属 E1 渗漏 | 2b RenderPassDesc / 投影统一 |
+| `u_NdcZMin` per-API 常量 | ~~深度反投影的深度范围差异以 uniform 注入~~ ✅ **已归还（2b 阶段 1）**：值成为 RenderPassDesc 字段，由后端在 pass 开始时标注进活动 desc（GL -1 / Vulkan 0 / DirectX 族 0），Renderer 经 `RenderCommand::GetActiveRenderPassDesc()` 读回，Renderer 层无 API 分支 | ✅ |
 | 延迟 shader 内嵌于 DeferredRendering.h | 引擎内部 shader 用 `Shader::Create(name, src...)` 内嵌源码（DLL 无 CWD 依赖）；`engine/shaders/*.glsl` 为同内容的规范副本 | 2b 资产管线统一 shader 路径 |
-| 光照 pass 直接编排 RenderCommand | 未走 RenderPassDesc 抽象 | 2b |
+| 光照 pass 直接编排 RenderCommand | ~~未走 RenderPassDesc 抽象~~ ✅ **部分归还（2b 阶段 1）**：G-buffer pass 由 `MakeRenderPassDescForTarget` 构造并经 `MatchesGBufferLayout` 断言；两后端 BeginRenderPass 以 desc 为唯一消费路径；光照 pass 开 target 时暂走旧 FrameBuffer* 形态（内部同样构造 desc），显式 desc 化随调用点迁移逐步完成 | ✅/余量随 2b 后续 |
 | 硬编码 Blinn-Phong 材质 uniform 名 | FlushDeferred 从 Material 按知名名取值（u_AlbedoColor 等），非反射 | 2b SPIR-V 反射 |
 | 管线 blend 状态按附件复制 | Vulkan key 里存全部分格式；blend state 仍是全局单份复制到各附件（与 GL 语义一致） | 2b per-target blend |
+
+### 7.1 Y 翻转（BeginScene flipY）在 RenderPassDesc 架构下的消除路径
+
+本阶段**不移除** `Renderer::BeginScene` 的 `if (Vulkan) flipY`（涉及投影约定与全部 shader，单独立项），但消除路径已在 2b 阶段 1 的架构下铺好：
+
+1. **现状**：投影矩阵按 OpenGL 约定（NDC Y 向上、z ∈ [-1,1]）生成；Vulkan 侧在 BeginScene 对 VP 左乘 `diag(1,-1,1)` 翻转，Vulkan pipeline 再配 frontFace 翻转；光照 pass 的 `u_InverseViewProjection` 取"含翻转的同一 VP"之逆，自洽。`u_NdcZMin`（z 范围差异）已于阶段 1 收进 RenderPassDesc 由后端标注——Y 翻转是同一渗漏模式（E1）仅剩的 Y 分量。
+2. **消除路径（推荐，符合 ENGINE_REVIEW E1 建议）**：把"裁剪空间约定修正"整体收敛进 `RendererAPI` 层——后端在 VP 上传/管线构建路径内统一施加 (1,-1,1) 裁剪修正 + frontFace 翻转，`Renderer::BeginScene` 保持纯后端无关。RenderPassDesc 可作为约定的载体：desc 已有 `NdcZMin` 先例，后续可扩展 `ClipYDirection`（或直接由后端自报，两后端各自实现于实现文件内部，公共接口零改动）。
+3. **前置条件**：梳理全部 shader 对 NDC 的隐式假设（全屏三角的 raw-NDC 顶点、延迟反投影的 `ndc.xy = uv*2-1`、深度 sky 判定 0.9999 等——注释已证明该式在两 API 各自纹理约定下成立）；工程上一次性切换 + 双后端视觉回归，避免两套约定并存期。z 分量已经由 `u_NdcZMin` 走通同一条路，可直接参照。
 
 ## 8. 测试与验证
 
