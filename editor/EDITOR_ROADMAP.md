@@ -158,6 +158,8 @@ EditorLayer::OnImGuiRender
 
 > 状态标注（2026-10-03）：Play mode 隔离 ✅（编辑态/运行态双 Scene + SceneDuplicator 深拷贝，Stop 恢复快照，选中按 UUID 回映射；多标签下按场景生效，全局单 runtime 槽位）；最近场景配置持久化 ✅（editor_config.ini）。导出可运行工程 ✅（2026-10-03 第二波：`editor/src/ProjectExporter.{h,cpp}` + File > Export Runnable Project... 对话框——生成 CMakeLists/main.cpp/README/assets（场景 JSON + UUID registry + 引用模型拷贝 + shaders 目录）；因引擎 install(EXPORT) 无法生成、无 Config 文件（KB-07 K-014），find_package 不可用，模板走 `add_subdirectory(DMGE_ENGINE_DIR)` 由用户填引擎路径；导出不自动执行构建，人工验证步骤见 agent 报告）。
 
+> 状态标注（2026-10-05）：菜单快捷键真键盘处理 ✅（Ctrl+N/S/O、Ctrl+Shift+A、Del、F5/F6——`EditorLayer::ProcessShortcuts` ImGui 轮询，WantTextInput/模态弹窗让路，Play 模式禁用编辑类快捷键，Alt+F4 交系统；菜单与快捷键共用 action helper）。动画预览 UI ✅（DMGE_ANIMATION=ON：RegisterSystems 成对注册 AnimationSystem+SkinnedMeshRenderSystem、Inspector Animator 段（Skeleton/Clip 显示与切换 + UUID 追加 + 播放控制 + scrub）、SceneDuplicator 补拷 AnimatorComponent；编辑态显示 CurrentTime 静止姿势，自动播放仅 Play 副本，详见 KB-07 K-026/K-027/K-028）。
+
 ### 阶段 5：质量
 - Vulkan 后端适配：viewport 的 `ImGui::Image` 当前用 OpenGL 纹理 ID；切 Vulkan 时 `ImTextureID` 是 `VkDescriptorSet`，需后端适配。
 - 单测 / CI：编辑器无测试，后续补 headless 冒烟。
