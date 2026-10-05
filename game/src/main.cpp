@@ -3,6 +3,8 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <cstdlib>
 #include <memory>
 #include <random>
 #include <string>
@@ -11,6 +13,46 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+
+// ──────────────────────────────────────────────────────────────────
+// Backend selection: DMGE_API=D3D11 (env) or a -d3d11/--d3d11 command
+// line argument switches the demo to the Direct3D 11 backend. Default
+// (and everything else) stays OpenGL. K-015: EntryPoint.h's main()
+// discards argc/argv, but the MSVC CRT keeps them in __argc/__argv.
+// ──────────────────────────────────────────────────────────────────
+#if defined(_MSC_VER)
+extern "C" int    __argc;
+extern "C" char** __argv;
+#endif
+
+static bool EqualsIgnoreCase(const char* a, const char* b)
+{
+    while (*a && *b)
+    {
+        if (std::tolower(static_cast<unsigned char>(*a)) !=
+            std::tolower(static_cast<unsigned char>(*b)))
+            return false;
+        ++a; ++b;
+    }
+    return *a == *b;
+}
+
+static bool WantDirectXBackend()
+{
+    if (const char* env = std::getenv("DMGE_API"))
+    {
+        if (EqualsIgnoreCase(env, "D3D11") || EqualsIgnoreCase(env, "DirectX"))
+            return true;
+    }
+#if defined(_MSC_VER)
+    for (int i = 1; i < __argc; ++i)
+    {
+        if (EqualsIgnoreCase(__argv[i], "-d3d11") || EqualsIgnoreCase(__argv[i], "--d3d11"))
+            return true;
+    }
+#endif
+    return false;
+}
 
 // ──────────────────────────────────────────────────────────────────
 // CreateCubeMesh: 24-vertex cube with flat per-face normals + UVs.
@@ -53,6 +95,28 @@ static DM::Ref<DMGameEngine::Mesh> CreateCubeMesh()
 // ──────────────────────────────────────────────────────────────────
 // LitCubeScene: 1500 ECS cubes + Blinn-Phong lighting (instanced).
 // ──────────────────────────────────────────────────────────────────
+// Blinn-Phong shader asset: GLSL for OpenGL (and Vulkan when it consumes
+// GLSL-style sources), the HLSL twin for D3D11 (see
+// Platform/DirectX/Shaders/BlinnPhongInstanced.hlsl - identical uniform
+// names, `#type vertex/#type fragment` blocks). The directories are injected
+// by game/CMakeLists.txt (worktree-relative); the fallbacks keep the file
+// compilable outside CMake.
+#ifndef DMGE_GAME_SHADER_DIR
+#define DMGE_GAME_SHADER_DIR "D:/CPPPractices/DMGameEngine/engine/shaders"
+#endif
+#ifndef DMGE_GAME_HLSL_DIR
+#define DMGE_GAME_HLSL_DIR "D:/CPPPractices/DMGameEngine/engine/src/DMGameEngine/Platform/DirectX/Shaders"
+#endif
+
+static const char* BlinnPhongShaderPath()
+{
+#if defined(DMGE_D3D11)
+    if (DMGameEngine::Renderer::GetAPI() == DMGameEngine::Renderer::API::DirectX)
+        return DMGE_GAME_HLSL_DIR "/BlinnPhongInstanced.hlsl";
+#endif
+    return DMGE_GAME_SHADER_DIR "/BlinnPhongInstanced.glsl";
+}
+
 class LitCubeScene : public DMGameEngine::DefaultSceneLayer
 {
 public:
@@ -79,8 +143,8 @@ public:
         cam->SetPitch(kCamPitch);
         SetCameraController(cam);
 
-        auto shader = AssetManager::Get().Load<Shader>(kShaderPath);
-        if (!shader) { DMGE_CLIENT_ERROR("Failed to load shader '{}'", kShaderPath); return; }
+        auto shader = AssetManager::Get().Load<Shader>(BlinnPhongShaderPath());
+        if (!shader) { DMGE_CLIENT_ERROR("Failed to load shader '{}'", BlinnPhongShaderPath()); return; }
         auto baseMat = DM::CreateRef<Material>(shader);
         baseMat->SetFloat3("u_AlbedoColor",      {0.85f, 0.85f, 0.88f});
         baseMat->SetFloat ("u_SpecularStrength",  0.5f);
@@ -88,20 +152,66 @@ public:
         baseMat->SetInt   ("u_UseTexture",        0);
         m_SharedMaterial = DM::CreateRef<MaterialInstance>(baseMat);
 
-        m_UnlitShader = Shader::Create("UnlitLightVisual",
-            R"VS(#version 430 core
+        // Light-visual shader (unlit color cubes). The inline sources follow
+        // the active backend's language: GLSL for OpenGL, HLSL for D3D11.
+#if defined(DMGE_D3D11)
+        if (DMGameEngine::Renderer::GetAPI() == DMGameEngine::Renderer::API::DirectX)
+        {
+            m_UnlitShader = Shader::Create("UnlitLightVisual",
+                R"HSLS(#pragma pack_matrix(column_major)
+cbuffer UnlitConstants : register(b0)
+{
+    column_major float4x4 u_ViewProjection;
+    column_major float4x4 u_Transform;
+};
+
+// K-025: varyings before SV_Position.
+struct VSOutput
+{
+    float4 v_Position : SV_Position;
+};
+
+struct VSInput
+{
+    float3 a_Position : POSITION;
+};
+
+VSOutput VSMain(VSInput input)
+{
+    VSOutput output;
+    output.v_Position = mul(u_ViewProjection, mul(u_Transform, float4(input.a_Position, 1.0)));
+    return output;
+}
+)HSLS",
+                R"HSLS(cbuffer UnlitPixelConstants : register(b0)
+{
+    float3 u_Color;
+};
+
+float4 PSMain() : SV_Target
+{
+    return float4(u_Color, 1.0);
+}
+)HSLS");
+        }
+        else
+#endif
+        {
+            m_UnlitShader = Shader::Create("UnlitLightVisual",
+                R"VS(#version 430 core
             layout(location=0) in vec3 a_Position;
             uniform mat4 u_ViewProjection;
             uniform mat4 u_Transform;
             void main() {
                 gl_Position = u_ViewProjection * u_Transform * vec4(a_Position, 1.0);
             })VS",
-            R"FS(#version 430 core
+                R"FS(#version 430 core
             layout(location=0) out vec4 FragColor;
             uniform vec3 u_Color;
             void main() {
                 FragColor = vec4(u_Color, 1.0);
             })FS");
+        }
 
         m_CubeMesh = CreateCubeMesh();
         CreateLights();
@@ -235,7 +345,6 @@ private:
     static constexpr float kCamDistance  = 28.0f;
     static constexpr float kCamYaw       = 35.0f;
     static constexpr float kCamPitch     = 18.0f;
-    static constexpr const char* kShaderPath = "D:/CPPPractices/DMGameEngine/engine/shaders/BlinnPhongInstanced.glsl";
 
     DM::Ref<DMGameEngine::Shader>            m_UnlitShader;
     DM::Ref<DMGameEngine::MaterialInstance>  m_SharedMaterial;
@@ -282,9 +391,19 @@ private:
 
 DMGameEngine::Application* DMGameEngine::CreateApplication()
 {
-    DMGameEngine::Renderer::SetAPI(DMGameEngine::Renderer::API::OpenGL);
-    // ROADMAP 3e: the demo runs the deferred path (G-buffer + fullscreen
-    // lighting pass). Switch back to RenderPath::Forward to compare.
-    DMGameEngine::Renderer::SetRenderPath(DMGameEngine::RenderPath::Deferred);
+    // Stage-B demo switch: DMGE_API=D3D11 (env) or -d3d11 (argv) runs the
+    // Direct3D 11 backend; default remains OpenGL.
+    const bool useD3D11 = WantDirectXBackend();
+    DMGameEngine::Renderer::SetAPI(useD3D11
+        ? DMGameEngine::Renderer::API::DirectX
+        : DMGameEngine::Renderer::API::OpenGL);
+
+    // ROADMAP 3e: the OpenGL demo runs the deferred path (G-buffer +
+    // fullscreen lighting pass). The D3D11 deferred alignment (internal
+    // shaders are GLSL embedded in Renderer.cpp) is stage C - D3D11 runs
+    // the forward path.
+    DMGameEngine::Renderer::SetRenderPath(useD3D11
+        ? DMGameEngine::RenderPath::Forward
+        : DMGameEngine::RenderPath::Deferred);
     return new LitCubesGame();
 }
