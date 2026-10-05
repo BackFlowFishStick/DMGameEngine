@@ -1,5 +1,7 @@
 # DMGameEditor - 构建路线与设计思路
 
+> ⚠️ **状态更新（2026-10-05，docs-agent 核验）**：本文件写于阶段 1（2026-08-03），下文"当前架构 / 已落地功能 / 路线图"各节反映的是当时快照。**阶段 3/4 规划内容此后已实际落地**——多标签 + 全局单 Play、Prefab、导出可运行工程、Play 快照隔离（`SceneDuplicator` 深拷贝 + Ref 共享）等均已合并（明细见 `TASKS.md` 已合并区，以及本文件 §7 之后由集成提交沉淀的演进记录）。§3.1 目录结构也已增长，现状见该节末尾的"目录补录（2026-10-05）"。**正文按工程档案"只增不毁"约定保持原样**，阅读时以补录与 TASKS.md 为准。
+
 > 创建日期：2026-08-03
 > 评估基准：engine 截至 2026-08-03（ECS + 序列化 + Asset/assimp + 光照 + 实例化渲染）+ editor 首版落地
 > 目的：记录独立编辑器工程的**架构决策演进、当前状态、后续路线**，让思路可追溯
@@ -96,6 +98,11 @@ editor/
     ├── EditorScene.h/.cpp        # 独立拥有 Scene + EditorCamera + 离屏 FB + play/pause + 默认场景
     └── EditorLayer.h/.cpp        # Tool overlay：全部面板逻辑
 ```
+
+> **目录补录（2026-10-05，docs-agent 核验）**：上图为阶段 1 快照。当前 `editor/src/` 另有：
+> `SceneDuplicator.h/.cpp`（Play 快照与 Prefab 共用的实体子树深拷贝）、
+> `ProjectExporter.h/.cpp`（导出可运行工程：资产收集 + 引擎 add_subdirectory 模板，见 KB-07 K-015 论证）、
+> `LogPanel.h/.cpp`（spdlog sink 日志面板，见 §7.3）。
 
 ### 3.2 数据流
 ```
