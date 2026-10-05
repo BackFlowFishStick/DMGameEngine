@@ -6,7 +6,12 @@
 
 ## 进行中 / 待 review
 
-（暂无——等待下一波认领）
+| 任务 | 状态 | 备注 |
+|---|---|---|
+| DirectX 阶段 B：窗口交换链 + 完整前向路径（game/editor 可切 D3D11） | 🚧 @d3d-agent agent/d3d-agent/stage-b 2026-10-04 | worktree `.worktrees/d3d-agent`；拥有 Platform/DirectX/**+CMakeLists+DMGameEngine.h+GraphicsContext 工厂分支；禁改 Renderer.cpp/Renderer.h |
+| 2b 阶段 1：RenderPassDesc 统一两后端 pass 语义（吸收 K-024/u_NdcZMin） | 🚧 @render-agent agent/render-agent/renderpass-desc 2026-10-04 | worktree `.worktrees/render-agent`；拥有 Renderer/**+OpenGL/**+Vulkan/**；SPIR-V 反射与 Y-flip hack 单独立项 |
+| 编辑器动画预览（AnimatorComponent UI + 播放控制）+ 菜单快捷键落成 | 🚧 @editor-agent agent/editor-agent/anim-preview 2026-10-04 | worktree `.worktrees/editor-agent`；拥有 editor/** |
+| docs：资产 Tour + EDITOR_ROADMAP 状态注记 + KB-04 修正 | 🚧 @docs-agent docs/asset-tour 2026-10-04 | worktree `.worktrees/docs-agent`；快捷键事实以 editor-agent 本波报告为准，LearningPath 捷径文本本波不动 |
 
 ## 已合并 ✅
 
