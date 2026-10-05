@@ -34,6 +34,19 @@ private:
     void DrawSystems();
     void DrawAssetBrowser();
 
+    // ── Global keyboard shortcuts + shared menu actions ─────────
+    // ProcessShortcuts polls ImGui key state once per frame (top of
+    // OnImGuiRender); the menu items and the shortcuts call the same
+    // action helpers so behavior cannot drift apart. Edit-type shortcuts
+    // (N/S/O/Shift+A/Del) are inert during play mode, matching the
+    // menu's disabled state; F5/F6 (play controls) work in every mode.
+    void ProcessShortcuts();
+    void NewSceneInTab();
+    void OpenSceneDialog();
+    void SaveActiveScene();
+    void CreateEmptyEntity();
+    void DeleteSelectedEntity();
+
     // ── Play mode isolation (stage 4, per active tab) ───────────
     // EnterPlay snapshots the active tab's selection (by UUID) into the tab
     // so it can be re-resolved on the edit scene after Stop.
