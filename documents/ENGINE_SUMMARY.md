@@ -2434,3 +2434,9 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 **涉及文件：** `Platform/DirectX/{DirectXGraphicsContext.h/.cpp(新), D3D11Common.h/.cpp, D3D11RendererAPI.cpp, D3D11Shader.h/.cpp, D3D11FrameBuffer.cpp, D3D11VertexArray.cpp, DirectXIntegration.h/.cpp, Shaders/BlinnPhongInstanced.hlsl(新)}`、`Renderer/{Shader,Texture2D,VertexArray,VertexBuffer,IndexBuffer,FrameBuffer}.cpp`（工厂分支）、`Platform/Windows/WindowsWindow.cpp`、`ImGui/ImGuiLayer.cpp`、`Debug/{ProfilerLayer,ConsoleLayer}.cpp`、`DMGameEngine.h`（无新公共头，DirectXIntegration.h 已门控导出 `CreateDirectXGraphicsContext`）、`engine/CMakeLists.txt`、`game/{CMakeLists.txt, src/main.cpp}`、`engine/tests/test_d3d11_smoke.cpp`、`documents/DIRECTX_BACKEND_DESIGN.md`（路线表 B ✅ + 变更记录）、kb/KB-07 K-031~K-035。
 
 **验证：** 三组矩阵全量构建零 error、改动文件 /W4 零新增警告：`DMGE_D3D11=ON` ctest **57/57 绿**（新增 4）、`DMGE_D3D11=OFF` ctest **50/50 绿**（回归无损）、`DMGE_VULKAN_BACKEND=ON + DMGE_D3D11=ON` 共存 **57/57 绿**。**运行时验证（agent 会话内完成，无需人工）**：`DMGE_API=D3D11 ./DMGameDemo.exe` 真窗口运行 10 秒——硬件适配器（feature level 0xb000）+ 1280×720 flip-discard 交换链 + 1500 实例化立方体 + 4 点光/1 平行光 Blinn-Phong 前向渲染，日志零 error（仅 unlit shader 不含照明 uniform 的 34 条"not found (ignored)"一次性提示，对齐 GL location -1 语义）；OpenGL 默认路径回归正常。像素级正确性由⑦回读断言兜底；**视觉效果请人工复核**（见 agent 报告步骤）。已知限制：D3D11 下 ImGui 面板整层缺失（阶段 C）、编辑器未做 D3D11 shader 资产适配、vsync 固定开。
+
+### 2026-10-05 第六波集成（管理员）：四分支合并（RenderPassDesc/DirectX B/动画预览/资产Tour）
+
+KB-07 三方撞号处理：render K-026/K-027、editor K-026~028→重编号 K-028~030、d3d K-026~030→重编号 K-031~035；清理 editor 合并遗留的 SUMMARY 嵌套冲突标记。管理员接线：DMGameEngine.h + CMake DMGE_HEADERS 追加 RenderPassDesc.h。
+
+**验证：** 全开配置（`DMGE_ANIMATION=ON + DMGE_D3D11=ON + DMGE_VULKAN_BACKEND=ON`）全量构建零 error，ctest **95/95 绿**。

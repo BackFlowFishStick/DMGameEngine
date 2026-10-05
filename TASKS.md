@@ -6,14 +6,14 @@
 
 ## 进行中 / 待 review
 
-| 任务 | 状态 | 备注 |
-|---|---|---|
-| DirectX 阶段 B：窗口交换链 + 完整前向路径（game/editor 可切 D3D11） | 🚧 @d3d-agent agent/d3d-agent/stage-b 2026-10-04 | worktree `.worktrees/d3d-agent`；拥有 Platform/DirectX/**+CMakeLists+DMGameEngine.h+GraphicsContext 工厂分支；禁改 Renderer.cpp/Renderer.h |
-| 2b 阶段 1：RenderPassDesc 统一两后端 pass 语义（吸收 K-024/u_NdcZMin） | 🚧 @render-agent agent/render-agent/renderpass-desc 2026-10-04 | worktree `.worktrees/render-agent`；拥有 Renderer/**+OpenGL/**+Vulkan/**；SPIR-V 反射与 Y-flip hack 单独立项 |
-| 编辑器动画预览（AnimatorComponent UI + 播放控制）+ 菜单快捷键落成 | 🚧 @editor-agent agent/editor-agent/anim-preview 2026-10-04 | worktree `.worktrees/editor-agent`；拥有 editor/** |
-| docs：资产 Tour + EDITOR_ROADMAP 状态注记 + KB-04 修正 | 🚧 @docs-agent docs/asset-tour 2026-10-04 | worktree `.worktrees/docs-agent`；快捷键事实以 editor-agent 本波报告为准，LearningPath 捷径文本本波不动 |
+（暂无——等待下一波认领）
 
 ## 已合并 ✅
+
+- ✅ DirectX 阶段 B：窗口交换链 + 完整前向路径 @d3d-agent（合并 `e4ae7cb`；DirectXGraphicsContext（flip-discard/resize/Present）+ 前向 API 补齐（索引数组 uniform/Mat4 实例属性/SwapChainTarget）+ game 经 `DMGE_API=D3D11` 真窗口运行；窗口路径全自动像素回读验证（绕开 K-014）；K-031~035 五坑；已知限制：ImGui/延迟对齐留阶段 C）
+- ✅ 2b 阶段 1：RenderPassDesc 统一 pass 语义 @render-agent（合并 `3c10480`波次内；RenderPassDesc.h 附件表/loadOp/clear/NdcZMin，两后端唯一消费路径，旧形态保留兼容；u_NdcZMin 渲染层 API 判断已移除；K-024 经 desc 直通验证；Y-flip 消除路径记录待单独立项；双后端 88/88）
+- ✅ 编辑器动画预览 + 快捷键落成 @editor-agent（合并 `bc69019`；Inspector Animator 段（clip 下拉/播放/速度/scrub）、双 System 成对注册（K-029 exclude 语义）、SceneDuplicator 白名单补 Animator（K-028）、编辑态 scrub 预览决策；快捷键 Ctrl+N/S/O/Shift+A/Del/F5/F6 真实现（K-030 让路规则）；ON 74/74 OFF 50/50）
+- ✅ 资产 Tour + 档案修正 @docs-agent（合并 `d939249` 波次内；AssetTour.md 九节+生命周期图；EDITOR_ROADMAP 状态注记 + KB-04 两处核验修正；新发现 KB-05 过时/registry 无生产调用方已登记）
 
 - ✅ 3e 延迟渲染（可配置，双后端）@render-agent（合并 `3c10480`；G-buffer RT0 RGBA8/RT1 RGBA16F/深度复用 + 全屏光照 pass；OpenGL 零改动（MRT 已具备）、Vulkan 补齐 3 处 MRT（K-024：pipeline 键必须含附件数）；默认 Forward，运行时可切换；光源 uniform 与前向同名；透明物阶段 1 限制已记录；双后端 ctest 50/50）
 - ✅ DirectX 后端阶段 A（D3D11）@d3d-agent（合并 `eadde05`；设备/shader 反射/纹理/缓冲/VA/状态对象/离屏 FB + headless 渲染回读 smoke 测试（硬件→WARP 回退）；K-025：D3D11 PS 输入按寄存器序链接——varying 必须声明在 SV_Position 前；ON/OFF/Vulkan 共存三组 41/41、37/37、41/41；管理员完成 RendererAPI 工厂接线）

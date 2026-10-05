@@ -67,6 +67,7 @@
 // Configurable deferred rendering path (ROADMAP 3e). Forward remains the
 // default; see Renderer::SetRenderPath and documents/DEFERRED_RENDERING_DESIGN.md.
 #include "DMGameEngine/Renderer/DeferredRendering.h"
+#include "DMGameEngine/Renderer/RenderPassDesc.h"
 
 #ifdef DMGE_ANIMATION
 // Skeletal animation subsystem (stage 1). Built when DMGE_ANIMATION=ON; see
