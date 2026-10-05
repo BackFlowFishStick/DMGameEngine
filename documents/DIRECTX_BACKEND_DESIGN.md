@@ -1,7 +1,7 @@
-# DirectX 11 后端设计（阶段 A：基础设施 + Headless 证明）
+# DirectX 11 后端设计（阶段 A+B：基础设施 + Headless 证明 + 窗口交换链前向路径）
 
-> 作者：d3d-agent · 分支 `agent/d3d-agent/stage-a` · 2026-10-04
-> 状态：阶段 A 落地中。本文是 DirectX 后端的**设计事实源**；后续阶段（B/C）落地时在此文档追加变更记录。
+> 作者：d3d-agent · 分支 `agent/d3d-agent/stage-a`（A）/ `agent/d3d-agent/stage-b`（B）· 2026-10-04/05
+> 状态：阶段 A+B 已落地。本文是 DirectX 后端的**设计事实源**；阶段 C 落地时在此文档追加变更记录。
 > 关联：`documents/ENGINE_REVIEW.md` §E1（双后端抽象收敛）、`kb/KB-03`（双后端注意事项）、`playbooks/PB-03`。
 
 ---
@@ -18,9 +18,9 @@
 
 ## 2. 分阶段路线
 
-- **阶段 A（本阶段）**：设备创建（硬件→WARP 回退）、HLSL 运行时编译 + `D3DReflect` uniform 反射、VB/IB/VA（input layout）、Texture2D、离屏 FrameBuffer（单颜色附件 + 深度）、`D3D11RendererAPI` 阶段 A 子集、headless smoke 测试（画三角形 + Map 回读断言）。**不做**窗口交换链、ImGui、实例化（接口留 TODO）、延迟渲染对齐。
-- **阶段 B**：HWND 交换链（`DXGI_SWAP_CHAIN`）+ GraphicsContext（`D3D11GraphicsContext`）、完整 Blinn-Phong 前向路径对齐（点光/聚光数组 uniform、纹理 albedo）、深度格式/投影深度范围处理、`Renderer::API::DirectX` 工厂接线（见 §7）。
-- **阶段 C**：ImGui D3D11 后端、DrawIndexedInstanced/实例化数据路径、与 2b 收敛成果（RenderPassDesc/反射统一）对齐、延迟渲染评估（依赖 render-agent 的 3e 产出形态）。
+- **阶段 A（✅ 2026-10-04）**：设备创建（硬件→WARP 回退）、HLSL 运行时编译 + `D3DReflect` uniform 反射、VB/IB/VA（input layout）、Texture2D、离屏 FrameBuffer（单颜色附件 + 深度）、`D3D11RendererAPI` 阶段 A 子集、headless smoke 测试（画三角形 + Map 回读断言）。
+- **阶段 B（✅ 2026-10-05，`agent/d3d-agent/stage-b`）**：HWND 交换链 + `DirectXGraphicsContext`（`CreateSwapChainForHwnd`、flip-discard 双缓冲、BGRA8、backbuffer RTV + 窗口深度 DSV、`ResizeBuffers`、`Present(vsync)`）；`BeginRenderPass(nullptr/SwapChainTarget)` 绑定窗口目标；点光/聚光**索引数组 uniform**（反射 ElementStride，按 HLSL 16 字节打包步进写入）；`Shader::Create(filepath)`（`#type` 分块 HLSL）；资源工厂（Shader/Texture2D/VA/VB/IB/FrameBuffer）DirectX 分支接入；`Mat4` 实例属性 input layout；`game` 演示 `DMGE_API=D3D11` 切换（环境变量或 `-d3d11`，默认仍 OpenGL，D3D11 下走 Forward 路径）。**深度范围处理**：D3D NDC z∈[0,1] 与投影矩阵的配合在离屏/窗口路径实测通过（清屏 depth=1.0、`Less` 比较语义与 GL 一致——阶段 A §3.3 的顾虑在 `DepthFunc::Less` + z=0 平面与真实场景下均未复现问题，若后续出现 z 精度问题再补重映射矩阵）。
+- **阶段 C（TODO）**：ImGui D3D11 后端（当前 DirectX 下 ImGuiLayer 整层降级禁用）、`SetMat4Array` 蒙皮调色板、TextureCube/2DArray、与 2b 收敛成果（RenderPassDesc/反射统一）对齐、延迟渲染对齐（内嵌 deferred shader 仍为 GLSL 源）。
 
 ## 3. 抽象对齐表（RendererAPI / 资源抽象 → D3D11 对应物）
 
@@ -51,7 +51,7 @@
 | `VertexArray` | 无原生 VAO：`D3D11VertexArray` 存 VB/IB 引用 + layout→`D3D11_INPUT_ELEMENT_DESC` 映射；`Bind()` 时 IASet* + input layout（按"当前绑定 shader 的 VS 字节码 + 布局"惰性创建并缓存） | ✅ |
 | `Texture2D` | `ID3D11Texture2D` + `ID3D11ShaderResourceView`；`Bind(slot)` 把 SRV 登记进单元表（对齐 GL texture unit 语义，见 §5.3） | ✅ |
 | `FrameBuffer`（离屏） | `ID3D11Texture2D`(BIND_RENDER_TARGET\|SHADER_RESOURCE) + RTV + SRV 包装成 `D3D11Texture2D` 附件；深度附件 DSV。阶段 A 单颜色附件；MSAA 仅按 spec 建样本数为 1（与 GL 后端现状一致） | ✅ |
-| `GraphicsContext` | 不实现（需要 HWND swapchain）——阶段 B | ⬜ B |
+| `GraphicsContext` | `DirectXGraphicsContext`：HWND swapchain（`CreateSwapChainForHwnd`，flip-discard、2 缓冲、BGRA8）+ backbuffer RTV + 窗口深度 DSV；`SwapBuffers()`=Present(vsync)、`RequestResize()`=`ResizeBuffers` + 视图重建；设备注册进 D3D11Backend 供 RendererAPI 采纳（B） | ✅ B |
 | `TextureCube/2DArray` | 阶段 C 按需 | ⬜ C |
 
 ### 3.3 阶段 A 有意留白（TODO+日志，不 abort）
@@ -119,7 +119,7 @@
    ```
    （枚举 `Renderer::API::DirectX` 已存在，**无需新增枚举值**；`DirectX11` 命名提案作废。）
 2. `RendererAPI.cpp` 顶部：`#ifdef DMGE_D3D11  #include "DMGameEngine/Platform/DirectX/DirectXIntegration.h"  #endif`
-3. 后续各资源工厂（`Shader::Create`/`Texture2D::Create`/...）同型分支——阶段 B 接入，当前 headless 测试直接构造后端类，不依赖工厂。
+3. 后续各资源工厂（`Shader::Create`/`Texture2D::Create`/...）同型分支——**阶段 B 已接入**（经用户批准的最小机械改动：`Renderer/Shader.cpp`、`Texture2D.cpp`、`VertexArray.cpp`、`VertexBuffer.cpp`、`IndexBuffer.cpp`、`FrameBuffer.cpp` 各加一个 `#ifdef DMGE_D3D11` 分支；`Texture2DArray/TextureCube` 仍留阶段 C）。
 
 ## 8. 构建开关
 
@@ -136,3 +136,4 @@
 |---|---|---|
 | 2026-10-04 | A | 初版设计；阶段 A 基础设施 + headless smoke 落地于 `agent/d3d-agent/stage-a` |
 | 2026-10-04 | A | 补充 K-023：本机 D3D11 运行时按寄存器序链接 PS 输入——**所有 D3D11 HLSL 的 VS 输出 struct 必须先声明 varying、最后声明 SV_Position**（§3.1/`BlinnPhong.hlsl` 头注释已落实） |
+| 2026-10-05 | B | 阶段 B 落地于 `agent/d3d-agent/stage-b`：窗口交换链 GraphicsContext、RendererAPI 窗口目标、索引数组 uniform（反射 ElementStride）、`Shader::Create(filepath)`（#type 分块 HLSL）、资源工厂 DirectX 分支、Mat4 实例属性、game `DMGE_API=D3D11` 演示；smoke 测试扩至 8 例（含隐藏窗口 swapchain 渲染回读 + resize）。新坑 K-026~K-030。阶段 C（ImGui/蒙皮/延迟对齐/TextureCube）保持 TODO |
