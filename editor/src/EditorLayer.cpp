@@ -147,6 +147,10 @@ void EditorLayer::OnRender() {
 }
 
 void EditorLayer::OnImGuiRender() {
+    // Global shortcuts first: polled against this frame's ImGui IO (after
+    // NewFrame), so ImGui::IsKeyPressed is valid here (same as the gizmo
+    // 1-4 keys in DrawViewport).
+    ProcessShortcuts();
     ImGuizmo::BeginFrame();
     DrawModalDialogs();
     DrawDockspace();
@@ -211,6 +215,95 @@ void EditorLayer::EndPlay() {
     }
     tab->SelectedUUIDBeforePlay = 0;
     DMGE_CLIENT_INFO("Play mode stopped on '{0}' - edit state restored", tab->Name);
+}
+
+// ── Global keyboard shortcuts + shared menu actions ─────────────
+
+void EditorLayer::NewSceneInTab() {
+    int idx = m_Scene.AddUntitledTab();
+    m_Scene.SetActive(idx);
+    m_Scene.SetSelected(NullEntity);
+}
+
+void EditorLayer::OpenSceneDialog() {
+    auto* activeTab = m_Scene.GetActiveTab();
+    std::snprintf(m_PathBuf, sizeof(m_PathBuf), "%s",
+                  activeTab ? activeTab->Path.c_str() : "");
+    m_Dialog = Dialog::OpenScene;
+    m_DialogOpenPending = true;
+}
+
+void EditorLayer::SaveActiveScene() {
+    auto* activeTab = m_Scene.GetActiveTab();
+    if (!activeTab) return;
+    if (activeTab->Path.empty()) {
+        m_PathBuf[0] = '\0';
+        m_Dialog = Dialog::SaveSceneAs;   // never-saved scene: ask where
+        m_DialogOpenPending = true;
+    } else {
+        SaveSceneToPath(activeTab->Path);
+    }
+}
+
+void EditorLayer::CreateEmptyEntity() {
+    if (auto* s = m_Scene.GetScene()) {
+        m_Scene.SetSelected(s->CreateEntity("Entity"));
+        MarkActiveDirty();
+    }
+}
+
+void EditorLayer::DeleteSelectedEntity() {
+    const Entity sel = m_Scene.GetSelected();
+    if (sel == NullEntity) return;
+    if (auto* s = m_Scene.GetScene()) {
+        s->DestroyEntity(sel);
+        m_Scene.SetSelected(NullEntity);
+        MarkActiveDirty();
+    }
+}
+
+void EditorLayer::ProcessShortcuts() {
+    ImGuiIO& io = ImGui::GetIO();
+    // Text input owns the keyboard (e.g. Log filter box, path dialogs,
+    // UUID fields): every shortcut yields so typing cannot trigger actions.
+    if (io.WantTextInput)
+        return;
+    // Modal dialogs open (close-confirm, open/save/export): route keys to
+    // the dialog, not to the scene behind it. (Path dialogs additionally
+    // hold the keyboard via WantTextInput above.)
+    if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
+        return;
+
+    const bool playing = m_Scene.IsPlaying();
+
+    // Play controls: F5 = Play (edit) / Pause-Resume toggle (playing),
+    // F6 = Stop. The popup guard above also yields these to modal dialogs.
+    if (ImGui::IsKeyPressed(ImGuiKey_F5, false)) {
+        if (playing)
+            m_Scene.SetPaused(!m_Scene.IsPaused());   // Play <-> Pause toggle
+        else
+            BeginPlay();   // warns itself if another tab owns the runtime slot
+    }
+    if (playing && ImGui::IsKeyPressed(ImGuiKey_F6, false))
+        EndPlay();
+
+    // Edit-type shortcuts: inert during play mode, matching the menu bar's
+    // disabled state for the same actions.
+    if (playing)
+        return;
+
+    const bool ctrl = io.KeyCtrl;
+    const bool shift = io.KeyShift;
+    if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_N, false))
+        NewSceneInTab();
+    if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_O, false))
+        OpenSceneDialog();
+    if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_S, false))
+        SaveActiveScene();
+    if (ctrl && shift && ImGui::IsKeyPressed(ImGuiKey_A, false))
+        CreateEmptyEntity();
+    if (!ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+        DeleteSelectedEntity();
 }
 
 // ── Scene management (stage 3, multi-tab) ───────────────────────
@@ -497,24 +590,13 @@ void EditorLayer::DrawMenuBar() {
         if (ImGui::BeginMenu("File")) {
             // New = fresh tab: nothing is replaced, so no confirm needed.
             if (ImGui::MenuItem("New Scene", "Ctrl+N")) {
-                int idx = m_Scene.AddUntitledTab();
-                m_Scene.SetActive(idx);
-                m_Scene.SetSelected(NullEntity);
+                NewSceneInTab();
             }
             if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) {
-                std::snprintf(m_PathBuf, sizeof(m_PathBuf), "%s",
-                              activeTab ? activeTab->Path.c_str() : "");
-                m_Dialog = Dialog::OpenScene;
-                m_DialogOpenPending = true;
+                OpenSceneDialog();
             }
             if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
-                if (activeTab && activeTab->Path.empty()) {
-                    m_PathBuf[0] = '\0';
-                    m_Dialog = Dialog::SaveSceneAs;   // never-saved scene: ask where
-                    m_DialogOpenPending = true;
-                } else if (activeTab) {
-                    SaveSceneToPath(activeTab->Path);
-                }
+                SaveActiveScene();
             }
             if (ImGui::MenuItem("Save Scene As...", nullptr, false, !m_Scene.IsPlaying())) {
                 std::snprintf(m_PathBuf, sizeof(m_PathBuf), "%s",
@@ -539,6 +621,8 @@ void EditorLayer::DrawMenuBar() {
                 m_DialogOpenPending = true;
             }
             ImGui::Separator();
+            // Alt+F4 is handled by the OS window manager (closes the window);
+            // the label documents the system behavior, no editor handling.
             if (ImGui::MenuItem("Quit", "Alt+F4"))
                 Application::Get().Quit();
             ImGui::EndMenu();
@@ -546,18 +630,11 @@ void EditorLayer::DrawMenuBar() {
         if (ImGui::BeginMenu("Entity")) {
             // Play-mode isolation: entity CRUD only in edit mode.
             if (ImGui::MenuItem("Create Empty", "Ctrl+Shift+A", false, !m_Scene.IsPlaying())) {
-                if (auto* s = m_Scene.GetScene()) {
-                    m_Scene.SetSelected(s->CreateEntity("Entity"));
-                    MarkActiveDirty();
-                }
+                CreateEmptyEntity();
             }
             const Entity sel = m_Scene.GetSelected();
             if (sel != NullEntity && ImGui::MenuItem("Delete", "Del", false, !m_Scene.IsPlaying())) {
-                if (auto* s = m_Scene.GetScene()) {
-                    s->DestroyEntity(sel);
-                    m_Scene.SetSelected(NullEntity);
-                    MarkActiveDirty();
-                }
+                DeleteSelectedEntity();
             }
             ImGui::EndMenu();
         }
@@ -1027,6 +1104,98 @@ void EditorLayer::DrawComponents(Entity e) {
         }
     }
 
+#ifdef DMGE_ANIMATION
+    if (s->HasComponent<AnimatorComponent>(e)) {
+        if (ImGui::CollapsingHeader("Animator", ImGuiTreeNodeFlags_DefaultOpen)) {
+            auto& ac = s->GetComponent<AnimatorComponent>(e);
+
+            // ── Skeleton / clip asset display ───────────────────
+            // Asset references are UUID handles; readable names come from
+            // the AssetManager registry (path metadata). There is no
+            // asset-picker UI yet (Asset Browser carries paths, not UUIDs),
+            // so references are authored in .scene files and shown
+            // read-only here.
+            auto displayName = [](AssetHandle h) {
+                if (!h.IsValid()) return std::string("(none)");
+                if (const auto* meta = AssetManager::Get().GetMetadata(h.GetUUID());
+                    meta && !meta->Path.empty())
+                    return std::filesystem::path(meta->Path).filename().string();
+                return std::string("UUID ") + std::to_string(h.GetUUID());
+            };
+            ImGui::Text("Skeleton: %s", displayName(ac.SkeletonAsset).c_str());
+            ImGui::TextDisabled("  UUID: %llu (assign via .scene; no asset picker yet)",
+                static_cast<unsigned long long>(ac.SkeletonAsset.GetUUID()));
+
+            // ── Clip selection: combo over the component's own Clips list ──
+            // Rationale: the AssetManager public API has no registry
+            // enumeration, so "clips associated with this skeleton" cannot
+            // be listed from the consumer side; the component's Clips
+            // vector IS the authoritative list, so switch among those.
+            if (ac.Clips.empty()) {
+                ImGui::TextDisabled("No clips (add by UUID below)");
+            } else {
+                int idx = ac.ActiveClip;
+                if (idx < 0 || idx >= static_cast<int>(ac.Clips.size())) idx = 0;
+                std::string preview = displayName(ac.Clips[static_cast<size_t>(idx)]);
+                if (ImGui::BeginCombo("Active Clip", preview.c_str())) {
+                    for (int i = 0; i < static_cast<int>(ac.Clips.size()); ++i) {
+                        std::string label = displayName(ac.Clips[static_cast<size_t>(i)]);
+                        if (ImGui::Selectable(label.c_str(), i == ac.ActiveClip)) {
+                            ac.ActiveClip = i;
+                            ac.CurrentTime = 0.0f;   // restart on clip switch
+                            MarkActiveDirty();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+
+            // Manual clip UUID input: appends to the Clips list (the only
+            // way to author a reference from the UI until an asset picker
+            // exists). UUIDs are listed by the Log when assets register /
+            // can be read from the .scene JSON.
+            static uint64_t s_ClipUuidInput = 0;   // scratch; one inspector at a time
+            ImGui::PushID(static_cast<int>(e));
+            ImGui::InputScalar("##ClipUUID", ImGuiDataType_U64, &s_ClipUuidInput,
+                               nullptr, nullptr, "%llu");
+            ImGui::SameLine();
+            if (ImGui::Button("Add Clip") && s_ClipUuidInput != 0) {
+                const uint64_t uuid = s_ClipUuidInput;
+                ac.Clips.emplace_back(uuid);
+                ac.ActiveClip = static_cast<int>(ac.Clips.size()) - 1;
+                ac.CurrentTime = 0.0f;
+                s_ClipUuidInput = 0;
+                MarkActiveDirty();
+                DMGE_CLIENT_INFO("Animator: clip UUID {0} added", uuid);
+            }
+            ImGui::PopID();
+
+            // ── Playback controls ────────────────────────────────
+            // Edit mode ticks scenes with dt=0 (EditorScene::OnUpdate), so
+            // Playing only takes effect in play mode; here it configures
+            // what the play copy will do. CurrentTime is scrubbable when
+            // not auto-playing: AnimationSystem still samples at dt=0, so
+            // scrubbing previews the exact pose in the editor viewport.
+            if (ImGui::Button(ac.Playing ? "Pause" : "Play")) {
+                ac.Playing = !ac.Playing;
+                MarkActiveDirty();
+            }
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Loop", &ac.Loop))
+                MarkActiveDirty();
+            if (ImGui::DragFloat("Speed", &ac.PlaybackSpeed, 0.05f, 0.0f, 10.0f, "%.2f"))
+                MarkActiveDirty();
+            if (ac.Playing) {
+                ImGui::Text("Time: %.2f ticks (auto)", ac.CurrentTime);
+            } else {
+                if (ImGui::DragFloat("Time (ticks)", &ac.CurrentTime, 0.05f, 0.0f, FLT_MAX, "%.2f"))
+                    MarkActiveDirty();
+            }
+            ImGui::Text("Joints in palette: %d", static_cast<int>(ac.Palette.size()));
+        }
+    }
+#endif
+
     // Add / Remove Component (runtime attach/detach).
     ImGui::Separator();
     if (ImGui::Button("Add Component"))
@@ -1044,6 +1213,12 @@ void EditorLayer::DrawComponents(Entity e) {
             s->AddComponent<MeshComponent>(e);
             MarkActiveDirty();
         }
+#ifdef DMGE_ANIMATION
+        if (!s->HasComponent<AnimatorComponent>(e) && ImGui::MenuItem("Animator")) {
+            s->AddComponent<AnimatorComponent>(e);
+            MarkActiveDirty();
+        }
+#endif
         ImGui::EndPopup();
     }
     ImGui::SameLine();
@@ -1062,6 +1237,12 @@ void EditorLayer::DrawComponents(Entity e) {
             s->RemoveComponent<MeshComponent>(e);
             MarkActiveDirty();
         }
+#ifdef DMGE_ANIMATION
+        if (s->HasComponent<AnimatorComponent>(e) && ImGui::MenuItem("Animator")) {
+            s->RemoveComponent<AnimatorComponent>(e);
+            MarkActiveDirty();
+        }
+#endif
         ImGui::EndPopup();
     }
 

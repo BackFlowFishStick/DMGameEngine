@@ -1,6 +1,10 @@
 #include "EditorScene.h"
 #include "SceneDuplicator.h"
 #include <DMGameEngine/Scene/SceneSerializer.h>
+#ifdef DMGE_ANIMATION
+#include <DMGameEngine/Scene/Systems/AnimationSystem.h>
+#include <DMGameEngine/Scene/Systems/SkinnedMeshRenderSystem.h>
+#endif
 #include <filesystem>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -62,7 +66,19 @@ EditorScene::EditorScene() {
 void EditorScene::RegisterSystems(Scene& s) {
     s.AddSystem(DM::CreateRef<TransformSystem>(s));
     s.AddSystem(DM::CreateRef<LightSystem>(s));
+#ifdef DMGE_ANIMATION
+    // AnimationSystem MUST be registered BEFORE MeshRenderSystem: it samples
+    // the palette each update and the skin pass reads it at render time.
+    // Registering it costs nothing when the scene holds no AnimatorComponent.
+    // SkinnedMeshRenderSystem is likewise required: with DMGE_ANIMATION=ON
+    // MeshRenderSystem EXCLUDES AnimatorComponent entities (double-draw
+    // guard), so without the skin pass such entities would never be drawn.
+    s.AddSystem(DM::CreateRef<AnimationSystem>(s));
+#endif
     s.AddSystem(DM::CreateRef<MeshRenderSystem>(s));
+#ifdef DMGE_ANIMATION
+    s.AddSystem(DM::CreateRef<SkinnedMeshRenderSystem>(s));
+#endif
 }
 
 void EditorScene::ApplyRenderState() {

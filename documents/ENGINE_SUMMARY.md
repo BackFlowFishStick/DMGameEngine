@@ -2386,6 +2386,7 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 
 **验证：** `DMGE_ANIMATION=ON + DMGE_D3D11=ON` 全量构建零 error，ctest **78/78 绿**（61 基线 + 13 延迟 + 4 D3D11 smoke）。
 
+<<<<<<< HEAD
 ## 2026-10-05 RenderPassDesc 统一两后端 render pass 语义——2b 阶段 1（render-agent）
 
 分支 `agent/render-agent/renderpass-desc`（worktree `.worktrees/render-agent`），对应 ENGINE_REVIEW E1 / ROADMAP 2b 第一阶段（SPIR-V 反射、Y-flip 实移除不在本阶段）。
@@ -2405,3 +2406,21 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 **验证：** 双配置全量构建零 error（engine+editor+game 三 target，均有产物）、改动文件 /W4 零新增警告（按改动文件过滤核账，既有 C4251 基线噪音识别见 K-027）：`DMGE_VULKAN_BACKEND=OFF + DMGE_ANIMATION=ON` ctest **88/88 绿**、`ON + ON` ctest **88/88 绿**（61 基线 + 13 延迟 + 14 新增；78 口径中的 4 例 D3D11 smoke 因 `DMGE_D3D11` 默认 OFF 未编入，加开后应为 92）。Vulkan 运行时受 K-014 无 surface 限制，agent 会话内以构建 + 纯逻辑单测兜底，人工运行时冒烟（editor viewport / game 双路径 × 前向/延迟 × 双后端）留待人工。
 
 **集成待办（管理员）：** ① `DMGameEngine.h` 追加 `#include "DMGameEngine/Renderer/RenderPassDesc.h"`（R9；当前经 RendererAPI.h→RenderPassDesc.h 传递可用，补显式 include 保持单一头清单完整）；② `engine/CMakeLists.txt` 的 `DMGE_HEADERS` 追加 RenderPassDesc.h（IDE 展示）；③ 本波新增 KB 号为 **K-026/K-027**，若与 d3d-agent 并行撞号请重编号并同步本条与代码注释引用。
+=======
+## 2026-10-05 - 编辑器动画预览 UI + 菜单快捷键落成（editor-agent）
+
+分支 `agent/editor-agent/anim-preview`（worktree `.worktrees/editor-agent`）。只改 `editor/**`（引擎零改动，纯消费视角）。
+
+**动画预览 UI（DMGE_ANIMATION 门控）：**
+- `EditorScene::RegisterSystems`：`#ifdef DMGE_ANIMATION` 下成对注册 `AnimationSystem`（在 MeshRenderSystem **之前**——调色板先算）+ `SkinnedMeshRenderSystem`（之后——ON 时 MeshRenderSystem exclude AnimatorComponent 实体，只注册采样系统会导致动画实体隐形，见 KB-07 K-029）。编辑态 dt=0 tick 下显示 CurrentTime 对应静止姿势（可 scrub 预览），自动播放只在 Play 副本里跑，Stop 丢弃副本回编辑态。
+- Inspector 新增 Animator 段：Skeleton/Clip 以 UUID → AssetManager 元数据显示可读文件名（无资产选择器 UI，注明限制：引用经 .scene 文件/UUID 手输途径授权）；clip 用组件自身 Clips 列表下拉切换（AssetManager 无 registry 枚举 API，"按 skeleton 列 clips"消费侧做不到，二选一取前者并支持 UUID 手动追加）；Play/Pause 按钮、Loop、Speed 拖拽、非播放态 Time 可拖拽 scrub、调色板关节数显示。Add/Remove Component 弹窗补 Animator 项。
+- `SceneDuplicator::CopyComponents` 补 AnimatorComponent 拷贝分支（原白名单不含它 → Play 快照静默丢组件、动画不跑，见 KB-07 K-028）；Palette 留空由首帧重算。
+
+**菜单快捷键（标注 → 真键盘处理）：**
+- `EditorLayer::ProcessShortcuts` 在 OnImGuiRender 头部 ImGui 轮询；让路条件 `io.WantTextInput` + 模态弹窗（不用 WantCaptureKeyboard——NavEnableKeyboard 下几乎恒真，见 KB-07 K-030）。菜单与快捷键共用同一组 action helper（NewSceneInTab/OpenSceneDialog/SaveActiveScene/CreateEmptyEntity/DeleteSelectedEntity）。
+- 已实现：Ctrl+N 新标签、Ctrl+O 打开场景、Ctrl+S 保存当前场景、Ctrl+Shift+A Create Empty、Del 删除选中、F5 Play/Pause 切换、F6 Stop；Play 模式中 N/S/O/Shift+A/Del 全部失效（与菜单 disabled 语义一致），F5/F6 始终可用；Alt+F4 交系统（菜单标注保留注明）。
+
+**涉及文件：** `editor/src/EditorLayer.{h,cpp}`、`editor/src/EditorScene.cpp`、`editor/src/SceneDuplicator.cpp`（editor/CMakeLists 零改动——DMGE_ANIMATION 为引擎 target PUBLIC 定义，经链接自动传递到编辑器 TU）。新坑：KB-07 K-028/K-029/K-030（撞号重编号）。
+
+**验证：** `DMGE_ANIMATION=ON` 全量构建零 error（336/336 target）、ctest **74/74 绿**、editor 源 /W4 零新增警告（存量 C4251 为引擎基线）；`DMGE_ANIMATION=OFF` 全量构建零 error、编辑器无动画段、ctest **74/74 绿**。GUI/蒙皮运行时效果无法 agent 会话自动化，人工验证步骤见 agent 报告（editor 无测试 target，SceneDuplicator 拷贝正确性测试跳过）。
+>>>>>>> agent/editor-agent/anim-preview
