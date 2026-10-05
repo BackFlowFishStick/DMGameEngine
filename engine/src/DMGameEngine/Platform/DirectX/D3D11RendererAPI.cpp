@@ -115,6 +115,21 @@ D3D11RendererAPI::~D3D11RendererAPI()
 
 void D3D11RendererAPI::Init(const RendererAPIInitConfig& config)
 {
+    // ── Adopt an existing window-facing device ───────────────────
+    // When a DirectXGraphicsContext already ran Init() (the normal
+    // Application flow: window first, Renderer::Init() second), its device
+    // and swapchain are registered process-wide and this backend must use
+    // THAT device - a second device could not present to the swapchain.
+    if (D3D11Backend::Device())
+    {
+        m_Device  = D3D11Backend::Device();
+        m_Context = D3D11Backend::Context();
+        std::memcpy(m_DriverTypeName, "Windowed", sizeof("Windowed"));
+        DMGE_LOG_INFO("[D3D11] RendererAPI adopted the window's device (feature level 0x{0:x})",
+                      static_cast<unsigned>(m_Device->GetFeatureLevel()));
+    }
+    else
+    {
     // Headless-capable device creation: hardware adapter first, then the
     // software rasterizers, so CI/agent sandboxes without a GPU (or without
     // an interactive desktop session - see kb/KB-07 K-014 for why Vulkan
@@ -153,6 +168,7 @@ void D3D11RendererAPI::Init(const RendererAPIInitConfig& config)
                   m_DriverTypeName,
                   static_cast<unsigned>(m_Device->GetFeatureLevel()));
     D3D11Backend::SetDeviceContext(m_Device.Get(), m_Context.Get());
+    }
 
     // Apply the requested initial pipeline state through the virtual setters
     // (base implementation mirrors the OpenGL/Vulkan backends).
@@ -199,12 +215,22 @@ void D3D11RendererAPI::SetViewport(int x, int y, int width, int height)
 
 void D3D11RendererAPI::BeginRenderPass(FrameBuffer* target)
 {
-    // nullptr / swapchain target: stage A has no swapchain; just drop the
-    // current targets (mirrors the OpenGL default-framebuffer no-op).
+    // nullptr / swapchain target: bind the window-facing backbuffer + depth
+    // view registered by DirectXGraphicsContext (stage B swapchain flow).
+    // Headless runs (no window target registered) keep the stage-A behavior:
+    // just drop the current targets.
     if (!target || target->GetSpecification().SwapChainTarget)
     {
-        m_CurrentRTV = nullptr;
-        m_CurrentDSV = nullptr;
+        m_CurrentRTV = D3D11Backend::WindowRenderTargetView();
+        m_CurrentDSV = D3D11Backend::WindowDepthStencilView();
+        if (m_Context && m_CurrentRTV)
+        {
+            m_Context->OMSetRenderTargets(1, &m_CurrentRTV, m_CurrentDSV);
+            // Mirror the OpenGL default-framebuffer loadOp=CLEAR semantics:
+            // the host's ClearFrame() ran with nothing bound (no-op on
+            // D3D11), so each pass opens clean here.
+            Clear();
+        }
         return;
     }
 

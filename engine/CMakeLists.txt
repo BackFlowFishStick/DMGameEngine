@@ -481,6 +481,7 @@ if(DMGE_D3D11)
         "src/DMGameEngine/Platform/DirectX/D3D11Texture2D.cpp"
         "src/DMGameEngine/Platform/DirectX/D3D11VertexArray.cpp"
         "src/DMGameEngine/Platform/DirectX/D3D11VertexBuffer.cpp"
+        "src/DMGameEngine/Platform/DirectX/DirectXGraphicsContext.cpp"
         "src/DMGameEngine/Platform/DirectX/DirectXIntegration.cpp"
     )
 endif()

@@ -50,6 +50,16 @@ DMGE_API void ClearDeviceContext();
 DMGE_API ID3D11Device*        Device();
 DMGE_API ID3D11DeviceContext* Context();
 
+// ── Window (swapchain) render target ─────────────────────────────
+// Registered by DirectXGraphicsContext (backbuffer RTV + window depth DSV).
+// D3D11RendererAPI::BeginRenderPass binds this pair for nullptr /
+// SwapChainTarget targets; headless runs have none (RendererAPI then
+// behaves like stage A: unbind).
+DMGE_API void SetWindowTarget(ID3D11RenderTargetView* rtv, ID3D11DepthStencilView* dsv);
+DMGE_API void ClearWindowTarget();
+DMGE_API ID3D11RenderTargetView* WindowRenderTargetView();
+DMGE_API ID3D11DepthStencilView* WindowDepthStencilView();
+
 // ── Format mapping ───────────────────────────────────────────────
 // Color formats usable for both SRV (sampling) and RTV (render target).
 DXGI_FORMAT TextureFormatToDXGI(TextureFormat format);

@@ -10,9 +10,16 @@
 #ifdef DMGE_VULKAN
 #include "DMGameEngine/Platform/Vulkan/VulkanGraphicsContext.h"
 #endif
+#ifdef DMGE_D3D11
+#include "DMGameEngine/Platform/DirectX/DirectXIntegration.h"
+#endif
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+#ifdef DMGE_D3D11
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#endif
 #include <cstdlib>
 
 namespace DMGameEngine {
@@ -64,6 +71,12 @@ void WindowsWindow::Init(const WindowProps& props) {
         // created explicitly by VulkanGraphicsContext::Init().
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     }
+    else if (Renderer::GetAPI() == Renderer::API::DirectX)
+    {
+        // Same for D3D11: the swapchain is created explicitly by
+        // DirectXGraphicsContext::Init() against the native HWND.
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    }
     else
     {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -88,13 +101,21 @@ void WindowsWindow::Init(const WindowProps& props) {
 
     s_eventWindow = m_window;
 
-    // ── OpenGL context via GraphicsContext abstraction ──────────
+    // ── Graphics context via the GraphicsContext abstraction ────
     if (Renderer::GetAPI() == Renderer::API::Vulkan)
     {
 #ifdef DMGE_VULKAN
         m_context = DM::CreateScope<VulkanGraphicsContext>(m_window);
 #else
         DMGE_CORE_ASSERT(false, "Vulkan backend not built (enable DMGE_VULKAN_BACKEND).");
+#endif
+    }
+    else if (Renderer::GetAPI() == Renderer::API::DirectX)
+    {
+#ifdef DMGE_D3D11
+        m_context = DirectX::CreateDirectXGraphicsContext(glfwGetWin32Window(m_window));
+#else
+        DMGE_CORE_ASSERT(false, "DirectX backend not built (enable DMGE_D3D11).");
 #endif
     }
     else
@@ -246,8 +267,11 @@ void* WindowsWindow::GetNativeWindow() const {
 // ── VSync ────────────────────────────────────────────────────────
 void WindowsWindow::SetVSync(bool enabled) {
     m_data.vSync = enabled;
-    if (Renderer::GetAPI() != Renderer::API::Vulkan)
-        glfwSwapInterval(enabled ? 1 : 0);  // VSync for Vulkan is handled by the present mode.
+    // Only OpenGL carries vsync through GLFW. Vulkan uses the present mode,
+    // D3D11 uses IDXGISwapChain::Present's SyncInterval (DirectXGraphicsContext
+    // currently presents with vsync on - stage-B limitation, see its header).
+    if (Renderer::GetAPI() == Renderer::API::OpenGL)
+        glfwSwapInterval(enabled ? 1 : 0);
 }
 
 // ── Cursor mode ─────────────────────────────────────────────────

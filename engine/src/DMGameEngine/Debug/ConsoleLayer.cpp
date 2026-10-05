@@ -59,7 +59,9 @@ void ConsoleLayer::OnEvent(Event& event) {
 // ── ImGui ────────────────────────────────────────────────────────
 
 void ConsoleLayer::OnImGuiRender() {
-    if (!m_show)
+    // No ImGui context (e.g. the D3D11 stage-B degradation path in
+    // ImGuiLayer) - ImGui::Begin would assert on a null context.
+    if (ImGui::GetCurrentContext() == nullptr || !m_show)
         return;
 
     ImGui::SetNextWindowSize(ImVec2(720.0f, 320.0f), ImGuiCond_FirstUseEver);

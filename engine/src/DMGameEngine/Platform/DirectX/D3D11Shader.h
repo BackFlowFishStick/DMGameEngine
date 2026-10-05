@@ -43,9 +43,15 @@ namespace DMGameEngine {
 class DMGE_API D3D11Shader : public Shader
 {
 public:
+    // From two source strings (HLSL, VSMain/PSMain entry points) - the
+    // Shader::Create(name, vert, frag) factory path.
     D3D11Shader(std::string_view name,
                 std::string_view vertexSrc,
                 std::string_view fragmentSrc);
+    // From a file using the engine's `#type vertex` / `#type fragment`
+    // (or `pixel`) block convention - the Shader::Create(filepath) factory
+    // path. The blocks contain HLSL (cbuffers, VSMain/PSMain), NOT GLSL.
+    explicit D3D11Shader(std::string_view filepath);
     ~D3D11Shader() override;
 
     void Bind()   const override;
@@ -67,9 +73,16 @@ public:
 
     // ── Diagnostics / test hooks ────────────────────────────────
     // True when a cbuffer member (or a sampler/texture resource) with the
-    // given name was found by reflection.
+    // given name was found by reflection. Indexed array element names
+    // ("u_PointLights_position[3]") resolve against the array member.
     bool HasUniform(std::string_view name) const;
     bool HasTexture(std::string_view name) const;
+    // Copies a uniform's current CPU staging bytes into dst (must hold
+    // `size` bytes; indexed array element names supported). Diagnostics /
+    // test hook: verifies what the next Bind() would upload without a GPU
+    // readback (cbuffers are GPU-private DEFAULT resources). Returns false
+    // when the name is unknown.
+    bool ReadUniformStaging(std::string_view name, void* dst, uint32_t size) const;
 
     ID3DBlob* GetVertexBlob() const { return m_VSBlob.Get(); }
 
@@ -88,10 +101,12 @@ private:
     // byte offset inside that cbuffer. A name can appear in several places.
     struct UniformTarget
     {
-        uint32_t Stage;      // 0 = VS, 1 = PS
-        uint32_t BufferSlot; // cbuffer register (b#)
-        uint32_t Offset;     // byte offset inside the cbuffer
-        uint32_t Size;       // member size in bytes (arrays: total)
+        uint32_t Stage;         // 0 = VS, 1 = PS
+        uint32_t BufferSlot;    // cbuffer register (b#)
+        uint32_t Offset;        // byte offset inside the cbuffer
+        uint32_t Size;          // member size in bytes (arrays: total)
+        uint32_t ElementStride; // array element stride in bytes (HLSL packs
+                                // float3 arrays at 16-byte steps); 0 = scalar
     };
 
     struct StageResources

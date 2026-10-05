@@ -33,7 +33,9 @@ void ProfilerLayer::OnEvent(Event& event) {
 }
 
 void ProfilerLayer::OnImGuiRender() {
-    if (!m_show)
+    // No ImGui context (e.g. the D3D11 stage-B degradation path in
+    // ImGuiLayer) - ImGui::Begin would assert on a null context.
+    if (ImGui::GetCurrentContext() == nullptr || !m_show)
         return;
 
     ImGui::SetNextWindowSize(ImVec2(460.0f, 360.0f), ImGuiCond_FirstUseEver);

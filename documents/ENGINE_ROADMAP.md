@@ -198,6 +198,7 @@
 - 评估是否引入 RHI 层（Render Hardware Interface）把 `CommandBuffer`/`Pipeline`/`DescriptorSet` 提到后端无关层——若 DirectX 真要落地则必要，若维持双后端可延后。
 - **状态标注（2026-10-04）**：DirectX 11 第三后端阶段 A 已由 d3d-agent 落地（`DMGE_D3D11` 开关，默认 OFF）——设备/基础资源/离屏渲染 + headless 冒烟测试（三后端中唯一可全自动 GPU 验证），设计与对齐表见 `DIRECTX_BACKEND_DESIGN.md`；阶段 B（窗口交换链/工厂接线）待启动，其反射方案（D3DReflect per-name uniform 桥接）与 2b 的 SPIR-V 反射方向一致。
 - **状态标注（2026-10-05）**：**2b 阶段 1 已由 render-agent 落地**（分支 `agent/render-agent/renderpass-desc`）——`Renderer/RenderPassDesc.h`（附件 format+loadOp、clear 值、深度、viewport/scissor、NdcZMin）+ 两后端 desc 唯一消费路径（旧 `FrameBuffer*` 形态保留兼容）；u_NdcZMin 渲染层 API 判断已移除（E1 渗漏部分收敛，K-024 附件数经 desc 直通 pipeline 键）；Y-flip 消除路径已记录于 `DEFERRED_RENDERING_DESIGN.md` §7.1。**余量：SPIR-V 反射、Y-flip 实移除（投影约定统一）、per-target blend、资源屏障抽象待后续阶段。**
+- **状态标注（2026-10-05）**：DirectX 11 阶段 B 已由 d3d-agent 落地——窗口交换链 `DirectXGraphicsContext`（flip-discard/resize/Present-vsync）、`BeginRenderPass` 窗口目标、点光/聚光索引数组 uniform、`Shader::Create(filepath)`（#type 分块 HLSL）、资源工厂 DirectX 分支（经所有者批准的最小机械改动）、`Mat4` 实例属性；game 演示 `DMGE_API=D3D11` 可真实窗口运行（Forward 路径）。阶段 C（ImGui D3D11 后端/蒙皮 SetMat4Array/TextureCube/延迟对齐）TODO。注意：D3D11 下 Vulkan 式 Y 翻转与 NDC z 差异不适用（clip 空间与 GL 同向），`u_NdcZMin` 保持 -1 即可。
 
 **交付物**：去除 `Renderer::BeginScene` 的 Y 翻转 hack；shader 反射统一；RenderPassDesc 落地。
 

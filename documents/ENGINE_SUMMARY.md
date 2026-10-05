@@ -2386,7 +2386,6 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 
 **验证：** `DMGE_ANIMATION=ON + DMGE_D3D11=ON` 全量构建零 error，ctest **78/78 绿**（61 基线 + 13 延迟 + 4 D3D11 smoke）。
 
-<<<<<<< HEAD
 ## 2026-10-05 RenderPassDesc 统一两后端 render pass 语义——2b 阶段 1（render-agent）
 
 分支 `agent/render-agent/renderpass-desc`（worktree `.worktrees/render-agent`），对应 ENGINE_REVIEW E1 / ROADMAP 2b 第一阶段（SPIR-V 反射、Y-flip 实移除不在本阶段）。
@@ -2406,7 +2405,6 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 **验证：** 双配置全量构建零 error（engine+editor+game 三 target，均有产物）、改动文件 /W4 零新增警告（按改动文件过滤核账，既有 C4251 基线噪音识别见 K-027）：`DMGE_VULKAN_BACKEND=OFF + DMGE_ANIMATION=ON` ctest **88/88 绿**、`ON + ON` ctest **88/88 绿**（61 基线 + 13 延迟 + 14 新增；78 口径中的 4 例 D3D11 smoke 因 `DMGE_D3D11` 默认 OFF 未编入，加开后应为 92）。Vulkan 运行时受 K-014 无 surface 限制，agent 会话内以构建 + 纯逻辑单测兜底，人工运行时冒烟（editor viewport / game 双路径 × 前向/延迟 × 双后端）留待人工。
 
 **集成待办（管理员）：** ① `DMGameEngine.h` 追加 `#include "DMGameEngine/Renderer/RenderPassDesc.h"`（R9；当前经 RendererAPI.h→RenderPassDesc.h 传递可用，补显式 include 保持单一头清单完整）；② `engine/CMakeLists.txt` 的 `DMGE_HEADERS` 追加 RenderPassDesc.h（IDE 展示）；③ 本波新增 KB 号为 **K-026/K-027**，若与 d3d-agent 并行撞号请重编号并同步本条与代码注释引用。
-=======
 ## 2026-10-05 - 编辑器动画预览 UI + 菜单快捷键落成（editor-agent）
 
 分支 `agent/editor-agent/anim-preview`（worktree `.worktrees/editor-agent`）。只改 `editor/**`（引擎零改动，纯消费视角）。
@@ -2423,4 +2421,16 @@ Vulkan 后端 `VulkanBackendReview.md` 列出的正确性隐患 A/C/D/F 全部�
 **涉及文件：** `editor/src/EditorLayer.{h,cpp}`、`editor/src/EditorScene.cpp`、`editor/src/SceneDuplicator.cpp`（editor/CMakeLists 零改动——DMGE_ANIMATION 为引擎 target PUBLIC 定义，经链接自动传递到编辑器 TU）。新坑：KB-07 K-028/K-029/K-030（撞号重编号）。
 
 **验证：** `DMGE_ANIMATION=ON` 全量构建零 error（336/336 target）、ctest **74/74 绿**、editor 源 /W4 零新增警告（存量 C4251 为引擎基线）；`DMGE_ANIMATION=OFF` 全量构建零 error、编辑器无动画段、ctest **74/74 绿**。GUI/蒙皮运行时效果无法 agent 会话自动化，人工验证步骤见 agent 报告（editor 无测试 target，SceneDuplicator 拷贝正确性测试跳过）。
->>>>>>> agent/editor-agent/anim-preview
+## 2026-10-05 - DirectX 11 后端阶段 B：窗口交换链 + 完整前向路径（d3d-agent）
+
+分支 `agent/d3d-agent/stage-b`（worktree `.worktrees/d3d-agent`）。目标达成：`Renderer::SetAPI(API::DirectX)` 下 game 演示可真实窗口运行（Blinn-Phong + 实例化 + 点光/聚光照明）。
+
+- **`DirectXGraphicsContext`**（`Platform/DirectX/DirectXGraphicsContext.h/.cpp` 新增）：HWND 交换链——`CreateDXGIFactory2` + 按窗口显示器挑硬件适配器 + `CreateSwapChainForHwnd`（flip-discard、2 缓冲、BGRA8）；backbuffer RTV + 独立窗口深度 DSV（D24S8）；`SwapBuffers()`=`Present(vsync)`；`RequestResize()`（GLFW size callback → `ResizeBuffers` + 视图重建）；`GetVendor/Renderer/Version` 走适配器描述。设备注册进 D3D11Backend 进程级访问器，`D3D11RendererAPI::Init` 优先**采纳**已注册设备（生产路径：窗口先建、Renderer::Init 后跑；headless 测试无窗口时仍走 HARDWARE→WARP→REFERENCE 梯）。窗口目标（RTV/DSV）经 `D3D11Common::SetWindowTarget` 注册，`BeginRenderPass(nullptr/SwapChainTarget)` 绑定之并清屏（镜像 GL 默认帧缓冲语义）。
+- **前向路径补齐**：`D3D11Shader` 新增 ①`Shader::Create(filepath)` 路径（`#type vertex/#type fragment` 分块、内容为 HLSL，对齐 GL 后端 K-023 约定）；②**索引数组 uniform** `SetFloat3("u_PointLights_position[i]")` 等——反射记录数组元素步进（HLSL float3 数组按 16 字节打包），`UploadSceneLighting` 逐元素上传全兼容，`HasUniform/ReadUniformStaging` 支持索引名；③`SetMat4Array` 仍留 TODO（阶段 C，改为 warn-once 防刷屏）。`D3D11VertexArray` 补 `Mat3/Mat4` 输入元素格式（矩阵按行展开 float4、PER_INSTANCE）——实例化路径（`a_InstanceModel`）打通。`D3D11FrameBuffer` 支持 `SwapChainTarget` spec（不建 GPU 对象）。`BlinnPhongInstanced.hlsl`（HLSL 实例化变体，HLSL 无 `inverse()` 内建——adjugate 手写 InverseTranspose，K-033）。
+- **工厂接线**（经所有者批准的最小机械改动，涉及 render-agent 属地 `Renderer/*.cpp` 6 个文件）：`Shader.cpp`（两重载）、`Texture2D.cpp`（两重载）、`VertexArray.cpp`、`VertexBuffer.cpp`（两重载）、`IndexBuffer.cpp`、`FrameBuffer.cpp` 各加 `#ifdef DMGE_D3D11` 分支返回对应 D3D11 类；`Texture2DArray/TextureCube` 留阶段 C。**WindowsWindow.cpp**：`API::DirectX` → `GLFW_NO_API` 窗口 hint + `DirectX::CreateDirectXGraphicsContext(glfwGetWin32Window(...))`；`SetVSync` 仅在 OpenGL 下调 `glfwSwapInterval`（D3D11 Present 固定 vsync，阶段 B 限制）。**ImGuiLayer/ProfilerLayer/ConsoleLayer**：DirectX 下 ImGui 整层降级禁用（无 D3D11 ImGui 后端，防止 OpenGL 后端在 NO_API 窗口上崩溃），日志提示"stage C"。
+- **game 演示**：`game/src/main.cpp` 支持环境变量 `DMGE_API=D3D11`（或 `DirectX`）与命令行 `-d3d11/--d3d11` 切换（CRT `__argc/__argv`，K-015），默认仍 OpenGL；D3D11 下自动 ①加载 `BlinnPhongInstanced.hlsl`（shader 目录改由 CMake 注入 worktree 相对路径，main.cpp 带回退缺省）②`RenderPath::Forward`（延迟路径的内嵌 shader 为 GLSL 源，阶段 C 对齐）③内联 light-visual shader 使用 HLSL 变体。
+- **测试**：`test_d3d11_smoke.cpp` 4 → 8 例。新增：⑤索引数组 uniform 写入断言（staging 读取，验证 16 字节打包步进与邻居元素零污染）；⑥SwapChainTarget FrameBuffer 无 GPU 对象；⑦**隐藏窗口交换链渲染回读**（真 Win32 窗口 + 完整窗口流：context 初始化→RendererAPI 采纳→清屏+三角形绘制进 backbuffer→CopyResource staging Map 逐像素断言→ResizeBuffers 32×32 重渲染断言）——窗口路径 GPU 验证也可全自动，不依赖 K-014 的交互桌面（D3D11 交换链无需 Vulkan 式 surface 特权）；⑧（合并入⑦）Present 可调用性。
+
+**涉及文件：** `Platform/DirectX/{DirectXGraphicsContext.h/.cpp(新), D3D11Common.h/.cpp, D3D11RendererAPI.cpp, D3D11Shader.h/.cpp, D3D11FrameBuffer.cpp, D3D11VertexArray.cpp, DirectXIntegration.h/.cpp, Shaders/BlinnPhongInstanced.hlsl(新)}`、`Renderer/{Shader,Texture2D,VertexArray,VertexBuffer,IndexBuffer,FrameBuffer}.cpp`（工厂分支）、`Platform/Windows/WindowsWindow.cpp`、`ImGui/ImGuiLayer.cpp`、`Debug/{ProfilerLayer,ConsoleLayer}.cpp`、`DMGameEngine.h`（无新公共头，DirectXIntegration.h 已门控导出 `CreateDirectXGraphicsContext`）、`engine/CMakeLists.txt`、`game/{CMakeLists.txt, src/main.cpp}`、`engine/tests/test_d3d11_smoke.cpp`、`documents/DIRECTX_BACKEND_DESIGN.md`（路线表 B ✅ + 变更记录）、kb/KB-07 K-031~K-035。
+
+**验证：** 三组矩阵全量构建零 error、改动文件 /W4 零新增警告：`DMGE_D3D11=ON` ctest **57/57 绿**（新增 4）、`DMGE_D3D11=OFF` ctest **50/50 绿**（回归无损）、`DMGE_VULKAN_BACKEND=ON + DMGE_D3D11=ON` 共存 **57/57 绿**。**运行时验证（agent 会话内完成，无需人工）**：`DMGE_API=D3D11 ./DMGameDemo.exe` 真窗口运行 10 秒——硬件适配器（feature level 0xb000）+ 1280×720 flip-discard 交换链 + 1500 实例化立方体 + 4 点光/1 平行光 Blinn-Phong 前向渲染，日志零 error（仅 unlit shader 不含照明 uniform 的 34 条"not found (ignored)"一次性提示，对齐 GL location -1 语义）；OpenGL 默认路径回归正常。像素级正确性由⑦回读断言兜底；**视觉效果请人工复核**（见 agent 报告步骤）。已知限制：D3D11 下 ImGui 面板整层缺失（阶段 C）、编辑器未做 D3D11 shader 资产适配、vsync 固定开。

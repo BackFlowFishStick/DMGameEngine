@@ -15,6 +15,10 @@ namespace {
 ID3D11Device*        s_Device  = nullptr;
 ID3D11DeviceContext* s_Context = nullptr;
 
+// Window-facing render target (non-owning; owned by DirectXGraphicsContext).
+ID3D11RenderTargetView* s_WindowRTV = nullptr;
+ID3D11DepthStencilView* s_WindowDSV = nullptr;
+
 // Non-owning unit table (SRVs are owned by D3D11Texture2D instances).
 std::array<ID3D11ShaderResourceView*, kMaxTextureUnits> s_TextureUnits{};
 
@@ -37,10 +41,27 @@ void ClearDeviceContext()
     s_WhiteDummySRV.Reset();
     s_Device  = nullptr;
     s_Context = nullptr;
+    s_WindowRTV = nullptr;
+    s_WindowDSV = nullptr;
 }
 
 ID3D11Device* Device()        { return s_Device; }
 ID3D11DeviceContext* Context(){ return s_Context; }
+
+void SetWindowTarget(ID3D11RenderTargetView* rtv, ID3D11DepthStencilView* dsv)
+{
+    s_WindowRTV = rtv;
+    s_WindowDSV = dsv;
+}
+
+void ClearWindowTarget()
+{
+    s_WindowRTV = nullptr;
+    s_WindowDSV = nullptr;
+}
+
+ID3D11RenderTargetView* WindowRenderTargetView() { return s_WindowRTV; }
+ID3D11DepthStencilView* WindowDepthStencilView() { return s_WindowDSV; }
 
 DXGI_FORMAT TextureFormatToDXGI(TextureFormat format)
 {
