@@ -4,8 +4,8 @@
 
 ## ECS 结构事实
 
-- 基于 **entt**（`engine/dependencies/`）。`Entity` 是 registry 句柄包装；组件在 `Scene/Components.h`：ID/Tag/Transform/Mesh/Camera/Light。
-- 层级：三叉链（firstChild/nextSibling/prevSibling/parent）+ **dirty 传播**（父变 → 子树标脏）+ 剪枝 + 环检测。
+- 基于 **entt**（`engine/dependencies/`）。`Entity` 是 registry 句柄包装；组件在 `Scene/Components/Components.h`（聚合入口，各组件头文件在同目录）：ID/Tag/Transform/Mesh/Camera/Light（动画开关下另有 Animator）。
+- 层级：三叉链（**parent / firstChild / nextSibling**，`TransformComponent` 中为 `Parent / FirstChild / NextSibling` 三个 Entity 字段——**没有 prevSibling**，左孩子右兄弟结构无需前驱指针）+ **dirty 传播**（父变 → 子树标脏）+ 剪枝 + 环检测。
 - System：`OnUpdate(ts)` / `OnRender()` / `OnEvent(e)`，由 `Scene` 持列表调度。现有：TransformSystem、MeshRenderSystem、LightSystem。
 
 ## 硬纪律（R4 展开）
@@ -28,3 +28,7 @@
 - 遍历中增删组件 → entt 迭代器失效；需要结构性修改时先收集后改。
 - 复制/移动 Entity 忘处理层级三叉链指针 → 孤儿节点；用 Scene 提供的操作接口，别直接操作 registry。
 - 序列化加新组件字段忘同步 Loader → 加载静默丢字段；**往返测试是兜底**，新组件必配。
+
+---
+
+> **2026-10-04 核验修正（docs-agent）**：① 三叉链字段实为 `Parent / FirstChild / NextSibling`（`Scene/Components/TransformComponent.h`），原文误写 "prevSibling"；② 组件聚合入口路径实为 `Scene/Components/Components.h`，原文误写 `Scene/Components.h`。均对照当前代码修正。
